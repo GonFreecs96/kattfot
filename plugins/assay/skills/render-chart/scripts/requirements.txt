@@ -1,0 +1,12 @@
+# Intentionally empty: render_html.py is pure Python standard library.
+#
+# This is a feature, not an omission. The renderer is the one surface an agent
+# reaches for constantly and mid-task, so it must never require a venv, a pip
+# install, or a node toolchain to produce a chart. ECharts is vendored at
+# ../vendor/echarts.min.js and inlined into the output, so a rendered chart is
+# also self-contained and opens offline.
+#
+# Keep it that way. If a change here would need a third-party package, that is a
+# strong signal it belongs in visualize-metric (the matplotlib SVG/PNG path)
+# instead. The file exists so `pip install -r` works uniformly across skills and
+# so this constraint is written down where someone would go to break it.

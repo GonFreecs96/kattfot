@@ -1,0 +1,8 @@
+{
+  "name": "assay",
+  "version": "0.1.0",
+  "description": "assay — a template for governed, defensible analytics over a data warehouse. Its subject is governance, not dashboards: every number carries an accuracy tier, an allow-listed set of dimensions and filters, a content-addressed provenance receipt, and a refusal path for anything outside those bounds. Queries run as the individual human user via browser OAuth (ADC) and service accounts are refused in code; a PreToolUse hook denies every warehouse access route except the plugin's vetted scripts, so identity and PII guards cannot be skipped. Ships governed metric reads (assay:query-metric), spine-backed funnel drop-off and stage timing, difference attribution (assay:reconcile), offline drift checks (assay:verify), stdlib-only interactive rendering (assay:render-chart, assay:render-dashboard), self-contained PDFs (assay:export-report), and guided onboarding (assay:setup). Fork it and point it at your own warehouse and domain.",
+  "author": {
+    "name": "markreid-lab"
+  }
+}

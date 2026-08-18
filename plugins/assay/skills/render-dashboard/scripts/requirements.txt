@@ -1,0 +1,10 @@
+# Intentionally empty: render_dashboard.py is pure Python standard library.
+#
+# Same constraint as the sibling render-chart skill, for the same reason: the
+# dashboard renderer must run with nothing installed. It reuses render-chart's
+# vendored ECharts, theme tokens, and shared chart-builders rather than adding a
+# dependency of its own, which is also what guarantees a dashboard's charts are
+# drawn by exactly the same governed code as a standalone chart.
+#
+# Keep it that way. The file exists so `pip install -r` works uniformly across
+# skills and so this constraint is written down where someone would go to break it.

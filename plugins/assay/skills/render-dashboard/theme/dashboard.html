@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en" data-theme-mode="{{THEME_MODE}}">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{{DOC_TITLE}}</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--page-bg); color: var(--ink); font-family: var(--font);
+    -webkit-font-smoothing: antialiased; padding: var(--page-pad); min-height: 100vh;
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; position: relative; }
+  .watermark {
+    position: fixed; inset: 0; pointer-events: none; z-index: 80;
+    display: flex; align-items: center; justify-content: center;
+  }
+  /* The [hidden] attribute alone loses to the .watermark display rule above
+     (author styles beat the UA sheet), so hide it explicitly when not mock. */
+  .watermark[hidden] { display: none; }
+  .watermark span {
+    font-size: clamp(60px, 14vw, 150px); font-weight: 800; letter-spacing: 0.08em;
+    color: var(--mock-ink); opacity: var(--mock-alpha); transform: rotate(-24deg); user-select: none;
+  }
+  header.hero {
+    display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start;
+    justify-content: space-between; border-bottom: 1px solid var(--card-border);
+    padding-bottom: 18px; margin-bottom: 22px;
+  }
+  h1.title { font-size: 25px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 6px; line-height: 1.2; }
+  .subtitle { color: var(--ink-muted); font-size: 13.5px; max-width: 760px; margin: 0; }
+  .pill {
+    flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px;
+    font-weight: 600; line-height: 1; padding: 7px 11px; border-radius: var(--pill-radius);
+    background: var(--tier-bg); color: var(--tier-ink); white-space: nowrap;
+  }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.85; }
+  .stamp { font-size: 11.5px; color: var(--ink-faint); text-align: right; line-height: 1.6; margin-top: 8px; }
+  .stamp code { background: var(--chip-bg); padding: 1px 5px; border-radius: 5px; font-family: var(--mono); font-size: 11px; }
+  h2.section { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--ink-muted); margin: 30px 0 12px; font-weight: 600; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 12px; }
+  .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 14px;
+    padding: 14px 16px; box-shadow: var(--card-shadow); }
+  .card .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-muted); }
+  .card .v { font-size: 25px; font-weight: 700; margin-top: 4px; letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums; }
+  .card .d { font-size: 11.5px; color: var(--ink-muted); margin-top: 2px; }
+  .card.accent .v { color: var(--accent); }
+  .card.good   .v { color: var(--good); }
+  .card.bad    .v { color: var(--bad); }
+  .grid { display: grid; gap: 16px; }
+  .grid.two-col { grid-template-columns: 1fr 1fr; }
+  .grid.one-col { grid-template-columns: 1fr; }
+  @media (max-width: 860px) { .grid.two-col { grid-template-columns: 1fr; } }
+  .panel { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 14px;
+    padding: 16px 18px; box-shadow: var(--card-shadow); overflow: hidden; }
+  .panel h3 { margin: 0 0 2px; font-size: 14.5px; font-weight: 650; }
+  .panel .cap { color: var(--ink-muted); font-size: 12.5px; margin: 0 0 8px; line-height: 1.45; }
+  .panel .mat { color: var(--mock-ink); font-weight: 600; font-size: 11.5px; }
+  .chart { width: 100%; height: 320px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--card-border); }
+  th.l, td.l { text-align: left; }
+  thead th { color: var(--ink-muted); font-weight: 600; text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.05em; }
+  tbody tr:hover { background: var(--row-hover); }
+  td.bad { color: var(--bad); font-weight: 700; }
+  td.good { color: var(--good); font-weight: 700; }
+  .caveats { background: var(--card-bg); border: 1px solid var(--card-border);
+    border-left: 3px solid var(--tier-ink); border-radius: 12px; padding: 14px 16px; margin-top: 24px; }
+  .caveats strong { font-size: 12.5px; }
+  .caveats ul { margin: 8px 0 0; padding-left: 18px; color: var(--ink-muted); font-size: 12.5px; }
+  .caveats li { margin: 4px 0; line-height: 1.45; }
+  footer { margin-top: 24px; color: var(--ink-faint); font-size: 11.5px;
+    border-top: 1px solid var(--card-border); padding-top: 14px; line-height: 1.6; }
+  footer code { background: var(--chip-bg); padding: 1px 5px; border-radius: 5px; font-family: var(--mono); }
+  details { margin-top: 10px; } summary { cursor: pointer; color: var(--accent); font-size: 12.5px; }
+  pre.audit { white-space: pre-wrap; font-size: 10.5px; color: var(--ink-muted);
+    max-height: 300px; overflow: auto; margin-top: 8px; font-family: var(--mono); }
+</style>
+</head>
+<body>
+  <div class="watermark" id="watermark" hidden><span>MOCK DATA</span></div>
+  <div class="wrap">
+    <header class="hero">
+      <div>
+        <h1 class="title" id="title"></h1>
+        <p class="subtitle" id="subtitle"></p>
+      </div>
+      <div>
+        <span class="pill" id="pill" hidden><span class="dot"></span><span id="pill-label"></span></span>
+        <div class="stamp" id="stamp"></div>
+      </div>
+    </header>
+    <div class="cards" id="cards"></div>
+    <div id="sections"></div>
+    <div class="caveats" id="caveats" hidden>
+      <strong>Caveats (verbatim — never trimmed)</strong>
+      <ul id="cav"></ul>
+    </div>
+    <footer id="footer"></footer>
+  </div>
+
+  <!-- ECHARTS -->
+  {{ECHARTS}}
+  <!-- /ECHARTS -->
+
+  <!-- shared governed option builders (single source of truth with render-chart) -->
+  <script>{{CHART_BUILDERS}}</script>
+
+  <script id="dashboard" type="application/json">{{DASHBOARD_JSON}}</script>
+  <script id="tokens" type="application/json">{{TOKENS_JSON}}</script>
+  <script>
+  (function () {
+    "use strict";
+    var D = JSON.parse(document.getElementById("dashboard").textContent);
+    var TOKENS = JSON.parse(document.getElementById("tokens").textContent);
+
+    // ---- Resolve theme mode -------------------------------------------------
+    var modeAttr = document.documentElement.getAttribute("data-theme-mode") || "auto";
+    var dark = modeAttr === "dark" ||
+      (modeAttr === "auto" && window.matchMedia &&
+       window.matchMedia("(prefers-color-scheme: dark)").matches);
+    var T = dark ? TOKENS.dark : TOKENS.light;
+    var PALETTE = TOKENS.series_palette;
+
+    // ---- Paint CSS variables from tokens -----------------------------------
+    var root = document.documentElement.style;
+    root.setProperty("--font", TOKENS.font.family);
+    root.setProperty("--mono", TOKENS.font.mono);
+    root.setProperty("--page-bg", T.page_bg);
+    root.setProperty("--card-bg", T.card_bg);
+    root.setProperty("--card-border", T.card_border);
+    root.setProperty("--card-shadow", T.card_shadow);
+    root.setProperty("--ink", T.ink);
+    root.setProperty("--ink-muted", T.ink_muted);
+    root.setProperty("--ink-faint", T.ink_faint);
+    root.setProperty("--pill-radius", TOKENS.radius.pill + "px");
+    root.setProperty("--page-pad", TOKENS.spacing.page + "px");
+    root.setProperty("--accent", PALETTE[0]);
+    root.setProperty("--good", PALETTE[2]);
+    root.setProperty("--bad", TOKENS.mock.ink);
+    root.setProperty("--mock-ink", TOKENS.mock.ink);
+    root.setProperty("--mock-alpha", TOKENS.mock.watermark_alpha);
+    root.setProperty("--chip-bg", dark ? "#1b2233" : "#EEF1F5");
+    root.setProperty("--row-hover", dark ? "rgba(45,125,210,0.10)" : "rgba(45,125,210,0.06)");
+
+    // ---- Header chrome ------------------------------------------------------
+    document.title = D.title || "Dashboard";
+    document.getElementById("title").textContent = D.title || "Dashboard";
+    var sub = document.getElementById("subtitle");
+    if (D.subtitle) sub.textContent = D.subtitle; else sub.hidden = true;
+
+    var tier = D.accuracy_tier;
+    if (tier && TOKENS.tier[tier]) {
+      var td = TOKENS.tier[tier];
+      root.setProperty("--tier-bg", dark ? td.dark_bg : td.bg);
+      root.setProperty("--tier-ink", dark ? td.dark_ink : td.ink);
+      document.getElementById("pill-label").textContent = td.label;
+      document.getElementById("pill").hidden = false;
+    } else {
+      root.setProperty("--tier-ink", T.ink_faint);
+    }
+
+    var stampLines = [];
+    if (D.source) stampLines.push("Source: <code>" + esc(D.source) + "</code>");
+    if (D.window) stampLines.push(esc(D.window));
+    var byline = [];
+    if (D.published_by) byline.push(esc(D.published_by));
+    if (D.generated_at) byline.push("Generated " + esc(D.generated_at));
+    if (byline.length) stampLines.push(byline.join(" · "));
+    document.getElementById("stamp").innerHTML = stampLines.join("<br/>");
+
+    // ---- Mock watermark (page-level if the dashboard or any chart is mock) ---
+    var anyMock = !!D.mock;
+    (D.sections || []).forEach(function (s) {
+      if (s.type === "charts") (s.blocks || []).forEach(function (b) { if (b.spec && b.spec.mock) anyMock = true; });
+    });
+    if (anyMock) document.getElementById("watermark").hidden = false;
+
+    // ---- Value formatting for KPIs/tables (chart values format inside builders) ---
+    function fmtCell(v, kind) {
+      if (v === null || v === undefined || v === "") return "—";
+      if (typeof v !== "number") return v;       // pre-formatted strings pass through
+      switch (kind) {
+        case "int":      return Math.round(v).toLocaleString();
+        case "pct":      return v.toFixed(1) + "%";
+        case "pct2":     return v.toFixed(2) + "%";
+        case "rate":     return (v * 100).toFixed(1) + "%";  // 0..1 fraction
+        case "currency": return "$" + Math.round(v).toLocaleString();
+        case "num1":     return v.toFixed(1);
+        default:         return String(v);
+      }
+    }
+    function esc(s) {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    // ---- KPI cards ----------------------------------------------------------
+    var cardsEl = document.getElementById("cards");
+    (D.kpis || []).forEach(function (c) {
+      var el = document.createElement("div");
+      el.className = "card " + (c.emphasis && c.emphasis !== "none" ? c.emphasis : "");
+      el.innerHTML = '<div class="k">' + esc(c.label || "") + '</div>' +
+        '<div class="v">' + esc(c.value != null ? c.value : "—") + '</div>' +
+        '<div class="d">' + esc(c.detail || "") + '</div>';
+      cardsEl.appendChild(el);
+    });
+    if (!(D.kpis && D.kpis.length)) cardsEl.style.display = "none";
+
+    // ---- Sections -----------------------------------------------------------
+    var sectionsEl = document.getElementById("sections");
+    var chartJobs = [];   // {id, spec}
+    (D.sections || []).forEach(function (sec, si) {
+      if (sec.title) {
+        var h = document.createElement("h2"); h.className = "section";
+        h.textContent = sec.title; sectionsEl.appendChild(h);
+      }
+      if (sec.type === "charts") {
+        var grid = document.createElement("div");
+        var layout = sec.layout || (sec.blocks && sec.blocks.length === 1 ? "one-col" : "two-col");
+        grid.className = "grid " + layout;
+        (sec.blocks || []).forEach(function (b, bi) {
+          var id = "chart-" + si + "-" + bi;
+          var panel = document.createElement("div"); panel.className = "panel";
+          var heading = b.title || (b.spec && b.spec.title) || "";
+          var cap = b.caption || "";
+          var maturing = b.spec && b.spec.flag_last_n
+            ? '<span class="mat">○ hollow points = still maturing (see caveats)</span>' : "";
+          panel.innerHTML =
+            (heading ? '<h3>' + esc(heading) + '</h3>' : '') +
+            (cap || maturing ? '<div class="cap">' + esc(cap) + (cap && maturing ? ' · ' : '') + maturing + '</div>' : '') +
+            '<div class="chart" id="' + id + '" style="height:' + (b.height || 320) + 'px"></div>';
+          grid.appendChild(panel);
+          if (b.spec) chartJobs.push({ id: id, spec: b.spec });
+        });
+        sectionsEl.appendChild(grid);
+      } else if (sec.type === "table") {
+        var panel2 = document.createElement("div"); panel2.className = "panel";
+        var cols = sec.columns || [];
+        var thead = "<tr>" + cols.map(function (c) {
+          return '<th class="' + ((c.align || "right") === "left" ? "l" : "") + '">' + esc(c.label || "") + "</th>";
+        }).join("") + "</tr>";
+        var rows = (sec.rows || []).map(function (r) {
+          return "<tr>" + cols.map(function (c, ci) {
+            var raw = r[ci];
+            var cls = (c.align || "right") === "left" ? "l" : "";
+            if (sec.highlight && sec.highlight.column === ci && typeof raw === "number") {
+              var hv = sec.highlight.value, op = sec.highlight.when;
+              var hit = op === "lt" ? raw < hv : op === "gt" ? raw > hv :
+                        op === "lte" ? raw <= hv : op === "gte" ? raw >= hv : false;
+              if (hit) cls += " " + (sec.highlight.class || "bad");
+            }
+            return '<td class="' + cls.trim() + '">' + esc(fmtCell(raw, c.format)) + "</td>";
+          }).join("") + "</tr>";
+        }).join("");
+        panel2.innerHTML =
+          (sec.caption ? '<div class="cap">' + esc(sec.caption) + '</div>' : '') +
+          '<table><thead>' + thead + '</thead><tbody>' + rows + '</tbody></table>';
+        sectionsEl.appendChild(panel2);
+      }
+    });
+
+    // ---- Caveats ------------------------------------------------------------
+    if (D.caveats && D.caveats.length) {
+      document.getElementById("caveats").hidden = false;
+      var cav = document.getElementById("cav");
+      D.caveats.forEach(function (c) {
+        var li = document.createElement("li"); li.textContent = c; cav.appendChild(li);
+      });
+    }
+
+    // ---- Footer + embedded audit dataset ------------------------------------
+    var note = D.footer_note ||
+      "Faithful & reproducible — renders only the points in the embedded spec: no re-query, " +
+      "no smoothing, no extrapolation; rate axes anchored at 0. The exact spec is embedded below for audit.";
+    document.getElementById("footer").innerHTML =
+      "<strong>Faithful & reproducible.</strong> " + esc(note) +
+      '<details><summary>Embedded dashboard spec (audit)</summary>' +
+      '<pre class="audit">' + esc(JSON.stringify(D, null, 2)) + '</pre></details>';
+
+    // ---- Render charts via the shared governed builders ---------------------
+    var insts = [];
+    chartJobs.forEach(function (job) {
+      var node = document.getElementById(job.id);
+      if (!node) return;
+      var option = (window.AssayCharts && window.AssayCharts.buildOption)
+        ? window.AssayCharts.buildOption(job.spec, T, TOKENS) : null;
+      if (!option) { node.textContent = "Unknown chart_type: " + (job.spec.chart_type || "?"); return; }
+      var inst = echarts.init(node, null, { renderer: "svg" });
+      inst.setOption(option);
+      insts.push(inst);
+    });
+    window.addEventListener("resize", function () { insts.forEach(function (i) { i.resize(); }); });
+  })();
+  </script>
+</body>
+</html>

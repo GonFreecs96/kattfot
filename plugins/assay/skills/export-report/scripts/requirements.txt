@@ -1,0 +1,7 @@
+# Dependencies for the export-report PDF helper (report_pdf.py). Installed into
+# the same .venv the other assay skills use. fpdf2 uses core fonts (no embedded
+# font files); Pillow is used to quantize/downscale the chart so the PDF stays
+# small (report_pdf falls back to the full-size PNG if Pillow is absent).
+pyyaml>=6.0
+fpdf2>=2.8
+pillow>=10

@@ -1,0 +1,13 @@
+# Dependencies for the setup doctor (doctor.py).
+#
+# These are exactly what the doctor's `deps` check looks for, because the point
+# of that check is "can a governed query actually run in this interpreter?" —
+# so this file and check_deps() must stay in step.
+#
+# The offline checks (gcloud, sa-env, adc) need neither package; only `deps` and
+# the optional `--probe` do. Installing this is what turns a red `deps` green.
+#
+# Install into a venv so you don't fight your system Python (PEP 668):
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+pyyaml>=6.0.3                  # YAML config / metric frontmatter parsing
+google-cloud-bigquery>=3.41.0  # the --probe SELECT 1, as the authenticated user via ADC

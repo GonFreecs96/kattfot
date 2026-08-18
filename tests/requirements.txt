@@ -1,0 +1,8 @@
+# Test/CI dependencies. Mirrors the runtime floors in the skills' own
+# requirements.txt files where they overlap.
+#
+# Nothing numeric here on purpose: the forecasting skills that needed
+# numpy/scipy/statsmodels ship as documented outlines in this template, so the
+# suite stays installable in seconds and runs with no compiled dependencies.
+pytest>=8.0
+pyyaml>=6.0.3

@@ -1,0 +1,9 @@
+# Dependencies for the verify CLI (verify_artifact.py).
+#
+# Offline by design — verify never touches the warehouse, so there is no
+# google-cloud-bigquery here. The only need is parsing the artifact's YAML
+# frontmatter to read its manifest.
+#
+# Install into a venv so you don't fight your system Python (PEP 668):
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+pyyaml>=6.0.3                # YAML frontmatter parsing (the artifact manifest)

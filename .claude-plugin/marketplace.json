@@ -1,0 +1,13 @@
+{
+  "name": "assay",
+  "owner": {
+    "name": "markreid-lab"
+  },
+  "plugins": [
+    {
+      "name": "assay",
+      "source": "./plugins/assay",
+      "description": "A working template for governed agentic analytics — registered metrics with accuracy tiers and refusal rules (assay:query-metric), spine-backed funnel analysis, content-addressed provenance receipts with offline drift checks (assay:verify), and self-contained interactive rendering (assay:render-chart, assay:render-dashboard). Per-user browser OAuth; service accounts refused in code."
+    }
+  ]
+}

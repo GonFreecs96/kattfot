@@ -1,0 +1,28 @@
+{
+  "chart_type": "single_line",
+  "metric": "cart_to_order_confirmed",
+  "title": "Cart Created → Order Confirmed conversion",
+  "subtitle": "T2 · analytics.checkout_session_spine · generated 2026-06-01 · MOCK",
+  "x_label": "cohort_week",
+  "y_label": "Cart-to-order rate",
+  "value_format": "percent",
+  "y_axis_min": 0,
+  "baseline": 0.257,
+  "mock": true,
+  "accuracy_tier": "T2",
+  "rationale": "0 dimensions over 8 time points → single trend line.",
+  "flag_last_n": 1,
+  "generated_at": "2026-06-01",
+  "series": [
+    { "name": "all", "points": [
+      { "x": "2026-04-06", "y": 0.271, "num": 1842, "den": 6797 },
+      { "x": "2026-04-13", "y": 0.283, "num": 1901, "den": 6717 },
+      { "x": "2026-04-20", "y": 0.276, "num": 1855, "den": 6721 },
+      { "x": "2026-04-27", "y": 0.289, "num": 1988, "den": 6878 },
+      { "x": "2026-05-04", "y": 0.282, "num": 1944, "den": 6893 },
+      { "x": "2026-05-11", "y": 0.291, "num": 2012, "den": 6914 },
+      { "x": "2026-05-18", "y": 0.285, "num": 1965, "den": 6894 },
+      { "x": "2026-05-25", "y": 0.243, "num": 1502, "den": 6181 }
+    ]}
+  ]
+}

@@ -1,0 +1,30 @@
+# --- Python / tooling caches ---
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+
+# --- OS / editor cruft ---
+.DS_Store
+.claude/settings.local.json
+
+# --- Generated outputs ---
+# Every assay:* run writes here (artifacts, charts, dashboards, studies). These
+# are reproducible from the governed metrics and must not be tracked.
+outputs/
+
+# --- Rendered examples: the committed spec stays, its rendered HTML does not ---
+plugins/assay/skills/render-chart/examples/out/
+plugins/assay/skills/render-dashboard/examples/out/
+
+# --- Local config / registry copies ---
+# The governed config that defines the module registry, funnel specs, coverage,
+# and guardrails IS tracked — it is the substance of the plugin. What must never
+# be tracked is a *local* copy carrying real values: a warehouse project id, live
+# wiki page ids, or a personal override. Those use the `.local.yaml` suffix, and
+# the tracked counterpart is a `.example.yaml` template.
+*.local.yaml
+plugins/assay/config/*-registry.yaml
+!plugins/assay/config/*-registry.example.yaml
