@@ -107,9 +107,9 @@ number you are holding.
 
 ## Where it is today
 
-`assay` is Phase 3: all fifteen functional skills run, offline, against
-committed synthetic fixtures, and that claim is checked by a script rather
-than asserted in this paragraph. Four more skills — a cohort-maturation
+`assay` is Phase 4 complete: all fifteen functional skills run, offline,
+against committed synthetic fixtures, and that claim is checked by a script
+rather than asserted in this paragraph. Four more skills — a cohort-maturation
 now-cast, a release scorecard with a causal verdict, a customer-grain journey
 analysis, and a wiki-publishing path — are documented as outlines in the
 skill cheat sheet but not implemented, because giving them honest numbers
@@ -121,7 +121,9 @@ generator, not a business, and a template's job is to not teach that habit.
 The honest summary: the governance engine is complete, the checkout module is
 a full worked example end to end, and the remaining four skills are a
 deliberate, stated gap rather than an oversight — see the module registry's
-`excluded:` entries for the specific reason behind each one.
+`excluded:` entries for the specific reason behind each one. Alongside the
+code sit the eight-document suite under [`docs/`](.), real committed output
+under [`examples/`](../examples/), and 1,111 passing tests.
 
 ## The case, in a sentence
 
