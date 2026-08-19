@@ -208,9 +208,11 @@ surfaces get it (also update `ALLOWED_CHART_TYPES` in `render_html.py` and
 
 ## Status in this template
 
-This skill is complete and runnable as shipped. `visualize-metric`, `chart_spec.py`,
-and `query-metric` are referenced above as the governed upstream because that is
-the intended pipeline; they are part of the skill set this template builds toward
-rather than files you will find in this repo yet. Until they land, hand-write a
-spec against the contract above (or use `examples/`) — the renderer does not care
-where a conforming spec came from, which is exactly why it could be ported first.
+This skill is complete and runnable as shipped, and its governed upstream now exists:
+`query-metric` and `visualize-metric` (including `chart_spec.py`) both ship in this
+repo, so the full pipeline runs end to end. `scripts/demo.py` walks it — query,
+artifact, spec, then this renderer — offline against the committed fixtures.
+
+The renderer still does not care where a conforming spec came from, which is why it
+could be ported before its upstream and why `examples/` remains a valid starting
+point. `render-dashboard` consumes the same specs and the same theme.

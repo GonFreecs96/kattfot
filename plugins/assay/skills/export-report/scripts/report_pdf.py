@@ -143,6 +143,15 @@ def bullets(lines: list[str]) -> list[str]:
 
 
 def find_chart(sections: dict, artifact_dir: Path) -> tuple[Path | None, str]:
+    """The chart image from the Visualization section, plus a one-line caption.
+
+    The caption is the first prose line after the image, with markdown emphasis
+    stripped — NOT just the first `**bold**` run. `visualize-metric` writes that line
+    as `**Chart type:** {type} — {rationale}`, so pulling only the bold span would
+    yield the literal caption "Chart type:" and drop the part that says anything.
+    Blockquote lines are skipped: those are the faithfulness notes, which belong in
+    the artifact but read as noise under a figure.
+    """
     lines = sections.get("visualization", [])
     img_path, caption = None, ""
     for ln in lines:
@@ -150,9 +159,11 @@ def find_chart(sections: dict, artifact_dir: Path) -> tuple[Path | None, str]:
         if mi and img_path is None:
             cand = (artifact_dir / mi.group(1)).resolve()
             img_path = cand if cand.exists() else None
-        mb = BOLD_RE.search(ln)
-        if mb and not caption:
-            caption = mb.group(1)
+            continue
+        s = ln.strip()
+        if caption or not s or s.startswith(">") or s.startswith("!["):
+            continue
+        caption = BOLD_RE.sub(r"\1", s).replace("`", "")
     return img_path, caption
 
 
@@ -192,7 +203,15 @@ def build_pdf(fm: dict, sections: dict, artifact_dir: Path, out: Path, published
     tier = fm.get("accuracy_tier", "")
     src = f"{fm.get('source_project','')}.{fm.get('source_view','')}".strip(".")
     generated = str(fm.get("generated_at", ""))
-    mock = fm.get("source_mode") == "mock_csv"
+    # Fixture-backed numbers get the banner. The explicit boolean wins; the source
+    # mode is the fallback so an artifact written before that field existed still
+    # warns. Erring toward showing the banner is the right direction — a spurious
+    # one is an annoyance, a missing one is a synthetic number in a stakeholder's
+    # PDF with nothing saying so.
+    mock = bool(
+        fm.get("fixture_backed")
+        or fm.get("source_mode") in ("mock_csv", "fixture_sql")
+    )
 
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.set_auto_page_break(auto=True, margin=MARGIN)
@@ -219,8 +238,9 @@ def build_pdf(fm: dict, sections: dict, artifact_dir: Path, out: Path, published
         pdf.set_font("Helvetica", "B", 10)
         pdf.multi_cell(
             width, 7,
-            clean("(!) MOCK DATA — source mart not yet provisioned. Numbers are stub "
-                  "values, not real measurements."),
+            clean("(!) FIXTURE DATA — these numbers come from committed synthetic "
+                  "fixtures, not from a warehouse. They describe a seeded random "
+                  "process and are not measurements."),
             fill=True, border=1,
         )
         pdf.ln(2)

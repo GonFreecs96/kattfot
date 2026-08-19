@@ -108,7 +108,16 @@ Close with this card, verbatim:
 
 ## Status in this template
 
-`doctor.py` is complete and runnable: all four offline checks and the live probe
-work today. Steps 4 and 5 name `catalog`, `coverage`, `query-metric`, and
-`load-context`, which are part of the skill set this template builds toward — until
-they land, Step 3 (a green probe as your own identity) is the real end of setup.
+`doctor.py` is complete and runnable: all four offline checks and the live probe work
+today. `query-metric` now ships too, so the end of setup is a real governed query
+rather than a green probe.
+
+Worth knowing before running the doctor at all: `ASSAY_ENGINE` defaults to `sqlite`,
+which reads the committed fixtures and needs no cloud account, no ADC, and no
+warehouse project. So the whole plugin is usable — `pytest`, `scripts/demo.py`, a
+chart, a PDF — before any of the doctor's checks pass. Setup is what you do when you
+want to point it at a real warehouse (`ASSAY_ENGINE=bigquery`), and only then does a
+red `adc` or `deps` check block anything.
+
+Steps 4 and 5 also name `catalog`, `coverage`, and `load-context`, which remain part
+of the skill set this template builds toward.

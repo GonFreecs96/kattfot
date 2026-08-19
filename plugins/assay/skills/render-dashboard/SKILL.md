@@ -212,8 +212,8 @@ script-free inline summary.
 
 ## Status in this template
 
-This skill is complete and runnable as shipped. The governed upstream it
-composes (`query-metric`, `funnel-dropoff`, `segment-compare`, `chart_spec.py`)
-is part of the skill set this template builds toward rather than files you will
-find in this repo yet. The renderer only needs a conforming spec — start from
-`examples/example.dashboard.json`.
+This skill is complete and runnable as shipped. Of the governed upstream it composes,
+`query-metric` and `chart_spec.py` now ship in this repo; `funnel-dropoff` and
+`segment-compare` are still part of the skill set this template builds toward. The
+renderer only needs a conforming spec, so a dashboard can already be assembled from
+`query-metric` output today — start from `examples/example.dashboard.json`.

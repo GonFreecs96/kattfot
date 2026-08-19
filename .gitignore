@@ -15,6 +15,14 @@ venv/
 # are reproducible from the governed metrics and must not be tracked.
 outputs/
 
+# --- Fixtures: the weekly aggregate is committed, the session spine is not ---
+# `scripts/generate_fixtures.py --emit both` also writes the session-grain spine
+# (~80k rows, ~22 MB). The weekly aggregate is what every metric reads and is
+# committed so `git clone && pytest && scripts/demo.py` works with no setup; the
+# spine is regenerated on demand by whoever needs it. Both are deterministic from
+# the same seed, so nothing is lost by not tracking the large one.
+data/assay/sample/cart_checkout_session_spine.csv
+
 # --- Rendered examples: the committed spec stays, its rendered HTML does not ---
 plugins/assay/skills/render-chart/examples/out/
 plugins/assay/skills/render-dashboard/examples/out/

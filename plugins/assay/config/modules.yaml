@@ -1,0 +1,79 @@
+# modules.yaml
+# ---------------------------------------------------------------------------
+# The module registry: the single place that knows the on-disk
+#   module -> spine -> funnel-spec-file
+# shape. Read by `_shared/spine.py`'s load_registry() / resolve_spine() /
+# spec_path(); every spine-backed skill resolves its spec through this file (or
+# through the `ASSAY_FUNNEL_SPEC` env var, which wins outright and exists for
+# tests and one-off overrides).
+#
+# A **module** is a governed business domain. A **spine** is one analysable grain
+# within it — a curated view with one row per instance of that grain, carrying
+# every stage flag, stage timestamp, and terminal-branch classification the
+# spine-backed skills need. A module may have several spines at different grains;
+# exactly one is the default.
+#
+# Rules this registry follows, all enforced by tests/test_module_registry.py:
+#   1. Every spine lists each spine-backed skill under EITHER `skills:` or
+#      `excluded:` — never both, never neither. An `excluded:` entry carries a
+#      real reason: "this grain has no ordered stage ladder", not "TODO".
+#   2. Exactly one `default: true` spine per module with a non-empty `spines:`.
+#   3. A skill under `skills:` must have what it needs in the spec, so inclusion
+#      is never a false promise.
+#   4. `handoff` is declarative (spine -> spine, on a join key) rather than
+#      bespoke SQL buried in a skill.
+#   5. `scoping_doc` is inert at query time — recorded so nobody wires a skill to
+#      a human-facing document by mistake.
+#
+# IMPORTANT: `skills:` / `excluded:` are documentation plus a lint target, NOT a
+# runtime permission gate. resolve_spine() returns the spine's dict as-is and
+# spec_path() reads only `cfg["spec"]`. A caller who passes
+# `--module checkout --spine session` to a skill this file marks excluded will
+# run it, then fail downstream on whichever spec key that skill needs. That is
+# intended: a clear error on a real gap beats a silent wrong answer.
+#
+# The `handoff` shape, for when a second spine lands (kept as a comment so it
+# cannot half-exist and confuse the linter):
+#
+#     handoff:
+#       to: checkout/session       # "module/spine"; both must be registered
+#       "on": checkout_session_id  # QUOTE the key — bare `on:` parses as the
+#                                  # boolean True under YAML 1.1 (PyYAML)
+#       coverage: 0.31             # measured share of source rows that reach it
+# ---------------------------------------------------------------------------
+
+modules:
+  checkout:
+    label: "Checkout & Fulfilment"
+    scoping_doc: null
+    spines:
+      session:
+        spec: checkout-funnel-spec.yaml
+        primary_entity: checkout_session
+        default: true
+        # No spine-backed skill ships in this template yet, so `skills:` is
+        # empty and every one of the seven carries a specific reason below. The
+        # metric-layer skills (query-metric, visualize-metric) are not
+        # spine-backed and so are not listed here at all — they resolve a
+        # metric's own `source_view`, not a spine.
+        skills: []
+        excluded:
+          funnel-dropoff: "Not implemented in this template yet. The spec already carries the `stages:` ladder and `terminal_branches:` decomposition it reads, so wiring it is purely additive — no spec change needed."
+          stage-timing: "Not implemented yet. The spec carries `transitions:`, and the adapter seam already exposes percentiles on both engines (pushed down via APPROX_QUANTILES on BigQuery, computed client-side on sqlite), so this is a skill-script gap only."
+          segment-compare: "Not implemented yet. Needs `stages` + `transitions`, both present below."
+          funnel-pulse: "Not implemented yet. Needs the `pulse:` block, present below."
+          funnel-nowcast: "Ships as a documented outline only. Chain-ladder now-casting needs a `nowcast:` block (per-target open/arrival timestamps, bootstrap parameters, a development-fraction floor) that is deliberately NOT authored here: those numbers are judgment calls calibrated against a real book, and fitting them to synthetic fixtures would produce a curve that describes the generator rather than any business."
+          release-scorecard: "Ships as a documented outline only. Inherits funnel-nowcast's prerequisite, and a causal verdict (BSTS counterfactual or difference-in-differences) computed over generated data would measure the generator's parameters, not a release."
+          applicant-journey: "Ships as a documented outline only, and is grain-scoped to a person spine this module does not register. Session grain cannot express 'did ANY of this customer's sessions reach X' — that is a different denominator, not a different filter."
+
+  # A module can be metric-layer only — no spine, no spine-backed skills — and
+  # that is a legitimate shape rather than an unfinished one: plenty of governed
+  # domains are a handful of ratio metrics over a weekly aggregate with no
+  # instance-grain ladder worth modelling. Registered now with `spines: {}` so
+  # the registry's empty-spines case stays covered by the linter, and so the
+  # module exists to hang a spine and a `handoff` edge (browse session ->
+  # checkout session) off when one is authored.
+  browse:
+    label: "Catalog & Browse"
+    scoping_doc: null
+    spines: {}

@@ -27,9 +27,17 @@ from pathlib import Path
 
 # Reuse the user-identity guard + PII denylist shared across the plugin.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from identity import assert_user_identity  # noqa: E402  (re-exported)
+from identity import assert_user_identity  # noqa: E402,F401  (re-exported)
 from pii import is_pii_column, pii_reason  # noqa: E402
 import guardrails as _guardrails  # noqa: E402
+
+# The adapter registry is imported through the `_shared` PACKAGE name rather than
+# bare, unlike its siblings above. This module is reachable both as `spine` and as
+# `_shared.spine`, which is harmless for stateless helpers but not for the adapter
+# cache: two module identities would mean two caches. Importing it one way from
+# everywhere keeps it a single object.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from _shared import adapters  # noqa: E402
 
 REFUSAL_EXIT = 5
 
@@ -177,7 +185,13 @@ def validate_filters(spec: dict, filters: dict) -> None:
 
 
 def col_expr(spec: dict, col: str) -> str:
-    """SQL expression for a dimension/filter column, casting where required."""
+    """SQL expression for a dimension/filter column, casting where required.
+
+    Emits canonical BigQuery (`AS STRING`) unconditionally — `_shared/dialect.py`
+    rewrites it to `AS TEXT` for sqlite. Branching on the engine here instead
+    would put dialect knowledge in a governance module and make the generated SQL
+    engine-dependent; see `fq_view` for the same reasoning.
+    """
     if col in (spec.get("string_cast") or []):
         return f"CAST({col} AS STRING)"
     return col
@@ -509,34 +523,48 @@ def build_where(
 
 
 # ---------------------------------------------------------------------------
-# BigQuery execution (user identity enforced)
+# Execution (the single warehouse contact point, behind an adapter)
 # ---------------------------------------------------------------------------
+# Everything above this line is pure string building over ONE canonical dialect
+# (BigQuery). This is the only function in the plugin that reaches a database,
+# which is why swapping engines is a dispatch rather than a rewrite: the
+# `bigquery` adapter asserts per-user identity and binds typed parameters; the
+# `sqlite` adapter loads the committed fixture CSVs into an in-memory database,
+# translates the canonical SQL once (`_shared/dialect.py`), and runs it. Engine
+# comes from `ASSAY_ENGINE`, defaulting to sqlite so a fresh clone works.
 
-def run_query(project: str, sql: str, params: dict) -> list[dict]:
-    try:
-        from google.cloud import bigquery
-    except ImportError:
-        sys.stderr.write("Missing deps. Install with:\n  pip install google-cloud-bigquery pyyaml\n")
-        sys.exit(3)
+def run_query(project: str, sql: str, params: dict, *, engine: str | None = None) -> list[dict]:
+    """Execute `sql` with bound `params` on the resolved engine.
 
-    assert_user_identity()  # exits 2 / 4 on bad credentials
+    Signature is unchanged from the pre-adapter version (`engine` is keyword-only
+    and optional), so every existing caller is untouched.
+    """
+    return adapters.get_adapter(engine).run_query(project, sql, params)
 
-    def _param(name, value):
-        if isinstance(value, dt.date):
-            return bigquery.ScalarQueryParameter(name, "DATE", value)
-        return bigquery.ScalarQueryParameter(name, "STRING", value)
 
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[_param(n, v) for n, v in params.items()],
-        labels={"source": "assay-spine-skill"},
+def active_adapter(engine: str | None = None):
+    """The adapter a query would run on. Skills use this to stamp provenance —
+    chiefly `fixture_backed`, which becomes the renderers' `mock: true`
+    watermark — and to check capabilities (percentile push-down) before building
+    a query."""
+    return adapters.get_adapter(engine)
+
+
+def fq_view(spec: dict, *, engine: str | None = None) -> str:
+    """The spine view's reference in **canonical** (BigQuery) SQL.
+
+    Adapter-resolved, but both adapters intentionally return the same
+    `project.dataset.view` form. sqlite has no such namespace, and the obvious
+    fix — have this return a bare table name under sqlite — would make the
+    generated SQL, and therefore the artifact's `query_sha` receipt, depend on
+    which engine served it. Instead the SQL stays dialect-stable and the
+    flattening to a physical table name happens in exactly one place,
+    `dialect.translate_sql`. Ask the adapter for `table_name()` when you need the
+    physical relation (the fixture loader does).
+    """
+    return adapters.get_adapter(engine).qualify_view(
+        spec["source_project"], spec["source_view"]
     )
-    client = bigquery.Client(project=project)
-    rows = client.query(sql, job_config=job_config).result()
-    return [dict(r) for r in rows]
-
-
-def fq_view(spec: dict) -> str:
-    return f"{spec['source_project']}.{spec['source_view']}"
 
 
 def filters_from_args(filter_args: list[str]) -> dict:

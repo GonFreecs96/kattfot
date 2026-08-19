@@ -19,10 +19,26 @@ the gap the manifest closes. A `result_sha` re-check is a deliberate, separate
 
 from __future__ import annotations
 
+import datetime as dt
 import sys
 from pathlib import Path
 
 from _shared import manifest as mf
+
+
+def _as_date(value):
+    """A frontmatter date value as a `dt.date`, or None.
+
+    PyYAML parses an unquoted `2026-08-10` into a `dt.date` already; a quoted one
+    arrives as a string. Both have to work, since the artifact is hand-editable
+    markdown and either form is legitimate YAML.
+    """
+    if value is None or isinstance(value, dt.date):
+        return value
+    try:
+        return dt.date.fromisoformat(str(value).strip())
+    except ValueError:
+        return None
 
 # Stable single-line status prefixes (same style as the consumer-api sentinels).
 VERIFY_OK = "VERIFY_OK"
@@ -96,12 +112,30 @@ def verify_frontmatter(fm: dict, *, aq=None) -> dict:
     dimensions = list(fm.get("dimensions") or [])
     filters = dict(fm.get("filters") or {})
     project = fm.get("source_project") or metric.get("source_project") or "<project>"
-    sql, params = aq.build_sql(metric, project, dimensions, filters)
+
+    # The maturity cutoff is an INPUT to the query, so a faithful rebuild has to use
+    # the one the artifact recorded — not a freshly resolved one, which would move
+    # every day and make verify report drift purely because time passed.
+    #
+    # It comes from the artifact rather than being recomputed for the same reason the
+    # window does. An artifact from a metric with a `maturity_stage` (every metric in
+    # the bundled catalog) carries `cohort_week <= @maturity_cutoff` in its SQL, so
+    # omitting it here would report QUERY_DRIFT on every single governed artifact —
+    # which is worse than not checking, because a verifier that always cries drift
+    # gets ignored.
+    #
+    # Absent (an older artifact, or a metric with no maturity gate) means rebuild
+    # without the predicate, which is exactly what produced that artifact.
+    cutoff_raw = fm.get("maturity_cutoff") or None
+    cutoff = _as_date(cutoff_raw)
+    sql, params = aq.build_sql(metric, project, dimensions, filters, cutoff)
     params_out = {
         **params,
         "start_date": str(fm.get("time_range_start")),
         "end_date": str(fm.get("time_range_end")),
     }
+    if cutoff is not None:
+        params_out["maturity_cutoff"] = cutoff.isoformat()
     recomputed_query = mf.query_sha(sql, params_out)
     claimed_query = manifest.get("query_sha")
     if recomputed_query != claimed_query:

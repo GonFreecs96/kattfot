@@ -1,24 +1,31 @@
 """Shared test setup.
 
-Puts the plugin's skill packages on sys.path so tests can import the governance
-code exactly as the skill runtime does:
+Puts the plugin's skill packages on `sys.path` so tests import the governance code
+exactly as the skill runtime does:
 
-  - `_shared.identity`       (per-user-identity / service-account refusal)
-  - `_shared.pii`            (R6 PII denylist)
-  - `_shared.manifest`       (content-addressed provenance receipts)
-  - `_shared.reconcile`      (difference attribution)
-  - `_shared.verify`         (offline definition/query drift)
-  - `doctor`                 (setup skill's environment doctor)
-  - `scrub_check`            (the repo's deny-token gate)
+  - `_shared.identity`   (per-user identity / service-account refusal)
+  - `_shared.pii`        (R6 PII denylist)
+  - `_shared.manifest`   (content-addressed provenance receipts)
+  - `_shared.reconcile`  (difference attribution)
+  - `_shared.verify`     (offline definition/query drift)
+  - `_shared.spine`      (module registry, maturity, WHERE builder)
+  - `_shared.dialect`    (the BigQuery -> sqlite translator)
+  - `_shared.adapters`   (the warehouse adapter seam)
+  - `assay_query`        (the governed query helper)
+  - `chart_spec`         (visualize-metric's spec builder)
+  - `doctor`             (the setup skill's environment doctor)
+  - `scrub_check`        (the repo's deny-token gate)
 
-These are the modules that enforce governance in code. The agent layer enforces
-the tier gate (R4) and the individual-level rules (R5); those are validated by
-the catalog linter + agent prompts, not here.
+`render.py` is deliberately absent from this list: it needs matplotlib, and the
+suite is kept installable in seconds with no compiled dependencies. Its behavior is
+covered where it matters — through `chart_spec`'s output contract, which is what
+constrains what any renderer can draw.
 
-Note what is deliberately absent: the query helper's `query-metric/scripts` dir,
-which would put `assay_query` on the path. That skill is not in this template
-yet, so anything needing it is either injected as a stub (see `test_verify.py`)
-or deferred — no test here imports a module that does not exist.
+Note the adapter import style. `_shared.adapters` keeps a process-level cache of
+adapter instances, so it must be a single module object; the package uses relative
+imports internally and everything here reaches it through the `_shared` package
+name for the same reason. The stateless siblings (`identity`, `pii`) are reachable
+either way, which is why some existing skill scripts import them bare.
 """
 
 import sys
@@ -27,8 +34,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "plugins" / "assay" / "skills"
 SETUP_SCRIPTS = SKILLS / "setup" / "scripts"
+QUERY_SCRIPTS = SKILLS / "query-metric" / "scripts"
+VISUALIZE_SCRIPTS = SKILLS / "visualize-metric" / "scripts"
 REPO_SCRIPTS = ROOT / "scripts"
 
-for _p in (str(SKILLS), str(SETUP_SCRIPTS), str(REPO_SCRIPTS)):
+for _p in (
+    str(SKILLS),
+    str(SETUP_SCRIPTS),
+    str(QUERY_SCRIPTS),
+    str(VISUALIZE_SCRIPTS),
+    str(REPO_SCRIPTS),
+):
     if _p not in sys.path:
         sys.path.insert(0, _p)

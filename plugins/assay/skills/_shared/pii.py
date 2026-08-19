@@ -56,6 +56,19 @@ SAFE_ALLOWLIST = {
     "country",
 }
 
+# Any run of snake_case prefixes, e.g. the `customer_` in `customer_email`. Applied
+# only to the categories where a prefix cannot make a column innocent: nothing
+# harmless is named `<something>_email`, `<something>_phone`, `<something>_ssn`, or
+# `<something>_dob`.
+#
+# Deliberately NOT applied to `name`. A generic prefix there would flag
+# `product_name`, `category_name`, `carrier_name`, and `channel_name` — ordinary
+# governed dimensions, none of which identifies a person. That category therefore
+# enumerates the person-ish prefixes explicitly instead, and the cost of that choice
+# is that a novel one (`purchaser_name`) needs adding by hand. Making R6 so blunt
+# that governed analysis stops working is its own kind of failure.
+_PFX = r"(?:[a-z0-9]+_)*"
+
 # Each category maps to regexes matched against the *whole* lowercased column
 # name (re.fullmatch). Anchoring on fullmatch is what stops a short pattern from
 # firing on an innocent column that merely contains it: `tin` (taxpayer ID) must
@@ -65,24 +78,24 @@ PII_PATTERNS: dict[str, list[re.Pattern]] = {
         re.compile(r"name"),
         re.compile(r"(first|last|middle|full|legal|maiden|preferred|customer|"
                    r"buyer|shopper|recipient|cardholder|account_holder|contact|"
-                   r"shipping|billing|payer|owner)_name"),
+                   r"shipping|billing|payer|owner|purchaser)_name"),
         re.compile(r"name_(first|last|middle|full)"),
     ],
     "contact": [
-        re.compile(r"e_?mail(_address)?"),
-        re.compile(r"phone(_number)?"),
-        re.compile(r"mobile(_number)?"),
-        re.compile(r"fax(_number)?"),
+        re.compile(_PFX + r"e_?mail(_address)?"),
+        re.compile(_PFX + r"phone(_number)?"),
+        re.compile(_PFX + r"mobile(_number)?"),
+        re.compile(_PFX + r"fax(_number)?"),
     ],
     "government_id": [
-        re.compile(r"ssn"),
-        re.compile(r"social_security(_number)?"),
-        re.compile(r"tax_id"),
-        re.compile(r"tin"),
-        re.compile(r"drivers?_licen[sc]e(_number)?"),
-        re.compile(r"dl_number"),
-        re.compile(r"passport(_number)?"),
-        re.compile(r"national_id"),
+        re.compile(_PFX + r"ssn(_last4)?"),
+        re.compile(_PFX + r"social_security(_number)?"),
+        re.compile(_PFX + r"tax_id"),
+        re.compile(_PFX + r"tin"),
+        re.compile(_PFX + r"drivers?_licen[sc]e(_number)?"),
+        re.compile(_PFX + r"dl_number"),
+        re.compile(_PFX + r"passport(_number)?"),
+        re.compile(_PFX + r"national_id"),
     ],
     "financial": [
         re.compile(r"(bank_)?account_number"),
@@ -108,11 +121,11 @@ PII_PATTERNS: dict[str, list[re.Pattern]] = {
         re.compile(r"health_condition"),
     ],
     "date_of_birth": [
-        re.compile(r"dob"),
-        re.compile(r"date_of_birth"),
-        re.compile(r"birth_?date"),
-        re.compile(r"birthday"),
-        re.compile(r"birth_dt"),
+        re.compile(_PFX + r"dob"),
+        re.compile(_PFX + r"date_of_birth"),
+        re.compile(_PFX + r"birth_?date"),
+        re.compile(_PFX + r"birthday"),
+        re.compile(_PFX + r"birth_dt"),
     ],
     "address": [
         re.compile(r"street(_address)?"),
@@ -120,7 +133,11 @@ PII_PATTERNS: dict[str, list[re.Pattern]] = {
         re.compile(r"address(_\d+)?"),
         re.compile(r"addr(_\d+)?"),
         re.compile(r"address_line(_\d+)?"),
-        re.compile(r"(mailing|home|residential|full|shipping|billing|delivery)_address"),
+        # Enumerated rather than generically prefixed, for the same reason as
+        # `name`: `warehouse_address` and `store_address` are facility attributes, not
+        # personal data, and flagging them would block legitimate logistics analysis.
+        re.compile(r"(mailing|home|residential|full|shipping|billing|delivery|"
+                   r"customer|buyer|recipient|purchaser)_address"),
     ],
 }
 

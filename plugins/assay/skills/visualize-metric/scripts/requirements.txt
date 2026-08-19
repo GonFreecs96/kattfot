@@ -1,0 +1,15 @@
+# Dependencies for visualize-metric.
+#
+# `chart_spec.py` needs only pyyaml — it parses an artifact's frontmatter and the
+# funnels config, and does no drawing. `render.py` needs matplotlib for the static
+# SVG/PNG that the PDF path embeds.
+#
+# If you only want an interactive chart, you do not need matplotlib at all: the
+# sibling `render-chart` skill consumes the SAME spec and is pure standard library.
+# The split is deliberate — the spec is the contract, and the two renderers are
+# interchangeable backends behind it.
+#
+# Install into a venv so you don't fight your system Python (PEP 668):
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+pyyaml>=6.0.3       # artifact frontmatter + funnels.yaml
+matplotlib>=3.8     # render.py only (static SVG/PNG)

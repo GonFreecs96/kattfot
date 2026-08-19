@@ -1,0 +1,166 @@
+{
+  "full_window_no_dim": [
+    {
+      "week_start": "2026-03-30",
+      "numerator": 1000,
+      "denominator": 1540,
+      "example_checkout_completion_rate": 0.6493506493506493
+    },
+    {
+      "week_start": "2026-04-06",
+      "numerator": 1105,
+      "denominator": 1630,
+      "example_checkout_completion_rate": 0.6779141104294478
+    },
+    {
+      "week_start": "2026-04-13",
+      "numerator": 1140,
+      "denominator": 1660,
+      "example_checkout_completion_rate": 0.6867469879518072
+    },
+    {
+      "week_start": "2026-04-20",
+      "numerator": 1105,
+      "denominator": 1635,
+      "example_checkout_completion_rate": 0.6758409785932722
+    },
+    {
+      "week_start": "2026-04-27",
+      "numerator": 1070,
+      "denominator": 1650,
+      "example_checkout_completion_rate": 0.6484848484848484
+    },
+    {
+      "week_start": "2026-05-04",
+      "numerator": 1210,
+      "denominator": 1730,
+      "example_checkout_completion_rate": 0.6994219653179191
+    },
+    {
+      "week_start": "2026-05-11",
+      "numerator": 1130,
+      "denominator": 1660,
+      "example_checkout_completion_rate": 0.6807228915662651
+    },
+    {
+      "week_start": "2026-05-18",
+      "numerator": 1245,
+      "denominator": 1765,
+      "example_checkout_completion_rate": 0.7053824362606232
+    }
+  ],
+  "by_segment": [
+    {
+      "week_start": "2026-03-30",
+      "segment": "segment_a",
+      "numerator": 775,
+      "denominator": 1145,
+      "example_checkout_completion_rate": 0.6768558951965066
+    },
+    {
+      "week_start": "2026-03-30",
+      "segment": "segment_b",
+      "numerator": 225,
+      "denominator": 395,
+      "example_checkout_completion_rate": 0.569620253164557
+    },
+    {
+      "week_start": "2026-04-06",
+      "segment": "segment_a",
+      "numerator": 810,
+      "denominator": 1198,
+      "example_checkout_completion_rate": 0.676126878130217
+    },
+    {
+      "week_start": "2026-04-06",
+      "segment": "segment_b",
+      "numerator": 295,
+      "denominator": 432,
+      "example_checkout_completion_rate": 0.6828703703703703
+    },
+    {
+      "week_start": "2026-04-13",
+      "segment": "segment_a",
+      "numerator": 840,
+      "denominator": 1220,
+      "example_checkout_completion_rate": 0.6885245901639344
+    },
+    {
+      "week_start": "2026-04-13",
+      "segment": "segment_b",
+      "numerator": 300,
+      "denominator": 440,
+      "example_checkout_completion_rate": 0.6818181818181818
+    },
+    {
+      "week_start": "2026-04-20",
+      "segment": "segment_a",
+      "numerator": 795,
+      "denominator": 1175,
+      "example_checkout_completion_rate": 0.676595744680851
+    },
+    {
+      "week_start": "2026-04-20",
+      "segment": "segment_b",
+      "numerator": 310,
+      "denominator": 460,
+      "example_checkout_completion_rate": 0.6739130434782609
+    },
+    {
+      "week_start": "2026-04-27",
+      "segment": "segment_a",
+      "numerator": 810,
+      "denominator": 1200,
+      "example_checkout_completion_rate": 0.675
+    },
+    {
+      "week_start": "2026-04-27",
+      "segment": "segment_b",
+      "numerator": 260,
+      "denominator": 450,
+      "example_checkout_completion_rate": 0.5777777777777777
+    },
+    {
+      "week_start": "2026-05-04",
+      "segment": "segment_a",
+      "numerator": 920,
+      "denominator": 1310,
+      "example_checkout_completion_rate": 0.7022900763358778
+    },
+    {
+      "week_start": "2026-05-04",
+      "segment": "segment_b",
+      "numerator": 290,
+      "denominator": 420,
+      "example_checkout_completion_rate": 0.6904761904761905
+    },
+    {
+      "week_start": "2026-05-11",
+      "segment": "segment_a",
+      "numerator": 790,
+      "denominator": 1180,
+      "example_checkout_completion_rate": 0.6694915254237288
+    },
+    {
+      "week_start": "2026-05-11",
+      "segment": "segment_b",
+      "numerator": 340,
+      "denominator": 480,
+      "example_checkout_completion_rate": 0.7083333333333334
+    },
+    {
+      "week_start": "2026-05-18",
+      "segment": "segment_a",
+      "numerator": 895,
+      "denominator": 1255,
+      "example_checkout_completion_rate": 0.7131474103585658
+    },
+    {
+      "week_start": "2026-05-18",
+      "segment": "segment_b",
+      "numerator": 350,
+      "denominator": 510,
+      "example_checkout_completion_rate": 0.6862745098039216
+    }
+  ]
+}

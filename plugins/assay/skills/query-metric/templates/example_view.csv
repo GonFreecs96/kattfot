@@ -1,0 +1,17 @@
+week_start,segment,sessions_started,sessions_completed
+2026-03-30,segment_a,1145,775
+2026-03-30,segment_b,395,225
+2026-04-06,segment_a,1198,810
+2026-04-06,segment_b,432,295
+2026-04-13,segment_a,1220,840
+2026-04-13,segment_b,440,300
+2026-04-20,segment_a,1175,795
+2026-04-20,segment_b,460,310
+2026-04-27,segment_a,1200,810
+2026-04-27,segment_b,450,260
+2026-05-04,segment_a,1310,920
+2026-05-04,segment_b,420,290
+2026-05-11,segment_a,1180,790
+2026-05-11,segment_b,480,340
+2026-05-18,segment_a,1255,895
+2026-05-18,segment_b,510,350

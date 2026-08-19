@@ -33,6 +33,17 @@ PII_COLUMNS = [
     "email", "email_address", "phone", "phone_number", "mobile_number",
     "ssn", "social_security_number", "tax_id", "tin", "drivers_license",
     "passport_number", "national_id",
+    # Prefixed forms. These are the shapes a real warehouse actually uses, and the
+    # bare-word patterns above did not catch them: `customer_name` was covered by
+    # the name category's explicit prefix list, but `customer_email` was not covered
+    # by anything until the contact / government-id / date-of-birth categories
+    # gained a generic snake_case prefix. A column called `customer_email` is about
+    # as common as a column gets, so this was a real hole rather than a hypothetical.
+    "customer_email", "billing_email", "contact_email", "buyer_e_mail",
+    "customer_phone", "mobile_phone", "shipping_phone_number",
+    "customer_ssn", "hashed_ssn", "ssn_last4", "applicant_tax_id",
+    "customer_dob", "insured_date_of_birth", "user_birthday",
+    "customer_address", "recipient_address", "purchaser_name",
     "account_number", "bank_account_number", "routing_number", "iban",
     "card_number", "credit_card_number", "cc_number", "cvv",
     "diagnosis", "icd10_code", "medical_record_number", "mrn", "prescription",
@@ -50,6 +61,14 @@ NEUTRAL_DIMENSIONS = [
     "cohort_week", "order_total", "promo_code", "sku", "fulfillment_center",
     "terminal_branch", "final_outcome", "final_outcome_detail",
     "address_type", "destination_market", "is_gift",
+    # `*_name` columns that name a THING, not a person. These pin the deliberate
+    # asymmetry in `pii.py`: the contact / government-id / date-of-birth categories
+    # take a generic snake_case prefix because nothing innocent is called
+    # `<x>_email`, while `name` and `address` enumerate person-ish prefixes because
+    # plenty of innocent things are called `<x>_name` or `<x>_address`. Widen the
+    # name category generically and these fail — which is the point.
+    "product_name", "category_name", "carrier_name", "channel_name",
+    "warehouse_address", "store_address",
 ]
 
 
