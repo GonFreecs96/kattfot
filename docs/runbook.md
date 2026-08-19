@@ -2,7 +2,8 @@
 
 *No-fluff how-to. Pair with the [glossary](glossary.md) (what the terms
 mean), the [skill cheat sheet](skill-cheatsheet.md) (every flag + example),
-and [`what-is-assay.md`](what-is-assay.md) (why this exists).*
+and [`what-is-assay.md`](what-is-assay.md) (why this exists). Want to see
+real output before running anything? [`examples/`](../examples/) has it.*
 
 Everything here is invoked in chat with Claude Code / Cursor. Skills are
 `assay:<skill>`. When in doubt, start at `assay:catalog`.

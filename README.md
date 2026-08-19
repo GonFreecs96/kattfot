@@ -282,6 +282,7 @@ scripts/                     repo tooling, NOT part of the shipped plugin
 data/assay/sample/           the two committed fixture CSVs + FIXTURES.md (seed, instant, trim)
 tests/                       governance tests + catalog linter, run by pytest
 outputs/                     generated artifacts (git-ignored, reproducible)
+examples/                    committed copies of real output — see examples/README.md
 docs/                        this documentation suite
 ```
 

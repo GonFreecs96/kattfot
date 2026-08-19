@@ -725,16 +725,24 @@ Emits a file — attaching/hosting it anywhere is a downstream, human choice.
 
 ## `export-report` — artifact → self-contained PDF
 
-**Purpose:** package a governed artifact (with its chart) as one
-downloadable PDF — chart inline, Results, Narrative, verbatim Caveats,
-tier+source stamp, MOCK DATA banner. Local only.
+**Purpose:** package a governed artifact as one downloadable PDF — chart
+inline when present, every table-bearing section, Narrative, verbatim
+Caveats, tier+source stamp, MOCK DATA banner. Local only. Accepts **two**
+artifact shapes: a `query-metric` / `visualize-metric` artifact (keyed by
+`metric:` in frontmatter, usually with a chart, its table under
+`## Results`) or a spine-analysis artifact from `funnel-dropoff`,
+`stage-timing`, `segment-compare`, or `funnel-pulse` (keyed by `skill:`
+instead, chart-less, its table(s) under its own skill-specific heading(s) —
+e.g. `## Stage funnel` + `## Where it leaks (terminal branch)`, or
+`## Latency by transition`). An artifact with **neither** `metric` nor
+`skill` is refused.
 
 ```
 assay:export-report [artifact path]
 ```
-Run `assay:visualize-metric` first so the artifact has a
-`## Visualization` section (without one the PDF is still produced, just
-chart-less).
+Run `assay:visualize-metric` first so a metric artifact has a
+`## Visualization` section (without one — or for a chart-less spine
+artifact — the PDF is still produced, just chart-less).
 
 **Helper** (needs `fpdf2` in the venv)
 ```bash
@@ -745,16 +753,20 @@ chart-less).
 ```
 
 **Returns:** prints `{"pdf_path", "title"}`; PDF written next to the
-artifact (`outputs/assay/{date}-{slug}.pdf` by default). Reproduces numbers
-and caveats **verbatim**; renders a MOCK DATA banner when
-`source_mode == mock_csv` or `fixture_backed`; quantizes the chart so the
-file stays small.
+artifact (`outputs/assay/{date}-{slug}.pdf` by default). Renders **every**
+table-bearing section in the artifact's own document order — not a single
+hardcoded `## Results` lookup — so a spine artifact's several
+skill-specific tables all render with no per-skill heading map to maintain
+(see `table_sections()` in `report_pdf.py`). Reproduces numbers and caveats
+**verbatim**; renders a MOCK DATA banner when `fixture_backed` or
+`source_mode` is `mock_csv`/`fixture_sql`; quantizes the chart so the file
+stays small.
 
-**Gotchas:** exports governed output only — a non-governed artifact (missing
-`metric`, `accuracy_tier`, `source_view`, `generated_at`) is refused. No
-upload/email/publish — this skill only writes a local file. Any T1/T3
-metric is refused further upstream, by `query-metric`, before this skill
-ever sees it.
+**Gotchas:** exports governed output only — an artifact missing
+`accuracy_tier`, `source_view`, `generated_at`, or **both** `metric` and
+`skill` is refused. No upload/email/publish — this skill only writes a
+local file. Any T1/T3 metric is refused further upstream, by
+`query-metric`, before this skill ever sees it.
 
 ---
 
@@ -833,6 +845,7 @@ query-metric ──→ visualize-metric ──→ export-report      # number �
 
 funnel-pulse ──→ funnel-dropoff ──→ stage-timing ──→ segment-compare
    # regression deep-dive: broad sweep → where it leaks → how slow → describe the shift
+   # any of these four (chart-less) ──→ export-report   # spine analysis → PDF
 
 reconcile   # any governed metric, against an external value, on demand
 verify      # any query-metric artifact, offline, at any time

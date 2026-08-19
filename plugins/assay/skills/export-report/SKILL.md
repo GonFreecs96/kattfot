@@ -5,9 +5,10 @@ description: >
   visualize-metric chart) or a spine-analysis artifact from funnel-dropoff,
   stage-timing, segment-compare, or funnel-pulse — to a single self-contained
   PDF on disk that a user can download and distribute as-is: chart inline
-  when present, Results table, Narrative, and verbatim Caveats, stamped with
-  the accuracy tier and source. Local only: no upload, no publishing
-  pipeline. The markdown artifact is the other portable form.
+  when present, every table-bearing section, Narrative, and verbatim
+  Caveats, stamped with the accuracy tier and source. Local only: no
+  upload, no publishing pipeline. The markdown artifact is the other
+  portable form.
 ---
 
 # Skill: export-report
@@ -25,9 +26,13 @@ query-metric  →  visualize-metric  →  export-report
 
 It also exports the spine-analysis skills directly — `funnel-dropoff`,
 `stage-timing`, `segment-compare`, and `funnel-pulse` write artifacts with the
-same Results-table-plus-caveats-plus-tier-stamp shape, keyed by `skill:`
-instead of `metric:` in frontmatter, and chart-less. Refusing to export those
-would be an arbitrary gap in the compose chain — they are governed,
+same table(s)-plus-caveats-plus-tier-stamp shape, keyed by `skill:` instead of
+`metric:` in frontmatter, and chart-less — each under its own skill-specific
+heading(s) (`## Stage funnel`, `## Latency by transition`, …) rather than a
+section literally named "Results". `report_pdf.py` renders **every**
+table-bearing section it finds, in the artifact's own document order, so
+neither shape needs a maintained per-skill heading map. Refusing to export
+these would be an arbitrary gap in the compose chain — they are governed,
 allow-listed, aggregate-only artifacts exactly like a query-metric run, just
 without a chart:
 
@@ -92,12 +97,17 @@ only.
   [--published-by "<name>"] \
   [--out <path.pdf>]
 ```
-`report_pdf.py` reads the artifact's chart (from `## Visualization`), Results table,
-Narrative, and Caveats and writes a PDF next to the artifact
+`report_pdf.py` reads the artifact's chart (from `## Visualization`, when present) and
+**every table-bearing section, in the artifact's own document order** — not a single
+hardcoded `## Results` lookup, so a metric artifact's one `## Results` table and a
+spine artifact's several skill-specific tables (`## Stage funnel` +
+`## Where it leaks (terminal branch)`, `## Latency by transition`, …) both render
+uniformly with no per-skill heading map to maintain (see `table_sections()`) — plus the
+Narrative and Caveats — and writes a PDF next to the artifact
 (`outputs/assay/{date}-{slug}.pdf` by default). It reproduces numbers and caveats
 **verbatim**, stamps the accuracy tier + source + generated-at, renders a **MOCK DATA**
-banner when `source_mode == mock_csv`, and quantizes the chart so the file stays small. It
-prints `{"pdf_path", "title"}`.
+banner when `fixture_backed` or `source_mode` is `mock_csv`/`fixture_sql`, and quantizes
+the chart so the file stays small. It prints `{"pdf_path", "title"}`.
 
 ### Step 4 — Report
 Tell the user the PDF path (and the markdown artifact path). Do not paste the file into

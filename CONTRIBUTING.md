@@ -16,6 +16,19 @@ This file is about (1). If you are doing (2), you still want
 [Local setup](#local-setup) and [Running the checks](#running-the-checks)
 below, but you are not bound by [What stays out of a PR](#what-stays-out-of-a-pr).
 
+> **Before anything else: run the scrub gate.** `assay` was scrubbed out of a
+> private internal repository before it was made public. `python3
+> scripts/scrub_check.py` — a fixed, 40-token deny-list (the private repo's
+> own name, carrier/partner names, internal warehouse identifiers,
+> issue-tracker project keys, contact addresses) — is the **only** thing
+> standing between a contribution and one of those tokens re-entering this
+> public repo. **This project has no CI.** The gate is wired into `pytest`
+> (see [Running the checks](#running-the-checks)) so it cannot be skipped by
+> skipping a separate CI job that doesn't exist — but nothing forces you to
+> run `pytest` either. Keeping this repo clean is a **manual discipline**,
+> not an automated backstop: run the gate yourself, every time, especially
+> if you're porting language in from somewhere else.
+
 ## Repository layout
 
 ```
@@ -45,6 +58,8 @@ data/assay/sample/                     # the two committed fixture CSVs + FIXTUR
 tests/                                 # governance tests + catalog linter (run by pytest)
 docs/                                  # this documentation suite
 outputs/                               # generated artifacts — git-ignored (reproducible)
+examples/                              # committed, real generated output — what a fresh
+                                        #   clone actually produces, see examples/README.md
 ```
 
 ## Local setup

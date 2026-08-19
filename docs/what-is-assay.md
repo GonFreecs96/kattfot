@@ -50,7 +50,10 @@ Every mechanism described here is checked by a test, not merely documented.
 `scripts/demo_skills.py` runs all fifteen functional skills in an environment
 scrubbed of credentials and fails if any of them cannot; `tests/test_pii_refusal.py`
 asserts a personal column is refused even when a metric's own frontmatter
-allow-lists it by mistake. Read the code, not just this doc.
+allow-lists it by mistake. Read the code, not just this doc — or, to see the
+output without cloning anything, go straight to
+[`examples/`](../examples/): a real governed artifact, its chart, and its
+PDF export, side by side.
 
 **3. Anyone comparing this to a plain BI dashboard.** A dashboard shows you
 numbers someone already vetted. An agent that can run *new* queries on
