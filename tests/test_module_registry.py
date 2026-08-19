@@ -34,7 +34,7 @@ ALL_SKILLS = {
     "funnel-pulse",
     "funnel-nowcast",
     "release-scorecard",
-    "applicant-journey",
+    "customer-journey",
 }
 
 # The plumbing keys every funnel spec must carry.
@@ -71,7 +71,7 @@ SKILL_REQUIRED_SPEC_FIELDS = {
     "funnel-pulse": ["stages", "terminal_branches", "pulse"],
     "funnel-nowcast": ["nowcast"],
     "release-scorecard": ["stages"],
-    "applicant-journey": ["rate_flags", "journey_flags"],
+    "customer-journey": ["rate_flags", "journey_flags"],
 }
 
 # `live` = a queryable view exists on the default engine (a committed fixture here,

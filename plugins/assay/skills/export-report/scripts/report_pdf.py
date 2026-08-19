@@ -1,16 +1,30 @@
 #!/usr/bin/env python3
-"""report_pdf.py — render a governed query-metric artifact into a PDF.
+"""report_pdf.py — render a governed artifact into a PDF.
 
-Produces a single, self-contained, stakeholder-ready PDF from a `query-metric`
-output artifact: the chart (inline), the Results table, the Narrative, the
-verbatim Caveats, and the governance stamp (accuracy tier, source view,
-generated-at, and a MOCK DATA banner when applicable). The PDF is written
-locally for the user to download and distribute as-is — no upload, no
-publishing pipeline (the `export-report` skill).
+Produces a single, self-contained, stakeholder-ready PDF from a governed
+output artifact: the chart (inline, when present), the Results table, the
+Narrative, the verbatim Caveats, and the governance stamp (accuracy tier,
+source view, generated-at, and a MOCK DATA / FIXTURE DATA banner when
+applicable). The PDF is written locally for the user to download and
+distribute as-is — no upload, no publishing pipeline (the `export-report`
+skill).
+
+Accepts two artifact shapes, both governed: a `query-metric` /
+`visualize-metric` artifact (keyed by `metric` in frontmatter, usually
+carrying a chart, its table under `## Results`) and a spine-analysis artifact
+from `funnel-dropoff`, `stage-timing`, `segment-compare`, or `funnel-pulse`
+(keyed by `skill` instead, chart-less, its table(s) under a skill-specific
+heading such as `## Stage funnel` or `## Latency by transition`). Every
+table-bearing section is rendered in the artifact's own order — see
+`table_sections()` — so both shapes export uniformly with no per-skill
+heading map to maintain. An artifact with neither `metric` nor `skill` is
+refused — that is what stops an arbitrary markdown file from being
+PDF-exported as though it were governed.
 
 Faithful by construction: every element is read from the artifact the
-governed `query-metric` run already wrote. This helper adds no numbers and
-re-queries nothing. The chart image is the one `visualize-metric` rendered.
+governed run already wrote. This helper adds no numbers and re-queries
+nothing. The chart image, when present, is the one `visualize-metric`
+rendered.
 
 Usage:
   report_pdf.py --artifact outputs/assay/2026-06-01-foo.md \
@@ -83,12 +97,30 @@ def clean(text: str) -> str:
 
 
 def parse_artifact(path: Path) -> tuple[dict, dict]:
+    """Parse a governed artifact's frontmatter + body.
+
+    Two shapes are accepted, both governed and both produced by this template's
+    compose chain: a metric artifact (`query-metric` / `visualize-metric`,
+    keyed by `metric`) and a spine-analysis artifact (`funnel-dropoff`,
+    `stage-timing`, `segment-compare`, `funnel-pulse`, keyed by `skill`). Both
+    carry `accuracy_tier`, `source_view`, and `generated_at`, and both produce
+    one or more results table(s), caveats, and a maturity/tier stamp — the
+    shared shape this exporter actually depends on, even though the two kinds
+    name their table sections differently (see `table_sections()`). An
+    artifact with NEITHER `metric` nor `skill` is refused: that check is what
+    stops an arbitrary markdown file from being PDF-exported as if it were
+    governed.
+    """
     text = path.read_text()
     m = FRONTMATTER_RE.match(text)
     if not m:
-        raise SystemExit(f"ERROR: {path} has no frontmatter — not a query-metric artifact.")
+        raise SystemExit(f"ERROR: {path} has no frontmatter — not a governed artifact.")
     fm = yaml.safe_load(m.group(1)) or {}
-    for req in ("metric", "accuracy_tier", "source_view", "generated_at"):
+    if "metric" not in fm and "skill" not in fm:
+        raise SystemExit(
+            "ERROR: artifact missing 'metric' or 'skill' — only governed artifacts."
+        )
+    for req in ("accuracy_tier", "source_view", "generated_at"):
         if req not in fm:
             raise SystemExit(f"ERROR: artifact missing '{req}' — only governed artifacts.")
     return fm, split_sections(m.group(2))
@@ -119,6 +151,38 @@ def parse_table(lines: list[str]) -> tuple[list[str], list[list[str]]]:
     return header, [r for r in data if len(r) == len(header)]
 
 
+#: Sections that are prose (or otherwise not a results table) even though a
+#: section-by-section scan would otherwise consider them eligible.
+NON_TABLE_SECTIONS = {
+    "_preamble", "narrative", "caveats", "provenance", "visualization",
+    "run warnings", "about this artifact",
+}
+
+
+def table_sections(sections: dict) -> list[tuple[str, list[str], list[list[str]]]]:
+    """Every section, in the artifact's own document order, that contains a
+    Markdown table.
+
+    A query-metric artifact has exactly one: `## Results`. A spine-analysis
+    artifact (funnel-dropoff, stage-timing, segment-compare, funnel-pulse) has
+    no section named "Results" at all — each has its own skill-specific
+    heading instead (`## Stage funnel` + `## Where it leaks (terminal
+    branch)`, `## Latency by transition`, `## Funnel (cumulative from
+    start)` + `## Timing (p{N})`, …), per that skill's own documented Output
+    format. Scanning every section for a table, rather than looking up one
+    hardcoded name, is what lets both shapes render their tables uniformly
+    without a maintained per-skill heading map.
+    """
+    out = []
+    for key, lines in sections.items():
+        if key in NON_TABLE_SECTIONS:
+            continue
+        header, data = parse_table(lines)
+        if header:
+            out.append((key, header, data))
+    return out
+
+
 def paragraphs(lines: list[str]) -> list[str]:
     out, buf = [], []
     for ln in lines:
@@ -132,13 +196,40 @@ def paragraphs(lines: list[str]) -> list[str]:
 
 
 def bullets(lines: list[str]) -> list[str]:
-    out = []
+    """Bullet items from a Markdown list, rejoining soft-wrapped continuation lines.
+
+    Every caveat in this repo is hand-wrapped at ~80 characters across several
+    physical lines with no blank line in between, e.g.:
+
+        - **Channel mix moves this number without anything changing.** The channels
+          converting between 55% and 76% means a shift in traffic mix alone will move
+          the blended rate.
+        - **A cart is not an intent to buy.** ...
+
+    A line that is non-blank and does not start with "- " is a continuation of the
+    bullet directly above it, and gets joined onto it with a single space — the
+    naive version that kept only lines starting with "- " silently truncated every
+    multi-line bullet to its first physical line, which is exactly the kind of
+    silent loss this artifact's own footer ("reproduced verbatim") promises does
+    not happen.
+
+    A blank line still closes the current bullet: a later non-bullet line (for
+    example a "### " sub-heading swept into this section by the coarse "## " split
+    in `split_sections`) is not glued onto an unrelated, already-finished bullet.
+    """
+    out: list[str] = []
+    continuing = False
     for ln in lines:
         s = ln.strip()
+        if not s:
+            continuing = False
+            continue
         if s.startswith("- "):
             # strip markdown bold/inline-code markers for clean PDF text
-            s = s[2:].replace("**", "").replace("`", "")
-            out.append(s)
+            out.append(s[2:].replace("**", "").replace("`", ""))
+            continuing = True
+        elif continuing and out:
+            out[-1] = out[-1] + " " + s.replace("**", "").replace("`", "")
     return out
 
 
@@ -199,7 +290,7 @@ def _quantized(img_path: Path) -> str:
 
 
 def build_pdf(fm: dict, sections: dict, artifact_dir: Path, out: Path, published_by: str) -> None:
-    title = fm.get("display_name", fm.get("metric"))
+    title = fm.get("display_name") or fm.get("metric") or fm.get("skill")
     tier = fm.get("accuracy_tier", "")
     src = f"{fm.get('source_project','')}.{fm.get('source_view','')}".strip(".")
     generated = str(fm.get("generated_at", ""))
@@ -258,10 +349,10 @@ def build_pdf(fm: dict, sections: dict, artifact_dir: Path, out: Path, published
             pdf.multi_cell(width, 5, clean(caption))
         pdf.ln(3)
 
-    # Results table
-    header, data = parse_table(sections.get("results", []))
-    if header:
-        _section_heading(pdf, "Results", width)
+    # Results table(s) — "Results" for a metric artifact; one or more
+    # skill-specific tables for a spine-analysis artifact (see table_sections()).
+    for key, header, data in table_sections(sections):
+        _section_heading(pdf, key.capitalize(), width)
         _render_table(pdf, header, data, width)
         pdf.ln(2)
 
@@ -293,10 +384,16 @@ def build_pdf(fm: dict, sections: dict, artifact_dir: Path, out: Path, published
     pdf.ln(2)
     pdf.set_font("Helvetica", "I", 8)
     pdf.set_text_color(*MUTED)
+    if "metric" in fm:
+        origin = (
+            f"metric `{fm.get('metric')}` · tier {tier}. Generated by query-metric, "
+            f"charted by visualize-metric."
+        )
+    else:
+        origin = f"skill `{fm.get('skill')}` · tier {tier}. Generated by assay:{fm.get('skill')}."
     pdf.multi_cell(
         width, 4.5,
-        clean(f"Governed artifact from assay · metric `{fm.get('metric')}` · "
-              f"tier {tier}. Generated by query-metric, charted by visualize-metric. "
+        clean(f"Governed artifact from assay · {origin} "
               f"Numbers and caveats are reproduced verbatim from the source run."),
     )
 
@@ -347,7 +444,8 @@ def main():
         rel = str(out.relative_to(Path.cwd()))
     except ValueError:
         rel = str(out)
-    print(json.dumps({"pdf_path": rel, "title": fm.get("display_name", fm.get("metric"))}))
+    title = fm.get("display_name") or fm.get("metric") or fm.get("skill")
+    print(json.dumps({"pdf_path": rel, "title": title}))
 
 
 if __name__ == "__main__":

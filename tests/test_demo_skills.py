@@ -33,26 +33,47 @@ def test_the_gate_covers_every_skill_that_exists_on_disk():
     """The test that catches a new skill quietly escaping the gate.
 
     Derived from the directory listing rather than a second hardcoded list, so
-    adding a skill and forgetting to wire it up fails here.
+    adding a skill and forgetting to wire it up fails here. A skill on disk must
+    land in exactly one of `SKILL_ORDER` (the gate runs it for real) or
+    `OUTLINE_ONLY_SKILLS` (it ships as a documented outline with no runnable
+    helper) — never both, and never neither. That "never both" arm is what stops
+    a future skill from being quietly forgotten by adding it to the exclusion set
+    without ever actually wiring it into the gate.
     """
     on_disk = {
         p.parent.name
         for p in SKILLS_DIR.glob("*/SKILL.md")
     }
     assert on_disk, "found no skills on disk"
-    missing = sorted(on_disk - set(demo_skills.SKILL_ORDER))
-    extra = sorted(set(demo_skills.SKILL_ORDER) - on_disk)
-    assert not missing, f"skills on disk that the offline gate does not run: {missing}"
-    assert not extra, f"the gate names skills that do not exist: {extra}"
+    accounted = set(demo_skills.SKILL_ORDER) | demo_skills.OUTLINE_ONLY_SKILLS
+    missing = sorted(on_disk - accounted)
+    extra = sorted(accounted - on_disk)
+    overlap = sorted(set(demo_skills.SKILL_ORDER) & demo_skills.OUTLINE_ONLY_SKILLS)
+    assert not missing, (
+        f"skills on disk that are neither run by the gate nor declared "
+        f"outline-only: {missing}"
+    )
+    assert not extra, f"the gate or OUTLINE_ONLY_SKILLS names skills that do not exist: {extra}"
+    assert not overlap, (
+        f"skill(s) claimed as both runnable and outline-only: {overlap}"
+    )
 
 
 def test_there_are_exactly_fifteen_functional_skills():
     """The number this phase committed to. If it changes, the README, the plugin
     description, and this gate all need to change together — so make that a decision
-    rather than a drift."""
+    rather than a drift.
+
+    Fifteen is the count of *functional* skills specifically — the ones with a real
+    helper the gate runs end to end. It is not the count of skill directories on
+    disk: four more ship as honest outlines (see `OUTLINE_ONLY_SKILLS`), so
+    `plugins/assay/skills/*/SKILL.md` currently totals nineteen. Both numbers are
+    correct at once; they are counting different things.
+    """
     assert len(demo_skills.SKILL_ORDER) == 15
     assert len(demo_skills.STEPS) == 15
     assert set(demo_skills.STEPS) == set(demo_skills.SKILL_ORDER)
+    assert len(demo_skills.OUTLINE_ONLY_SKILLS) == 4
 
 
 def test_every_skill_has_a_skill_md_and_the_gate_runs_a_real_helper():

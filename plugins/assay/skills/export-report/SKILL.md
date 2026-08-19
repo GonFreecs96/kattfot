@@ -1,11 +1,13 @@
 ---
 name: export-report
 description: >
-  Export a governed query-metric artifact (with its visualize-metric chart) to a
-  single self-contained PDF on disk that a user can download and distribute as-is
-  — chart inline, Results table, Narrative, and verbatim Caveats, stamped with the
-  accuracy tier and source. Local only: no upload, no publishing pipeline. The
-  markdown artifact is the other portable form.
+  Export a governed artifact — a query-metric artifact (with its
+  visualize-metric chart) or a spine-analysis artifact from funnel-dropoff,
+  stage-timing, segment-compare, or funnel-pulse — to a single self-contained
+  PDF on disk that a user can download and distribute as-is: chart inline
+  when present, Results table, Narrative, and verbatim Caveats, stamped with
+  the accuracy tier and source. Local only: no upload, no publishing
+  pipeline. The markdown artifact is the other portable form.
 ---
 
 # Skill: export-report
@@ -19,6 +21,19 @@ user can download and hand to anyone — no hosting, no upload, no publishing su
 ```
 query-metric  →  visualize-metric  →  export-report
  (the number)     (the chart)          (a portable PDF on disk)
+```
+
+It also exports the spine-analysis skills directly — `funnel-dropoff`,
+`stage-timing`, `segment-compare`, and `funnel-pulse` write artifacts with the
+same Results-table-plus-caveats-plus-tier-stamp shape, keyed by `skill:`
+instead of `metric:` in frontmatter, and chart-less. Refusing to export those
+would be an arbitrary gap in the compose chain — they are governed,
+allow-listed, aggregate-only artifacts exactly like a query-metric run, just
+without a chart:
+
+```
+funnel-dropoff / stage-timing / segment-compare / funnel-pulse  →  export-report
+                    (the spine analysis)                             (a portable PDF)
 ```
 
 Two portable forms come out of this chain, both local:
@@ -60,11 +75,14 @@ Resolve `ER_ROOT` once, first match wins:
 
 ### Step 1 — Locate the artifact
 Use the given path, else the newest `*.md` in `$ASSAY_OUTPUTS_DIR`. If none, tell the
-user to run `/query-metric` (and `/visualize-metric`) first.
+user to run `/query-metric` (and `/visualize-metric`) first — or one of the
+spine-analysis skills (`/funnel-dropoff`, `/stage-timing`, `/segment-compare`,
+`/funnel-pulse`) for a chart-less spine artifact.
 
 ### Step 2 — Validate
-Confirm governed frontmatter (`metric`, `accuracy_tier`, `source_view`, `generated_at`).
-If it isn't a governed artifact, **stop** and say so — this skill exports governed output
+Confirm governed frontmatter: `accuracy_tier`, `source_view`, `generated_at`, and
+either `metric` (a query-metric artifact) or `skill` (a spine-analysis artifact).
+If neither key is present, **stop** and say so — this skill exports governed output
 only.
 
 ### Step 3 — Render the PDF

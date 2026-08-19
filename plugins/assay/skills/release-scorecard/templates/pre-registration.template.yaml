@@ -1,0 +1,58 @@
+# Release Scorecard — pre-registration template
+#
+# This is a TEMPLATE for a skill that ships as a documented outline only (see
+# ../SKILL.md). Filling this file out is real and useful groundwork — the
+# discipline of writing the hypothesis and the expected direction down BEFORE
+# the release ships is what makes a later verdict a test rather than a story
+# fitted to the data after the fact. But no code in this template validates or
+# consumes this file yet: `scripts/scorecard_stub.py` refuses unconditionally,
+# regardless of what you put here.
+#
+# Once implemented, validate with:
+#   <python> scripts/release_scorecard.py --pre-reg this-file.yaml --dry-run
+
+schema_version: "1"
+
+release:
+  id: my-release-slug          # lowercase kebab-case
+  label: "Human-readable launch name"
+  sign_off_owner: TBD          # PM or analyst — pre-launch sign-off
+
+hypothesis: >
+  What we expect to change, why, and the mechanism (1-3 sentences).
+  Example: A simplified one-page checkout on mobile reduces checkout
+  abandonment and lifts payment-submitted-to-decision conversion.
+
+# Primary metric for the BSTS causal lift (weekly time series).
+# stage_cumulative = cumulative-from-start rate at a funnel stage (spine).
+# nowcast_target = a funnel-nowcast target, for a deep stage (see that
+#   skill's SKILL.md — also outlined, not implemented).
+primary_metric:
+  type: stage_cumulative
+  stage: order_confirmed       # checkout_started | payment_submitted | payment_decisioned | order_confirmed | shipped | delivered | return_window_complete
+  # type: nowcast_target
+  # target: start_to_delivered
+
+# Treatment segment (allow-listed filters only — see checkout-funnel-spec.yaml).
+segment:
+  filters:
+    channel: mobile_app
+
+# Optional control segment — enables DiD alongside BSTS (omit to skip DiD).
+control_segment:
+  label: "Web channel benchmark"
+  filters:
+    channel: web
+
+evaluation:
+  launch_date: "2026-06-01"    # ISO Monday or ship date; pre = cohort_week < date, post >= date
+  pre_weeks: 12                # minimum pre-period weeks required for BSTS (default 12)
+  post_weeks: 8                # post window cap from launch (default 8)
+  # time_range: "2026-01-05:2026-08-10"   # optional override; else derived from launch ± weeks
+
+# Immature-cohort context (funnel-nowcast) — FORECAST lane, not the verdict metric.
+nowcast:
+  enabled: true
+  target: start_to_delivered   # defaults to primary_metric's target if it is a nowcast_target
+
+expected_direction: increase   # increase | decrease | neutral — verdict checks BSTS 95% CI

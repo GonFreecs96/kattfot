@@ -85,6 +85,19 @@ SKILL_ORDER = (
     "funnel-pulse",
 )
 
+#: Skills that ship as a documented outline only — a `SKILL.md` exists on disk, but
+#: there is deliberately no runnable helper behind it (see each skill's own
+#: `SKILL.md` for why). The offline gate cannot run these, and must not silently
+#: forget they exist either — `tests/test_demo_skills.py` asserts every on-disk
+#: skill is in exactly one of `SKILL_ORDER` or this set, never both and never
+#: neither.
+OUTLINE_ONLY_SKILLS = {
+    "funnel-nowcast",
+    "release-scorecard",
+    "customer-journey",
+    "publish",
+}
+
 OPTIONAL_DEPS = {
     "visualize-metric": ("matplotlib", "plugins/assay/skills/visualize-metric/scripts/requirements.txt"),
     "export-report": ("fpdf", "plugins/assay/skills/export-report/scripts/requirements.txt"),

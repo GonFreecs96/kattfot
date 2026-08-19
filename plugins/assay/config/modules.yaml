@@ -87,7 +87,7 @@ modules:
         excluded:
           funnel-nowcast: "Ships as a documented outline only. Chain-ladder now-casting needs a `nowcast:` block (per-target open/arrival timestamps, bootstrap parameters, a development-fraction floor) that is deliberately NOT authored here: those numbers are judgment calls calibrated against a real book, and fitting them to synthetic fixtures would produce a curve that describes the generator rather than any business."
           release-scorecard: "Ships as a documented outline only. Inherits funnel-nowcast's prerequisite, and a causal verdict (BSTS counterfactual or difference-in-differences) computed over generated data would measure the generator's parameters, not a release."
-          applicant-journey: "Ships as a documented outline only, and is grain-scoped to a person spine this module does not register. Session grain cannot express 'did ANY of this customer's sessions reach X' — that is a different denominator, not a different filter."
+          customer-journey: "Ships as a documented outline only, and is grain-scoped to a person spine this module does not register. Session grain cannot express 'did ANY of this customer's sessions reach X' — that is a different denominator, not a different filter."
 
   # The second module, and the reason the registry has a `handoff` concept at
   # all. Its spine is `declared`: the stage ladder, terminal branches,
@@ -120,7 +120,7 @@ modules:
           funnel-pulse: "Blocked on the same missing view. The `pulse:` block is authored with a browse-appropriate window (every browse stage settles within a day, so the monitor can run tighter than checkout's return-window tail)."
           funnel-nowcast: "Ships as a documented outline only, and would be pointless at this grain even with data: a browse session settles the day it opens, so there is no maturation tail to now-cast. Chain-ladder development factors need a target that genuinely withholds outcomes for weeks."
           release-scorecard: "Ships as a documented outline only. Inherits funnel-nowcast's prerequisite and, like it, needs a `nowcast:` block that is deliberately unauthored because its parameters are judgment calls against a real book."
-          applicant-journey: "Ships as a documented outline only, and is grain-scoped to a person spine this module does not register. 'Did ANY of this visitor's sessions add to cart' is a different denominator from 'did this session add to cart', not a filter on it."
+          customer-journey: "Ships as a documented outline only, and is grain-scoped to a person spine this module does not register. 'Did ANY of this visitor's sessions add to cart' is a different denominator from 'did this session add to cart', not a filter on it."
         # The edge this module exists to demonstrate. Read `coverage_note`
         # before using `coverage` for anything.
         handoff:

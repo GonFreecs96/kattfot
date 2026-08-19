@@ -1,0 +1,52 @@
+# Wiki page registry (TEMPLATE)
+#
+# `publish` (see ../SKILL.md) is a documented outline, not a working skill —
+# there is no wiki adapter behind it, so nothing reads this file today except
+# a human. It is the genericized, pluggable form of the private original's
+# vendor-specific page registry: same shape, no vendor assumed.
+#
+# In a real deployment, copy this to your workspace as
+#   config/assay-wiki-registry.yaml
+# and fill in:
+#   - `wiki.adapter`, naming whichever WikiAdapter implementation you wrote
+#     (see ../SKILL.md, "Adapter seam, not a vendor choice")
+#   - real page IDs, once your wiki space exists
+#
+# The shipped template carries `TBD` page IDs on purpose — `publish` refuses
+# to write to a `TBD` page (../SKILL.md, "Never").
+
+wiki:
+  adapter: null          # e.g. "my_wiki_adapter" — the module implementing WikiAdapter
+  space:
+    key: TBD              # e.g. "REPORTS" once a dedicated reports space exists
+    name: "Assay Reports"
+
+pages:
+  # The read-only landing page — seeded from a space-overview file an
+  # implementer would author for their own deployment (see ../SKILL.md,
+  # "Status in this template" — this outline ships no seed file).
+  overview:
+    title: "Assay Reports"
+    page_id: TBD
+
+  # Per-module rollups (a weekly funnel pulse, etc.)
+  checkout/funnel-pulse:
+    title: "Checkout — Funnel Pulse"
+    page_id: TBD
+
+  # Per-metric pages (key = metric slug). Add entries as metrics earn a
+  # standing page. Two examples from the bundled catalog:
+  cart_to_checkout_start_conversion:
+    title: "Checkout — Cart to Checkout Start Conversion"
+    page_id: TBD
+
+  payment_approval_rate:
+    title: "Checkout — Payment Approval Rate"
+    page_id: TBD
+
+# Existing related pages (not published by this skill, listed here only for
+# navigation/linking once an implementer has a real space):
+references:
+  walkthrough:
+    title: "assay:query-metric — a worked walkthrough"
+    page_id: TBD
