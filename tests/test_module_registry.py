@@ -65,19 +65,55 @@ CORE_REQUIRED_SPEC_FIELDS = [
 # fallback. Soft, `.get()`-with-a-real-default keys are deliberately absent, or this
 # check would block inclusions that would in fact work.
 SKILL_REQUIRED_SPEC_FIELDS = {
-    "funnel-dropoff": ["stages"],
+    "funnel-dropoff": ["stages", "terminal_branches"],
     "stage-timing": ["transitions"],
-    "segment-compare": ["stages", "transitions"],
-    "funnel-pulse": ["stages"],
+    "segment-compare": ["stages", "transitions", "terminal_branches"],
+    "funnel-pulse": ["stages", "terminal_branches", "pulse"],
     "funnel-nowcast": ["nowcast"],
     "release-scorecard": ["stages"],
     "applicant-journey": ["rate_flags", "journey_flags"],
 }
 
+# `live` = a queryable view exists on the default engine (a committed fixture here,
+# a curated view in a real deployment). `declared` = the contract is authored and
+# linted but nothing is provisioned behind it.
+VALID_SPINE_STATUS = {"live", "declared"}
+
+# What a `handoff.coverage_basis` may say. The pairing with
+# `coverage_measured_at` is what stops an estimate reading as a measurement.
+VALID_COVERAGE_BASIS = {"declared_estimate", "measured_source_share"}
+
+
+ENTITIES_DIR = ROOT / "plugins" / "assay" / "skills" / "query-metric" / "entities"
+
 
 def _load_yaml(path: Path) -> dict:
     with open(path) as f:
         return yaml.safe_load(f) or {}
+
+
+def _entity_keys() -> dict:
+    """`{entity_slug: keys_block}` from the entity registry.
+
+    The handoff linter needs to know what key identifies a grain, and the entity
+    files are where that is declared — a funnel spec names its primary entity but
+    not its key. Files with no `entity:` (the registry README) are documentation and
+    are skipped, matching the resolver.
+    """
+    out: dict = {}
+    if not ENTITIES_DIR.exists():
+        return out
+    for p in sorted(ENTITIES_DIR.rglob("*.md")):
+        text = p.read_text()
+        if not text.startswith("---"):
+            continue
+        try:
+            fm = yaml.safe_load(text.split("---", 2)[1]) or {}
+        except yaml.YAMLError:
+            continue
+        if fm.get("entity"):
+            out[fm["entity"]] = fm.get("keys") or {}
+    return out
 
 
 def _spines(registry: dict):
@@ -112,10 +148,61 @@ def test_registry_parses():
 
 
 def test_registry_has_the_expected_modules():
-    """`checkout` is the worked example; `browse` is registered with `spines: {}` to
-    keep the metric-layer-only shape covered and to give a future spine (plus its
-    handoff edge to checkout/session) somewhere to land."""
+    """`checkout` is the worked example, live and queryable; `browse` is the second
+    grain, `declared` rather than live, and the reason the registry has a `handoff`
+    concept at all."""
     assert set(_REGISTRY["modules"]) >= {"checkout", "browse"}
+
+
+@pytest.mark.parametrize("mod_name,spine_name,cfg", _SPINES, ids=_SPINE_IDS)
+def test_every_spine_declares_a_status(mod_name, spine_name, cfg):
+    assert cfg.get("status") in VALID_SPINE_STATUS, (
+        f"{mod_name}/{spine_name}: status {cfg.get('status')!r} is not one of "
+        f"{sorted(VALID_SPINE_STATUS)}"
+    )
+
+
+@pytest.mark.parametrize("mod_name,spine_name,cfg", _SPINES, ids=_SPINE_IDS)
+def test_a_declared_spine_promises_no_skills(mod_name, spine_name, cfg):
+    """Registry rule 6, and the sharpest form of the false-promise rule. A spine with
+    no view behind it can satisfy every spec-key check in this file and still crash
+    on the first query, so `skills:` has to stay empty until data exists — otherwise
+    the registry advertises a capability that cannot run at all, which is worse than
+    one that runs and refuses."""
+    if cfg.get("status") != "declared":
+        return
+    assert not (cfg.get("skills") or []), (
+        f"{mod_name}/{spine_name} is declared (no view provisioned) but lists "
+        f"skills {cfg.get('skills')!r}"
+    )
+
+
+def test_live_spines_are_queryable_offline_and_declared_ones_are_not():
+    """`status` is checkable, not decorative: it has to agree with the fixtures on
+    disk. A spine marked `live` whose view has no table behind it would make every
+    skill listed against it fail with 'no such table' — exactly the false promise the
+    status field exists to prevent — and a spine marked `declared` that DOES have a
+    fixture is understating what the template can do."""
+    from _shared import adapters, dialect
+
+    adapters.reset_cache()
+    loaded = set(adapters.get_adapter("sqlite").loaded_tables())
+    problems = []
+    for mod_name, spine_name, cfg in _SPINES:
+        spec = _load_yaml(CONFIG_DIR / cfg["spec"])
+        table = dialect.table_name(spec["source_view"])
+        present = table in loaded
+        if cfg.get("status") == "live" and not present:
+            problems.append(
+                f"{mod_name}/{spine_name}: status live but no fixture table {table!r} "
+                f"(loaded: {sorted(loaded)})"
+            )
+        if cfg.get("status") == "declared" and present:
+            problems.append(
+                f"{mod_name}/{spine_name}: status declared but fixture table "
+                f"{table!r} exists — mark it live"
+            )
+    assert not problems, problems
 
 
 @pytest.mark.parametrize("mod_name,mod", _MODULES, ids=_MODULE_IDS)
@@ -316,25 +403,149 @@ def test_every_spec_stage_and_transition_has_a_lag():
 # --- handoff (declarative cross-spine composition) ---------------------------
 
 
-def test_handoff_when_present_is_well_formed():
-    """No spine declares a handoff yet — `browse` is registered with `spines: {}`
-    precisely so a future browse-session spine has somewhere to declare one. Written
-    as a loop so this reports as a pass rather than a skip."""
+def _handoffs():
+    return [(m, s, cfg, cfg["handoff"]) for m, s, cfg in _SPINES if cfg.get("handoff")]
+
+
+def test_at_least_one_handoff_is_declared():
+    """The `handoff` checks below are only worth anything if something exercises
+    them. `browse/session -> checkout/session` is the worked edge; if it is ever
+    removed, this fails loudly instead of the rest of the section passing
+    vacuously."""
+    assert _handoffs(), "no spine declares a handoff — the edge linter is vacuous"
+
+
+def test_handoff_target_resolves_to_a_registered_spine():
     problems = []
-    for mod_name, spine_name, cfg in _SPINES:
-        handoff = cfg.get("handoff")
-        if handoff is None:
+    for mod_name, spine_name, _cfg, handoff in _handoffs():
+        to = handoff.get("to")
+        if not to or "/" not in str(to):
+            problems.append(f"{mod_name}/{spine_name}: handoff.to should be 'module/spine', got {to!r}")
             continue
-        if not handoff.get("to") or "/" not in handoff["to"]:
-            problems.append(f"{mod_name}/{spine_name}: handoff.to should be 'module/spine'")
-            continue
-        if not handoff.get("on"):
-            problems.append(f"{mod_name}/{spine_name}: handoff missing `on`")
-        target_mod, target_spine = handoff["to"].split("/", 1)
+        target_mod, target_spine = to.split("/", 1)
         if target_mod not in _REGISTRY["modules"]:
             problems.append(f"{mod_name}/{spine_name}: handoff names unknown module {target_mod!r}")
         elif target_spine not in (_REGISTRY["modules"][target_mod].get("spines") or {}):
-            problems.append(f"{mod_name}/{spine_name}: handoff names unknown spine {handoff['to']!r}")
+            problems.append(f"{mod_name}/{spine_name}: handoff names unknown spine {to!r}")
+    assert not problems, problems
+
+
+def test_handoff_key_is_the_targets_primary_key():
+    """`on` has to be a key the target grain is actually identified by, not merely a
+    column name that appears on both sides. Checked against the target spine's
+    primary entity in the entity registry, which is where the grain's keys are
+    declared — so a handoff cannot quietly join on a dimension and produce fan-out."""
+    entities = _entity_keys()
+    problems = []
+    for mod_name, spine_name, _cfg, handoff in _handoffs():
+        to = handoff.get("to") or ""
+        if "/" not in to:
+            continue  # already reported by the resolution test
+        target_mod, target_spine = to.split("/", 1)
+        target_cfg = ((_REGISTRY["modules"].get(target_mod) or {}).get("spines") or {}).get(target_spine)
+        if not target_cfg:
+            continue
+        key = handoff.get("on")
+        if not key:
+            problems.append(f"{mod_name}/{spine_name}: handoff missing `on`")
+            continue
+        if key is True:
+            problems.append(
+                f"{mod_name}/{spine_name}: handoff `on` parsed as the boolean True — "
+                f"quote the key (YAML 1.1 treats bare `on:` as a boolean)"
+            )
+            continue
+        target_entity = target_cfg.get("primary_entity")
+        primary = (entities.get(target_entity) or {}).get("primary")
+        if primary and key != primary:
+            problems.append(
+                f"{mod_name}/{spine_name}: handoff joins on {key!r} but the target "
+                f"grain {target_entity!r} is keyed by {primary!r}"
+            )
+    assert not problems, problems
+
+
+def test_handoff_coverage_is_plausible_and_honestly_labelled():
+    """The strict one, because `coverage` is the field that invites self-deception.
+
+    A handoff's coverage is the share of SOURCE rows that reach the target, and for
+    an edge like browse-session -> checkout-session that share is a *conversion
+    rate*: a browse session that produced no cart carries no join key at all. So it
+    is a genuine measurement of behaviour, not a statement about how well two tables
+    match — and the failure mode is reporting one as the other.
+
+    Four things are checked, each guarding a specific lie:
+      * in (0, 1) exclusive — 1.0 would claim every source row reaches the target,
+        which contradicts a source ladder that declares non-handoff terminal
+        branches; 0 would make the edge pointless;
+      * `coverage_basis` and `coverage_measured_at` agree, so an estimate cannot
+        wear a measurement's clothes;
+      * a `declared` source spine may only carry an estimate — you cannot report a
+        measurement from a spine with no data behind it;
+      * the denominator is stated in words, because a bare ratio does not say what
+        it is a share OF, and that is the whole difficulty on this edge.
+    """
+    problems = []
+    for mod_name, spine_name, cfg, handoff in _handoffs():
+        label = f"{mod_name}/{spine_name}"
+        cov = handoff.get("coverage")
+        if not isinstance(cov, (int, float)) or isinstance(cov, bool):
+            problems.append(f"{label}: handoff coverage {cov!r} is not a number")
+        elif not (0 < cov < 1):
+            problems.append(
+                f"{label}: handoff coverage {cov} is outside (0, 1) — a source ladder "
+                f"with non-handoff terminal branches cannot hand off all or none of "
+                f"its rows"
+            )
+        basis = handoff.get("coverage_basis")
+        if basis not in VALID_COVERAGE_BASIS:
+            problems.append(
+                f"{label}: coverage_basis {basis!r} not in {sorted(VALID_COVERAGE_BASIS)}"
+            )
+        measured_at = handoff.get("coverage_measured_at")
+        if basis == "declared_estimate" and measured_at is not None:
+            problems.append(
+                f"{label}: coverage_basis is declared_estimate but "
+                f"coverage_measured_at is {measured_at!r} — an estimate has no "
+                f"measurement date"
+            )
+        if basis == "measured_source_share" and measured_at is None:
+            problems.append(
+                f"{label}: coverage_basis claims a measurement but "
+                f"coverage_measured_at is null"
+            )
+        if cfg.get("status") == "declared" and basis != "declared_estimate":
+            problems.append(
+                f"{label}: source spine is declared (no view provisioned) so its "
+                f"handoff coverage cannot be a {basis!r} — there is nothing to have "
+                f"measured"
+            )
+        denom = handoff.get("coverage_denominator")
+        if not (isinstance(denom, str) and len(denom.strip()) >= 20):
+            problems.append(
+                f"{label}: coverage_denominator must state in words what the share is "
+                f"OF, got {denom!r}"
+            )
+    assert not problems, problems
+
+
+def test_handoff_source_ladder_admits_a_non_handoff_exit():
+    """The structural reason the coverage bound above is (0, 1) rather than (0, 1].
+
+    If the source spine's terminal branches were a single value, every source row
+    would reach the target by construction and the edge would carry no information.
+    The check is on the spec rather than on the number, so the two cannot drift into
+    disagreeing.
+    """
+    problems = []
+    for mod_name, spine_name, cfg, _handoff in _handoffs():
+        spec = _load_yaml(CONFIG_DIR / cfg["spec"])
+        branches = spec.get("terminal_branches") or []
+        if len(branches) < 2:
+            problems.append(
+                f"{mod_name}/{spine_name}: declares a handoff but only "
+                f"{len(branches)} terminal branch(es) — nothing can fail to hand off"
+            )
     assert not problems, problems
 
 

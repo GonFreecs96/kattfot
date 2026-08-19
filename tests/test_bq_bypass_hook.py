@@ -51,7 +51,7 @@ MUST_ALLOW = [
     'python3 plugins/assay/skills/stage-timing/scripts/stage_timing.py --kpi time-to-order-confirmed-days --time-range last_8_weeks',
     'python3 plugins/assay/skills/stage-timing/scripts/calibrate_maturity.py --kpi time-to-order-confirmed-days',
     'python3 plugins/assay/skills/segment-compare/scripts/segment_compare.py --mode ab --segment-a channel=paid_social --segment-b channel=email',
-    'python3 plugins/assay/skills/reconcile/scripts/reconcile.py --artifact outputs/assay/foo.md --other outputs/assay/bar.md',
+    'python3 plugins/assay/skills/reconcile/scripts/reconcile_number.py --metric payment_approval_rate --their-value 0.81 --time-range last_8_weeks',
     # setup doctor (offline + live probe).
     'python3 plugins/assay/skills/setup/scripts/doctor.py',
     'python3 plugins/assay/skills/setup/scripts/doctor.py --probe',

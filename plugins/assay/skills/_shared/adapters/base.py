@@ -105,18 +105,71 @@ class Adapter:
         percentiles: list[int],
         params: dict,
         group_expr: str | None = None,
+        group_by: dict | list | None = None,
     ) -> list[dict]:
-        """Percentiles of `value_expr`, optionally per `group_expr`.
+        """Percentiles of `value_expr`, optionally per group.
 
-        Returns one dict per group: `{group?, n, p50, p90, ...}` with a `p{N}`
-        key per requested percentile, plus `mean`. Rows where `value_expr` is
-        NULL are excluded, so each group's stats are over the population that
-        actually reached both endpoints of the transition being measured.
+        Grouping takes either form:
+
+          `group_expr="channel"`         one anonymous group column, keyed `grp`
+          `group_by={"channel": "channel", "market": "market"}`
+                                         one column per entry, keyed by its
+                                         own name
+
+        Returns one dict per group carrying the group columns as **separate
+        keys** plus `n`, `mean`, and a `p{N}` per requested percentile — the
+        same `list[dict]` shape `query-metric` returns, so a table or a chart
+        consumes it with no extra unpacking. `group_expr`'s single `grp` key is
+        the degenerate case of that and is kept because a one-dimension caller
+        reads better without naming the column twice.
+
+        Rows where `value_expr` is NULL are excluded, so each group's stats are
+        over the population that actually reached both endpoints of the
+        transition being measured.
 
         Implemented per-engine: pushed into the warehouse where the engine can,
-        computed in Python where it cannot. Callers do not need to know which.
+        computed in Python where it cannot. Callers do not need to know which,
+        but `_percentile_basis` on every row records which happened.
         """
         raise NotImplementedError
+
+
+# ---------------------------------------------------------------------------
+# Grouping normalization (shared by both adapters)
+# ---------------------------------------------------------------------------
+
+
+def normalize_groups(
+    group_expr: str | None = None, group_by: dict | list | None = None
+) -> list[tuple[str, str]]:
+    """`(group_expr, group_by)` -> an ordered `[(alias, sql_expr), ...]` list.
+
+    One function so the two adapters cannot disagree about what a caller asked
+    for. `group_by` wins when both are given; `group_expr` maps to the single
+    alias `grp`. An alias that is not a bare identifier is refused rather than
+    interpolated: aliases reach the SQL text (they cannot be bound), so this is
+    the one place a caller-supplied string could become SQL.
+    """
+    if group_by:
+        pairs = list(group_by.items()) if isinstance(group_by, dict) else list(group_by)
+    elif group_expr:
+        pairs = [("grp", group_expr)]
+    else:
+        return []
+    out: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for alias, expr in pairs:
+        alias = str(alias)
+        if not alias.isidentifier():
+            raise ValueError(
+                f"group alias {alias!r} is not a bare identifier; aliases are "
+                f"emitted into SQL text and cannot be bound as parameters"
+            )
+        if alias in seen:
+            raise ValueError(f"duplicate group alias {alias!r}")
+        seen.add(alias)
+        out.append((alias, expr))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +189,17 @@ def percentile_from_sorted(values: list[float], pct: int) -> float | None:
         return None
     idx = int(round((pct / 100.0) * (len(values) - 1)))
     return values[max(0, min(idx, len(values) - 1))]
+
+
+def group_sort_key(key: tuple) -> tuple:
+    """Total ordering over group-value tuples, NULLs last.
+
+    A group column can be text, an integer, or NULL in the same result set, and
+    Python refuses to compare those. Sorting on `(is_none, text)` gives a stable
+    order that matches what `ORDER BY` produces on the warehouse path closely
+    enough for a table to read the same on either engine.
+    """
+    return tuple((v is None, "" if v is None else str(v)) for v in key)
 
 
 def summarize_percentiles(values: list[float], percentiles: list[int]) -> dict:

@@ -1,0 +1,9 @@
+# Dependencies for the catalog helper (catalog.py).
+#
+# Offline by design — this skill reads metric files and funnel specs and never
+# touches a warehouse, so there is no warehouse client library here. The only need
+# is a YAML parser for frontmatter and spec blocks.
+#
+# Install into a venv so you don't fight your system Python (PEP 668):
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+pyyaml>=6.0.3                # metric frontmatter + funnel-spec `kpis:` parsing

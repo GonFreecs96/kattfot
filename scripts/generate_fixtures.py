@@ -38,21 +38,42 @@ It also plants three things worth being able to see:
 
 Outputs
 -------
-  data/assay/sample/cart_checkout_funnel_weekly.csv   (committed — the default)
+  data/assay/sample/cart_checkout_funnel_weekly.csv   (committed)
       The weekly aggregate the governed query-metric catalog reads: one row per
       cohort_week x channel x payment_method x market x category, with a count
-      column per stage.
+      column per stage. Always the whole book (~78 cohort weeks) — it is small,
+      because it is pre-aggregated.
 
-  data/assay/sample/cart_checkout_session_spine.csv   (--emit spine, not committed)
-      The session-grain spine the deep skills read: one row per cart with stage
-      flags, stage timestamps, and a terminal-branch classification. Not
-      committed because nothing in this phase queries it and it is ~20x the size;
-      regenerate with one command when a spine-backed skill lands.
+  data/assay/sample/cart_checkout_session_spine.csv   (committed, TRIMMED)
+      The session-grain spine the spine-backed skills read: one row per cart with
+      stage flags, stage timestamps, and a terminal-branch classification. One
+      row per cart is ~280 bytes, so the whole book is ~22 MB — too large to
+      commit into a template whose promise is that a fresh clone runs. What IS
+      committed is the most recent `--spine-weeks` cohort weeks (default
+      TRIMMED_SPINE_WEEKS, see below), which is the window every spine skill
+      needs at the funnel spec's own defaults.
+
+Trimmed vs. full spine
+----------------------
+The trim is a **cohort-week window**, not a row sample. Every session in a kept
+week is kept, so the trimmed spine and the weekly aggregate still reconcile
+exactly over the overlapping weeks (`tests/test_fixtures.py` asserts that), and
+the per-stage maturity behaviour is real rather than simulated: the newest weeks
+are genuinely unsettled for the deep stages.
+
+    python3 scripts/generate_fixtures.py                     # both, spine trimmed
+    python3 scripts/generate_fixtures.py --spine-weeks 0 \
+        --out-dir /tmp/assay-full                            # the full ~22 MB spine
+
+Both are deterministic from the same seed, and the trimmed file is a strict
+subset of the full one, so `--spine-weeks 0` regrows exactly what was trimmed
+away. Write the full spine to `--out-dir` unless you actually mean to replace
+the committed fixture with a 22 MB file.
 
 Usage
 -----
-    python3 scripts/generate_fixtures.py                  # weekly only
-    python3 scripts/generate_fixtures.py --emit both      # weekly + spine
+    python3 scripts/generate_fixtures.py                  # both (the committed pair)
+    python3 scripts/generate_fixtures.py --emit weekly    # just the aggregate
     python3 scripts/generate_fixtures.py --sessions 200000 --weeks 104
     python3 scripts/generate_fixtures.py --seed 7          # a different book
 
@@ -87,6 +108,19 @@ DEFAULT_AS_OF = dt.date(2026, 8, 17)
 DEFAULT_SEED = 20260817
 DEFAULT_SESSIONS = 80_000
 DEFAULT_WEEKS = 78  # ~18 monthly cohorts
+
+#: Cohort weeks of session spine actually committed (~4.5 months). Not an
+#: arbitrary "small enough" number: it is the widest window any shipped spine
+#: skill asks for when run at the funnel spec's own defaults, and it is
+#: `funnel-pulse` that sets it. Pulse compares a 4-week recent window against
+#: the 8 baseline weeks before it, *per stage*, and the deepest stage
+#: (`return_window_complete`, 44-day lag) is mature only through
+#: `2026-06-22` — so its baseline reaches back to `2026-04-06`, while the
+#: freshest stage (`created`, lag 0) runs through `2026-08-10`. That span is 19
+#: weeks. Trim below it and pulse silently reads a truncated baseline;
+#: `tests/test_fixtures.py::test_trimmed_spine_covers_every_pulse_window`
+#: recomputes the requirement from the spec rather than trusting this comment.
+TRIMMED_SPINE_WEEKS = 19
 
 #: The week the v2 checkout replaced v1. Sessions before it are the legacy
 #: cohort the funnel spec excludes by default.
@@ -508,6 +542,25 @@ def generate(sessions: int, weeks: int, as_of: dt.date, seed: int) -> list[dict]
     return records
 
 
+def trim_to_recent_weeks(records: list[dict], weeks: int) -> list[dict]:
+    """The last `weeks` cohort weeks of the book, whole weeks only.
+
+    A window rather than a sample, deliberately. Sampling one row in N would hit
+    the same file size with more cohort history, but it would break two things
+    that matter more: the trimmed spine would no longer sum to the committed
+    weekly aggregate (so nothing could check that the two views are projections
+    of one book), and `funnel-pulse`'s `min_started` volume gate would fire on
+    fixture thinning rather than on real thin cells.
+
+    `weeks <= 0` means no trim.
+    """
+    if weeks <= 0:
+        return records
+    cohorts = sorted({r["cohort_week"] for r in records})
+    keep = set(cohorts[-weeks:])
+    return [r for r in records if r["cohort_week"] in keep]
+
+
 def aggregate_weekly(records: list[dict]) -> list[dict]:
     """Roll the session grain up to the weekly aggregate the metrics read."""
     flag_to_measure = {
@@ -594,6 +647,7 @@ def write_manifest(out_dir: Path, meta: dict) -> Path:
         f"| Sessions simulated | {meta['sessions']:,} |",
         f"| Return window | {RETURN_WINDOW_DAYS} days |",
         f"| Legacy cohort | `{LEGACY_VERSION}` for the first {LEGACY_CUTOVER_WEEK_INDEX} weeks |",
+        f"| Spine cohort weeks committed | {meta['spine_weeks_label']} |",
         "",
         "Rows written:",
         "",
@@ -609,15 +663,31 @@ def write_manifest(out_dir: Path, meta: dict) -> Path:
         "date would keep withholding more of the tail every week until the whole",
         "book looked immature.",
         "",
+        "## Why the spine is trimmed and the aggregate is not",
+        "",
+        "The weekly aggregate is pre-summed, so the whole book fits in well under a",
+        "megabyte. The session spine is one row per cart (~280 bytes), so the whole",
+        f"book is ~22 MB — more than a template should ask a clone to carry. The",
+        f"committed spine is the most recent {TRIMMED_SPINE_WEEKS} cohort weeks: the widest window any",
+        "spine skill reads at the funnel spec's own defaults, which `funnel-pulse`",
+        "sets (a 4-week recent window plus its 8 baseline weeks, lagged by the",
+        "44-day return-window settle time).",
+        "",
+        "The trim is a **cohort-week window, not a row sample**, so over the weeks it",
+        "covers the spine still sums exactly to the aggregate above.",
+        "",
         "## Regenerating",
         "",
         "```bash",
-        "python3 scripts/generate_fixtures.py              # weekly aggregate only",
-        "python3 scripts/generate_fixtures.py --emit both  # + the session spine",
+        "python3 scripts/generate_fixtures.py                 # both, spine trimmed",
+        "python3 scripts/generate_fixtures.py --emit weekly   # just the aggregate",
+        "python3 scripts/generate_fixtures.py --spine-weeks 0 \\",
+        "    --out-dir /tmp/assay-full                        # the full ~22 MB spine",
         "```",
         "",
         "Deterministic: the same arguments produce byte-identical files, so a diff",
-        "here always means a parameter changed.",
+        "here always means a parameter changed. The trimmed spine is a strict subset",
+        "of the full one, so nothing is lost by not tracking the large version.",
         "",
     ]
     path.write_text("\n".join(lines))
@@ -637,9 +707,18 @@ def main() -> int:
     )
     p.add_argument(
         "--emit",
-        default="weekly",
+        default="both",
         choices=["weekly", "spine", "both"],
-        help="weekly aggregate (committed), session spine, or both",
+        help="weekly aggregate, session spine, or both (default: both — the "
+             "committed pair)",
+    )
+    p.add_argument(
+        "--spine-weeks",
+        type=int,
+        default=TRIMMED_SPINE_WEEKS,
+        help=f"cohort weeks of session spine to emit, most recent first "
+             f"(default {TRIMMED_SPINE_WEEKS}, the committed trim). 0 emits the "
+             f"full ~22 MB book — pair it with --out-dir.",
     )
     p.add_argument("--quiet", action="store_true")
     args = p.parse_args()
@@ -650,21 +729,30 @@ def main() -> int:
     records = generate(args.sessions, args.weeks, as_of, args.seed)
     outputs: dict[str, int] = {}
 
+    # The aggregate always covers the whole book; only the spine is trimmed.
     if args.emit in ("weekly", "both"):
         weekly = aggregate_weekly(records)
         n = write_csv(
             out_dir / f"{WEEKLY_VIEW}.csv", ("cohort_week",) + DIMENSIONS + MEASURES, weekly
         )
         outputs[f"{WEEKLY_VIEW}.csv"] = n
+    spine_records = trim_to_recent_weeks(records, args.spine_weeks)
     if args.emit in ("spine", "both"):
-        n = write_csv(out_dir / f"{SPINE_VIEW}.csv", SPINE_COLUMNS, records)
+        n = write_csv(out_dir / f"{SPINE_VIEW}.csv", SPINE_COLUMNS, spine_records)
         outputs[f"{SPINE_VIEW}.csv"] = n
 
+    spine_cohorts = sorted({r["cohort_week"] for r in spine_records})
     meta = {
         "seed": args.seed,
         "as_of": as_of.isoformat(),
         "weeks": args.weeks,
         "sessions": len(records),
+        "spine_weeks": args.spine_weeks,
+        "spine_weeks_label": (
+            f"{len(spine_cohorts)} ({spine_cohorts[0]} .. {spine_cohorts[-1]})"
+            if spine_cohorts else "0"
+        ),
+        "spine_rows": len(spine_records),
         "outputs": outputs,
     }
     write_manifest(out_dir, meta)

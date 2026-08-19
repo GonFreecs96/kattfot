@@ -33,6 +33,8 @@ from .base import (  # noqa: F401  (re-exported)
     CAP_PUSHDOWN_AGGREGATION,
     CAP_USER_IDENTITY,
     Adapter,
+    group_sort_key,
+    normalize_groups,
     percentile_from_sorted,
     summarize_percentiles,
 )

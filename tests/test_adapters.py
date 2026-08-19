@@ -403,6 +403,138 @@ def test_percentiles_without_a_group_returns_one_row():
 
 
 # ---------------------------------------------------------------------------
+# 5. Multi-key percentile grouping
+# ---------------------------------------------------------------------------
+# `group_expr` produces one anonymous `grp` column, which is fine for one dimension
+# and *undefined* for two: there is no sensible single value for a (market, category)
+# pair. So grouping generalises to one output column per dimension, keyed by its own
+# name — the same `list[dict]` shape query-metric returns, so a table or a chart
+# consumes it with no extra unpacking.
+
+
+def test_group_by_returns_one_column_per_dimension():
+    adapter = adapters.get_adapter("sqlite")
+    rows = adapter.percentiles(
+        "proj",
+        from_sql=f"`proj.{WEEKLY_VIEW}`",
+        where_sql="WHERE cohort_week >= @start_date",
+        value_expr="carts_created",
+        percentiles=[50, 90],
+        params={"start_date": dt.date(2026, 6, 1)},
+        group_by={"market": "market", "category": "category"},
+    )
+    assert len(rows) == 12  # 3 markets x 4 categories
+    for r in rows:
+        assert set(r) >= {"market", "category", "n", "mean", "p50", "p90"}
+        assert "grp" not in r, "a composite key must not leak into the row"
+        assert r["n"] > 0
+        assert r["p50"] <= r["p90"]
+    assert len({(r["market"], r["category"]) for r in rows}) == 12
+
+
+def test_group_by_and_group_expr_agree_on_one_dimension():
+    """The single-dimension convenience form is the degenerate case of the general
+    one, not a separate code path. Same buckets, same statistics — only the key name
+    differs."""
+    adapter = adapters.get_adapter("sqlite")
+    common = dict(
+        from_sql=f"`proj.{WEEKLY_VIEW}`",
+        where_sql="WHERE cohort_week >= @start_date",
+        value_expr="carts_created",
+        percentiles=[50, 90, 99],
+        params={"start_date": dt.date(2026, 6, 1)},
+    )
+    legacy = adapter.percentiles("proj", group_expr="channel", **common)
+    general = adapter.percentiles("proj", group_by={"channel": "channel"}, **common)
+    assert [r["grp"] for r in legacy] == [r["channel"] for r in general]
+    for a, b in zip(legacy, general):
+        assert (a["n"], a["mean"], a["p50"], a["p90"], a["p99"]) == (
+            b["n"], b["mean"], b["p50"], b["p90"], b["p99"]
+        )
+
+
+def test_group_by_wins_when_both_are_given():
+    adapter = adapters.get_adapter("sqlite")
+    rows = adapter.percentiles(
+        "proj",
+        from_sql=f"`proj.{WEEKLY_VIEW}`",
+        where_sql="WHERE 1=1",
+        value_expr="carts_created",
+        percentiles=[50],
+        params={},
+        group_expr="channel",
+        group_by={"market": "market"},
+    )
+    assert {r["market"] for r in rows} == {"us", "ca", "uk"}
+    assert all("grp" not in r for r in rows)
+
+
+def test_multi_key_groups_partition_the_population():
+    """Splitting by more dimensions must partition, not resample: the per-group
+    populations have to sum to the ungrouped one."""
+    adapter = adapters.get_adapter("sqlite")
+    common = dict(
+        from_sql=f"`proj.{WEEKLY_VIEW}`",
+        where_sql="WHERE 1=1",
+        value_expr="carts_created",
+        percentiles=[50],
+        params={},
+    )
+    whole = adapter.percentiles("proj", **common)[0]["n"]
+    parts = adapter.percentiles(
+        "proj", group_by={"market": "market", "category": "category"}, **common
+    )
+    assert sum(r["n"] for r in parts) == whole
+
+
+def test_a_group_alias_that_is_not_an_identifier_is_refused():
+    """Aliases reach the SQL text — they cannot be bound as parameters — so this is
+    the one place a caller-supplied string could become SQL. Refused rather than
+    escaped, because there is no legitimate reason for a non-identifier alias."""
+    for bad in ("market; DROP TABLE t", "market-1", "", "2market"):
+        with pytest.raises(ValueError):
+            adapters_base.normalize_groups(group_by={bad: "market"})
+
+
+def test_duplicate_group_aliases_are_refused():
+    with pytest.raises(ValueError):
+        adapters_base.normalize_groups(group_by=[("m", "market"), ("m", "category")])
+
+
+def test_normalize_groups_covers_the_three_calling_styles():
+    assert adapters_base.normalize_groups() == []
+    assert adapters_base.normalize_groups(group_expr="channel") == [("grp", "channel")]
+    assert adapters_base.normalize_groups(
+        group_by={"a": "x", "b": "CAST(y AS STRING)"}
+    ) == [("a", "x"), ("b", "CAST(y AS STRING)")]
+
+
+def test_group_sort_key_orders_mixed_types_with_nulls_last():
+    """A group column can be text, an integer, or NULL in one result set, and Python
+    refuses to compare those. Without a total order the sqlite adapter would raise on
+    a perfectly valid grouping."""
+    keys = [("b", None), ("a", 2), (None, "x"), ("a", 1)]
+    ordered = sorted(keys, key=adapters_base.group_sort_key)
+    assert ordered[0] == ("a", 1)
+    assert ordered[-1] == (None, "x")
+
+
+def test_both_adapters_declare_the_same_percentile_signature():
+    """The seam only works if a skill can call either adapter identically. Checked on
+    the signature rather than by running BigQuery, which the offline suite cannot."""
+    import inspect
+
+    from _shared.adapters.bigquery_adapter import BigQueryAdapter
+
+    sqlite_sig = inspect.signature(SqliteAdapter.percentiles)
+    bq_sig = inspect.signature(BigQueryAdapter.percentiles)
+    assert list(sqlite_sig.parameters) == list(bq_sig.parameters)
+    assert "group_by" in sqlite_sig.parameters
+    base_sig = inspect.signature(adapters_base.Adapter.percentiles)
+    assert list(base_sig.parameters) == list(sqlite_sig.parameters)
+
+
+# ---------------------------------------------------------------------------
 # Fixture loading
 # ---------------------------------------------------------------------------
 

@@ -6,9 +6,12 @@
                                                       ->  report_pdf.py  (PDF)
 
 No network, no cloud account, no credentials: `ASSAY_ENGINE` defaults to `sqlite`,
-so every metric's real SQL runs against the committed fixture CSVs. This is the gate
-a fresh clone has to pass, and it is also the fastest way to see what the plugin
-actually produces.
+so every metric's real SQL runs against the committed fixture CSVs. This is the
+fastest way to see what the plugin actually produces.
+
+For the *gate* — every one of the fifteen skills, run in an environment scrubbed of
+credentials, failing if any cannot — use `scripts/demo_skills.py`. This script walks
+one chain in depth; that one covers the whole surface in breadth.
 
 **What this script is, and is not.** In normal use the *agent* composes the artifact
 markdown — that is Step 8 of `query-metric`'s SKILL.md, and it is a judgment step

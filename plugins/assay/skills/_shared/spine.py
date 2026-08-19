@@ -200,8 +200,232 @@ def col_expr(spec: dict, col: str) -> str:
 def guardrail_warnings(spec: dict, start, end, columns=None) -> list:
     """Warn-level guardrails (feed-cutover discontinuities + view/column notes)
     for a spine query window. Thin wrapper over the shared guardrails layer so
-    each spine skill can add `out["warnings"] = spine.guardrail_warnings(...)`."""
+    each spine skill can add `out["warnings"] = spine.guardrail_warnings(...)`.
+
+    Pass the columns the query actually referenced — the group-by dimension and
+    the filter keys — or column-scoped notes cannot fire and the caveat layer
+    only ever surfaces feed cutovers.
+    """
     return _guardrails.warnings_for(spec.get("source_view"), columns or [], start, end)
+
+
+def legacy_status(spec: dict, include_legacy: bool) -> dict:
+    """What this read did about the spine's legacy cohort, in a shape an artifact
+    header can print without knowing whether one is declared.
+
+    Three states, and the distinction matters: a spine with a legacy cohort that
+    was excluded, one whose legacy cohort was deliberately included, and one that
+    declares none at all. Collapsing the third into "included" would report a
+    legacy cohort as present on every spine that has none — a claim about the
+    data that happens to be false.
+    """
+    col = spec.get("legacy_exclude_column")
+    val = spec.get("legacy_exclude_value")
+    if not col or val is None:
+        return {
+            "declared": False,
+            "excluded": False,
+            "detail": "this spine declares no legacy cohort, so nothing was excluded",
+        }
+    excluded = not include_legacy
+    return {
+        "declared": True,
+        "excluded": excluded,
+        "column": col,
+        "value": val,
+        "detail": (
+            f"legacy cohort {col}={val!r} "
+            + ("excluded (the default)" if excluded else "INCLUDED via --include-legacy")
+        ),
+    }
+
+
+def fixture_provenance(engine: str | None = None) -> dict:
+    """Engine + fixture-backing stamp for a spine artifact.
+
+    Spine skills carry no metric definition and so no `manifest`, which makes
+    this the only place a reader learns whether the numbers came from a warehouse
+    or from committed synthetic CSVs. `fixture_backed` is what every renderer
+    turns into the MOCK DATA watermark, so it has to reach the output.
+    """
+    adapter = active_adapter(engine)
+    return {
+        "engine": adapter.name,
+        "fixture_backed": bool(adapter.fixture_backed),
+        "engine_capabilities": sorted(adapter.capabilities()),
+    }
+
+
+def fixture_warning(engine: str | None = None) -> list:
+    """The FIXTURE DATA warning line, or nothing on a warehouse engine."""
+    adapter = active_adapter(engine)
+    if not adapter.fixture_backed:
+        return []
+    return [
+        "FIXTURE DATA: this read ran on the "
+        f"{adapter.name} adapter against the committed synthetic fixtures. The "
+        "numbers describe a seeded random process, not any real business; every "
+        "downstream chart, dashboard, and PDF is watermarked accordingly."
+    ]
+
+
+def maturity_warning(spec: dict, meta: dict) -> list:
+    """The MATURITY line for a spine artifact, mirroring query-metric's.
+
+    Says which cohorts were withheld and — when the spec admits it — that the
+    lags were hand-authored rather than measured. Implying measurement where
+    there was none is the one thing this machinery must not do.
+    """
+    if meta.get("mode") != "stage":
+        return [
+            f"MATURITY: mode is {meta.get('mode')!r}, so no per-stage cutoff was "
+            f"applied. Deep stages of recent cohorts have not settled and will "
+            f"read low."
+        ]
+    table = stage_maturity_table(spec)
+    illustrative = (
+        " The lags themselves are hand-authored and illustrative, NOT measured — a "
+        "real deployment regenerates the stage_maturity table by measuring "
+        "open-anchored settle time on the spine."
+        if table.get("illustrative")
+        else ""
+    )
+    return [
+        "MATURITY: each stage is gated to the cohort weeks mature FOR THAT STAGE; "
+        f"the deepest fully-settled cohort is {meta.get('deep_cohort_through')}, "
+        f"which is what the terminal-branch mix and any single-cohort funnel use."
+        + illustrative
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Timing transitions (shared by stage-timing and segment-compare)
+# ---------------------------------------------------------------------------
+
+#: BigQuery `TIMESTAMP_DIFF` units the specs may name. `dialect.py` rewrites the
+#: call for sqlite, scaling by the same unit table.
+UNIT_SQL = {"minute": "MINUTE", "hour": "HOUR", "day": "DAY", "second": "SECOND"}
+
+
+def select_transitions(spec: dict, keys: list | None) -> list:
+    """The spec's `transitions`, or the named subset, refusing an unknown key.
+
+    Shared rather than duplicated in the two skills that read timing, because a
+    divergence here would mean two different answers to "which transitions
+    exist" for the same spine.
+    """
+    by_key = {t["key"]: t for t in spec.get("transitions") or []}
+    if not by_key:
+        refuse(
+            f"the spec sourced from {spec.get('source_view', '?')} declares no "
+            f"`transitions:`, so it cannot serve stage timing."
+        )
+    if not keys:
+        return list(spec["transitions"])
+    out = []
+    for k in keys:
+        if k not in by_key:
+            refuse(f"Unknown transition '{k}'. Available: {', '.join(by_key)}.")
+        out.append(by_key[k])
+    return out
+
+
+def parse_percentiles(raw: str) -> list:
+    pcts = []
+    for part in str(raw).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            p = int(part)
+        except ValueError:
+            refuse(f"Bad --percentiles '{raw}'. Use comma-separated 0-100, e.g. 50,90,99.")
+        if not 0 <= p <= 100:
+            refuse(f"Percentile {p} is outside 0-100.")
+        pcts.append(p)
+    if not pcts:
+        refuse(f"Bad --percentiles '{raw}'. Use comma-separated 0-100, e.g. 50,90,99.")
+    return pcts
+
+
+def gated_diff(spec: dict, transition: dict, cutoffs: dict) -> str:
+    """`to - from` duration, NULLed for cohorts not yet mature for the
+    transition's ARRIVAL stage.
+
+    Percentile and mean aggregates drop NULLs, so this excludes recent cohorts
+    whose slow members have not arrived yet — without a separate WHERE, and
+    therefore without changing the denominator of anything else in the same
+    query. Gating on arrival rather than departure is the point: a transition
+    read over cohorts that have not finished arriving is biased *fast*, which
+    looks like an improvement.
+    """
+    unit = UNIT_SQL.get(transition.get("unit"), "MINUTE")
+    diff = f"TIMESTAMP_DIFF({transition['to']}, {transition['from']}, {unit})"
+    cut = cutoffs.get(transition["key"])
+    if cut is not None:
+        return f"IF({spec['cohort_column']} <= @cut_{transition['key']}, {diff}, NULL)"
+    return diff
+
+
+def percentile_params(where_params: dict, transition: dict, cutoffs: dict) -> dict:
+    """Bind values for ONE transition's percentile query.
+
+    Scoped to that transition's own cutoff rather than passing every stage's,
+    because `adapter.percentiles()` builds its own SQL and a parameter the SQL
+    never names is at best noise in the artifact's provenance and at worst an
+    error on a stricter driver.
+    """
+    params = dict(where_params)
+    cut = cutoffs.get(transition["key"])
+    if cut is not None:
+        params[f"cut_{transition['key']}"] = cut
+    return params
+
+
+# ---------------------------------------------------------------------------
+# Shared CLI surface
+# ---------------------------------------------------------------------------
+# Four skills take the same governance-relevant arguments. Declared once so they
+# cannot drift into meaning slightly different things per skill — which is how a
+# `--maturity` flag ends up defaulting differently in two places.
+
+
+def add_common_args(ap, *, group_by_help: str | None = None) -> None:
+    ap.add_argument(
+        "--module", default=None,
+        help=f"registry module in config/modules.yaml (default: {DEFAULT_MODULE})",
+    )
+    ap.add_argument(
+        "--spine", default=None,
+        help="spine within --module (default: that module's default spine). "
+             "ASSAY_FUNNEL_SPEC overrides both.",
+    )
+    if group_by_help:
+        ap.add_argument("--group-by", default=None, help=group_by_help)
+    ap.add_argument(
+        "--filter", action="append", default=[],
+        help="allow-listed col=value, repeatable; values are bound, never interpolated",
+    )
+    ap.add_argument(
+        "--time-range", default=None,
+        help="last_N_weeks | YYYY-MM-DD:YYYY-MM-DD (default: the spec's lookback)",
+    )
+    ap.add_argument(
+        "--today", default=None,
+        help="ISO date override, for a deterministic window (fixtures: 2026-08-17)",
+    )
+    ap.add_argument(
+        "--include-legacy", action="store_true",
+        help="include the spine's declared legacy cohort (excluded by default)",
+    )
+    ap.add_argument(
+        "--maturity", choices=list(MATURITY_MODES), default=None,
+        help="stage (per-stage cutoffs, the default) | flag (whole-funnel legacy "
+             "gate) | off (no gate at all)",
+    )
+    ap.add_argument("--no-mature", action="store_true", help="alias for --maturity off")
+    ap.add_argument("--engine", default=None, help="override ASSAY_ENGINE (sqlite | bigquery)")
+    ap.add_argument("--output-format", default="json", choices=["json"])
 
 
 # ---------------------------------------------------------------------------

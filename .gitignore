@@ -15,13 +15,15 @@ venv/
 # are reproducible from the governed metrics and must not be tracked.
 outputs/
 
-# --- Fixtures: the weekly aggregate is committed, the session spine is not ---
-# `scripts/generate_fixtures.py --emit both` also writes the session-grain spine
-# (~80k rows, ~22 MB). The weekly aggregate is what every metric reads and is
-# committed so `git clone && pytest && scripts/demo.py` works with no setup; the
-# spine is regenerated on demand by whoever needs it. Both are deterministic from
-# the same seed, so nothing is lost by not tracking the large one.
-data/assay/sample/cart_checkout_session_spine.csv
+# --- Fixtures: both committed, the spine trimmed to a cohort-week window ---
+# `scripts/generate_fixtures.py` writes the weekly aggregate (whole book, small
+# because pre-aggregated) and the session-grain spine (one row per cart, ~280
+# bytes, so the whole 78-week book is ~22 MB). Both are tracked, because the
+# spine-backed skills are unrunnable on a fresh clone without the spine — but
+# the committed spine is trimmed to the most recent 19 cohort weeks, the widest
+# window any spine skill reads at the funnel spec's own defaults. Regrow the
+# full one with `--spine-weeks 0 --out-dir <somewhere-else>`; it is a superset,
+# so nothing is lost.
 
 # --- Rendered examples: the committed spec stays, its rendered HTML does not ---
 plugins/assay/skills/render-chart/examples/out/

@@ -36,7 +36,13 @@ import sqlite3
 from pathlib import Path
 
 from .. import dialect
-from .base import CAP_PUSHDOWN_AGGREGATION, Adapter, summarize_percentiles
+from .base import (
+    CAP_PUSHDOWN_AGGREGATION,
+    Adapter,
+    group_sort_key,
+    normalize_groups,
+    summarize_percentiles,
+)
 
 #: Default fixture location, relative to the repo root. Overridable with
 #: `ASSAY_SAMPLE_DIR` (the same variable the CSV-stub oracle path uses, so one
@@ -208,6 +214,7 @@ class SqliteAdapter(Adapter):
         percentiles: list[int],
         params: dict,
         group_expr: str | None = None,
+        group_by: dict | list | None = None,
     ) -> list[dict]:
         """Pull the latency column and compute p50/p90/p99 in Python.
 
@@ -216,10 +223,13 @@ class SqliteAdapter(Adapter):
         rows come back and `summarize_percentiles` (shared with nothing
         engine-specific) does the arithmetic. The `_percentile_basis` field on
         each row records that, so an artifact says where the number was computed.
+
+        Grouping is by the whole tuple of group columns, and each column is
+        emitted under its own alias — so a two-dimension call returns one row per
+        (dim_a, dim_b) pair with both columns present, not an opaque composite.
         """
-        select_parts = []
-        if group_expr:
-            select_parts.append(f"{group_expr} AS grp")
+        groups = normalize_groups(group_expr, group_by)
+        select_parts = [f"{expr} AS {alias}" for alias, expr in groups]
         select_parts.append(f"{value_expr} AS value")
         sql = (
             "SELECT\n  "
@@ -232,14 +242,12 @@ class SqliteAdapter(Adapter):
         for r in rows:
             if r.get("value") is None:
                 continue
-            key = r.get("grp") if group_expr else None
+            key = tuple(r.get(alias) for alias, _ in groups)
             buckets.setdefault(key, []).append(float(r["value"]))
 
         out = []
-        for key in sorted(buckets, key=lambda k: (k is None, k)):
-            rec = {}
-            if group_expr:
-                rec["grp"] = key
+        for key in sorted(buckets, key=group_sort_key):
+            rec = {alias: value for (alias, _), value in zip(groups, key)}
             rec.update(summarize_percentiles(buckets[key], percentiles))
             rec["_percentile_basis"] = "exact nearest-rank (computed client-side)"
             out.append(rec)

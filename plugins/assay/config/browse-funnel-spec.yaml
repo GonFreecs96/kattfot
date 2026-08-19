@@ -1,0 +1,161 @@
+# browse-funnel-spec.yaml
+# ---------------------------------------------------------------------------
+# The BROWSE SESSION funnel — grain is one visit to the catalog, whether or not
+# it ever produced a cart. Second spine in this template, and it exists to make
+# one thing concrete: a **declarative handoff edge** between two spines at
+# different grains (config/modules.yaml, `browse/session -> checkout/session`
+# on `checkout_session_id`).
+#
+# STATUS: DECLARED, NOT LIVE.
+# ---------------------------------------------------------------------------
+# No browse-session view is provisioned and no browse fixture is committed, so
+# nothing here is queryable and every spine-backed skill is marked `excluded`
+# in the registry. What IS fixed is the contract: the stage ladder, the terminal
+# branches, the allow-lists, the maturity lags, and the handoff key. That is the
+# part a downstream consumer depends on and the part that is expensive to change
+# later, which is why it is authored and linted now rather than sketched in a
+# comment.
+#
+# The honest reason it is not live: the committed session spine is already ~6 MB
+# for 19 cohort weeks, and a browse spine covering the same window is ~2.4x that
+# many rows, because most browse sessions never create a cart. Carrying both
+# would put ~16 MB of synthetic CSV in a template whose selling point is that a
+# fresh clone runs. See `coverage.yaml#browse_to_cart_handoff` for the same fact
+# stated to a stakeholder, and the registry's `excluded:` reasons for what would
+# have to land first.
+#
+# Why this grain is worth modelling at all: it is where the denominator problem
+# lives. The checkout spine cannot answer "what share of visits produce a cart",
+# because a visit that produced no cart is not on it. That is not a filter away
+# from the checkout funnel — it is a different population.
+# ---------------------------------------------------------------------------
+
+source_view: analytics.browse_session_spine
+source_project: ${ASSAY_BIGQUERY_PROJECT}
+accuracy_tier: T2
+
+primary_entity: browse_session
+entities:
+  - browse_session     # the ladder's grain — one visit
+  - checkout_session   # what a handed-off visit becomes
+  - customer           # person rollup (secondary grain; no spine registered)
+  - channel            # acquisition surface (slicing dim)
+  - market             # selling region (slicing dim)
+relationships:
+  - { from: browse_session, to: checkout_session, kind: one_to_zero_or_one, via: checkout_session_id }
+  - { from: browse_session, to: customer,         kind: many_to_one,        via: customer_token }
+  - { from: browse_session, to: channel,          kind: many_to_one,        via: channel }
+  - { from: browse_session, to: market,           kind: many_to_one,        via: market }
+
+cohort_column: cohort_week          # DATE — ISO-Monday week the session opened
+maturity_flag: is_mature_7d         # BOOL — legacy whole-funnel gate, reachable
+                                    # only via `--maturity flag`. The per-stage
+                                    # table below is the default.
+
+defaults:
+  lookback_weeks: 13                # shorter than checkout's 26: a browse
+                                    # session settles in a day, so a longer
+                                    # window buys history rather than maturity
+  mature_only: true
+
+# No `legacy_exclude_column` / `legacy_exclude_value`. A browse session is not
+# versioned by a checkout implementation, so there is no retired cohort to
+# exclude — and the both-or-nothing rule means the honest thing is to leave BOTH
+# keys out rather than half-declare one. `build_where()` then omits the clause
+# entirely. (A lone `col != NULL` evaluates to NULL, which silently zeroes every
+# row; tests/test_legacy_exclude.py guards that.)
+
+# funnel-pulse windows. Every stage here settles within a day or two, so the
+# monitor can run tight: a browse regression is visible almost immediately, which
+# is the opposite of the checkout ladder's return-window tail. `min_started` is
+# higher than checkout's because browse volume is a multiple of cart volume — the
+# same absolute floor would let much thinner cells through.
+pulse:
+  by: channel
+  recent_weeks: 4
+  baseline_weeks: 8
+  min_started: 500
+  flag_threshold_pp: 2.0
+
+# Ordered stages. The ladder deliberately ENDS at the handoff: past that point
+# the checkout spine owns the funnel, and duplicating its stages here would be
+# two sources of truth for one conversion.
+stages:
+  - { ordinal: 1, key: session_started,        label: "Session Started",           flag: session_started_flag,        maturity_stage: session_started }
+  - { ordinal: 2, key: product_listed,         label: "Product List Viewed",       flag: product_listed_flag,         maturity_stage: product_listed }
+  - { ordinal: 3, key: product_detail_viewed,  label: "Product Detail Viewed",     flag: product_detail_viewed_flag,  maturity_stage: product_detail_viewed }
+  - { ordinal: 4, key: cart_handoff,           label: "Cart Created (Handoff)",    flag: cart_handoff_flag,           maturity_stage: cart_handoff }
+
+# Deepest-first, mutually exclusive, exhaustive. The existence of branches 1-3 is
+# exactly why the handoff edge's `coverage` cannot be 1.0: most visits end in one
+# of them, and the registry linter checks that a declared coverage is consistent
+# with a ladder that admits non-handoff exits.
+terminal_branches:
+  - "4 Cart Created (Handed Off)"
+  - "3 Product Detail Viewed, No Cart"
+  - "2 Product List Viewed, No Detail"
+  - "1 Session Started, No Product View"
+
+transitions:
+  - { key: session_to_list,   label: "Session -> List View",   from: session_started_at,       to: product_listed_at,        unit: minute, maturity_stage: product_listed }
+  - { key: list_to_detail,    label: "List -> Detail View",    from: product_listed_at,        to: product_detail_viewed_at, unit: minute, maturity_stage: product_detail_viewed }
+  - { key: detail_to_cart,    label: "Detail View -> Cart",    from: product_detail_viewed_at, to: cart_created_at,          unit: minute, maturity_stage: cart_handoff }
+
+allowed_dimensions:
+  - channel
+  - market
+  - device
+  - landing_surface
+  - is_returning_visitor
+
+allowed_filters:
+  - channel
+  - market
+  - device
+  - landing_surface
+  - is_returning_visitor
+
+string_cast:
+  - is_returning_visitor
+
+# >>> stage_maturity >>>
+# ---------------------------------------------------------------------------
+# THESE NUMBERS ARE ILLUSTRATIVE, NOT CALIBRATED — and doubly so here, since
+# there is no browse spine to have measured them against. `illustrative: true`
+# plus `calibrated_at: null` say so in machine-readable form, and
+# tests/test_maturity.py holds both flags.
+# ---------------------------------------------------------------------------
+# A browse session is a single sitting, so almost everything settles same-day.
+# The one real lag is the handoff: a session can be resumed the next day and only
+# then produce a cart, which is why `cart_handoff` is 1 rather than 0.
+stage_maturity:
+  illustrative: true
+  basis: hand_authored_illustrative     # a real one reads: open_anchored_days
+  percentile: null
+  calibrated_at: null
+  calibration_window: null
+  lag_days:
+    session_started: 0            # the open anchor
+    product_listed: 0             # same sitting, seconds later
+    product_detail_viewed: 0      # same sitting
+    cart_handoff: 1               # a resumed session can hand off the next day
+    # Terminal-branch stages. An "abandoned browse" is definitional rather than
+    # observed — the session simply ends — so these settle with the session.
+    no_product_view: 0
+    no_detail_view: 0
+    detail_no_cart: 1             # matches the handoff lag: a cart may still come
+# <<< stage_maturity <<<
+
+# One named latency KPI, so `assay:catalog` has something to enumerate for this
+# spine and the shape of a second module's KPI block is fixed.
+kpis:
+  - key: time_to_cart_minutes
+    display_name: "Time to cart (Detail View -> Cart, minutes)"
+    transition: detail_to_cart
+    report_unit: minute
+    percentiles: [50, 90, 99]
+    accuracy_tier: T2
+    maturity_stage: cart_handoff
+    owner: analytics-owner
+    leak_guarded: "Product Detail Viewed, No Cart — the largest browse leak"
+    smes: [analytics-owner, growth-pm]

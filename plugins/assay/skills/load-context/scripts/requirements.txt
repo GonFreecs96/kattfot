@@ -1,0 +1,9 @@
+# Dependencies for the load-context helper (load_context.py).
+#
+# Offline by design — the consumer API returns definitions, never numbers, so it
+# has no warehouse dependency at all. The only need is a YAML parser for
+# frontmatter, the module registry, and the coverage register.
+#
+# Install into a venv so you don't fight your system Python (PEP 668):
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+pyyaml>=6.0.3                # frontmatter, module registry, coverage register

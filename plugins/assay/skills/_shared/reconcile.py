@@ -17,7 +17,7 @@ Cause catalog (the analytics conventions two correct pipelines most often
 disagree on):
   - ``DATE_WINDOW``      — they measured a different explicit window.
   - ``MATURITY_CUTOFF``  — their range reaches into the recent, still-immature
-                           cohorts our 60-day cutoff excludes (folds in the
+                           cohorts our per-stage cutoff excludes (folds in the
                            partial-week case).
   - ``TIMEZONE``         — a one-day boundary shift (UTC vs local day-cut).
   - ``FILTER_DIFF``      — they applied / omitted a filter we didn't.
@@ -47,13 +47,24 @@ DEFINITION_DRIFT = "DEFINITION_DRIFT"
 @dataclass(frozen=True)
 class Request:
     """A recomputable description of one governed number. Frozen + hashable so it
-    can key a stub runner in tests and be cheaply tweaked with ``replace``."""
+    can key a stub runner in tests and be cheaply tweaked with ``replace``.
+
+    ``mature`` is what makes the ``MATURITY_CUTOFF`` cause reachable at all. A
+    governed run applies the metric's per-stage cutoff, so a hypothesis that only
+    widened the window would be clamped straight back to our own number and could
+    never reproduce theirs — the cause would be permanently unreachable in the
+    live path even though it is the most common real explanation. Setting it False
+    says "and they did not withhold the immature tail", which is the other half of
+    the same hypothesis. Trailing field with a default, so every positional
+    construction and every ``replace`` call predating it is unaffected.
+    """
 
     metric: str
     start: dt.date
     end: dt.date
     dimensions: tuple = ()
     filters: tuple = ()  # tuple of (col, val) pairs
+    mature: bool = True  # apply the metric's maturity cutoff
 
 
 def within(ours: float, theirs: float, *, rtol: float = 0.01, atol: float = 0.0005) -> bool:
@@ -94,11 +105,14 @@ def candidate_hypotheses(
         )
 
     # MATURITY_CUTOFF — their range reaches into the immature recent cohorts.
+    # Both halves of the hypothesis: a wider window AND no cutoff. Widening alone
+    # would be clamped back by the governed cutoff and could never reproduce their
+    # number, which would make this cause unreachable in the live path.
     if today and today > base.end:
         out.append(
-            (MATURITY_CUTOFF, replace(base, end=today),
-             f"their range extends to {today}, including cohorts inside the "
-             f"60-day maturity cutoff our number excludes")
+            (MATURITY_CUTOFF, replace(base, end=today, mature=False),
+             f"their range extends to {today} and does not withhold the immature "
+             f"tail, so it includes cohorts our per-stage maturity cutoff excludes")
         )
 
     # TIMEZONE — one-day boundary shift either direction.

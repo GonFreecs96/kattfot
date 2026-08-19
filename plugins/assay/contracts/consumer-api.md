@@ -42,6 +42,27 @@ Format: `{SENTINEL} -- {human-readable detail}`. `TIER_REFUSED` is the load-bear
 guarantees a consumer can never silently embed a non-governed (financial/regulatory or
 exploratory) metric as if it were decision-grade.
 
+A sentinel is printed to **stdout**, because it is the response rather than a log line: a
+consumer prefix-matches it the same way it would parse content. The **exit code** is the
+machine-readable duplicate, so a shell caller does not have to parse anything:
+
+| Exit | Meaning |
+|------|---------|
+| `0` | content returned |
+| `1` | `SCOPE_NOT_FOUND` / `EMPTY_RESULT` — nothing to return, nothing wrong |
+| `5` | `TIER_REFUSED` / `PATH_BOUNDARY` — a governance refusal (the same code the spine skills use) |
+| `2` / `3` / `4` | missing ADC, missing dependency, service account refused (`query-metric` only) |
+
+Splitting 1 from 5 is deliberate: "no such metric" and "that metric is not governed" call
+for completely different handling by a consumer, and a single non-zero code would force it
+back to parsing prose.
+
+**Withholding applies to descriptions too.** In `catalog`, a non-T2 metric is listed with
+its name and tier, and its one-line summary — which is the first line of the metric's own
+`## Definition`, i.e. body content — is replaced by `TIER_REFUSED — tier {T}, body
+withheld`. In `module/{name}`, the set is not refused wholesale (the caller asked for a
+set); each non-T2 member is named with its tier and its body withheld.
+
 ## Success Response Formats
 
 ### load-context
@@ -79,12 +100,14 @@ performs this drift check offline.
   omitted when the file has no `owner:` frontmatter — e.g. `tiers`).
 - **Data maturity** (`query-metric` + spine skills): maturity is applied **per stage** — each
   metric / funnel stage / timing transition is withheld only until its own stage settles
-  (calibrated open→stage p95 lag in the module's funnel spec under `stage_maturity`: payment
-  submitted ~0d → return window complete ~30d). When the requested range includes immature
-  cohort weeks for that stage, `query-metric` appends:
-  `MATURITY: cohorts after {date} are immature and may shift`; spine-skill outputs carry a
-  per-row `mature_through` week + a `maturity` block. Consumers should not present immature
-  figures as final.
+  (open→stage lag in the module's funnel spec under `stage_maturity`: payment submitted ~1d →
+  return window complete ~44d). When the requested range includes immature cohort weeks for
+  that stage, `query-metric` appends a `MATURITY:` line; spine-skill outputs carry a per-row
+  `mature_through` week plus a `maturity` block and a top-level `maturity_cutoff`. Consumers
+  should not present immature figures as final.
+- **Fixture backing** (every skill that produces a number): `fixture_backed: true` means the
+  number came from committed synthetic fixtures rather than a warehouse. It is not advisory —
+  the renderers turn it into a MOCK DATA watermark, and a consumer must carry it too.
 
 The `STALE:` and `MATURITY:` prefixes are stable; consumers may detect them by line prefix.
 
@@ -100,9 +123,19 @@ The `STALE:` and `MATURITY:` prefixes are stable; consumers may detect them by l
 | `lineage/{module}` | The cohort-vs-activity-time `LINEAGE.md` note | Single |
 | `tiers` | Accuracy-tier doctrine + refusal rules (R1–R6) | Single |
 | `governance` | Ownership & governance doctrine: owners per entity/module, review cadence, freshness SLA | Single |
+| `spines` | The module registry as data: every spine, its `status` (`live` / `declared`), the spine-backed skills available on it, and any `handoff` edge with its coverage basis and denominator | Single (JSON) |
 | `coverage` | Instrumentation coverage register grouped by status (what's measurable / blocked / empty / declined + why) | Single (compact) |
 | `coverage/{id}` | One coverage entry (e.g. `coverage/cart_abandon_reason`) | Single |
 | `glossary` / `glossary/{term}` | Reserved-term definitions | Single/Multi (may be empty in v0) |
+
+`spines` was added after the first version of this contract. Adding a scope is
+non-breaking, and this one closes a real gap: a `handoff` edge's `coverage` is a governed
+number with a subtle denominator (for `browse/session -> checkout/session` it is a
+*conversion rate*, not a join-quality figure), and without this scope the only way to reach
+it was to read the registry YAML — exactly the path-coupling the scope vocabulary exists to
+avoid. The edge also carries `coverage_basis` (`declared_estimate` or
+`measured_source_share`) and `coverage_measured_at`, so a consumer can tell an estimate
+from a measurement without asking.
 
 ## Versioning
 
@@ -112,7 +145,14 @@ New scopes or optional fields are non-breaking.
 
 ## Status in this template
 
-`load-context` and `query-metric` are the two skills this contract describes; both are part of
-the full skill set the template builds toward. The contract is committed first, deliberately —
-the response shape is the part consumers depend on, and pinning it before the implementation is
-what stops each skill from inventing its own error vocabulary.
+Both skills this contract describes now ship, and the contract is enforced in code rather than
+in a prompt: `skills/load-context/scripts/load_context.py` raises the sentinels, checks the
+read-root boundary on the *resolved* path, and applies the tier gate at the point content would
+otherwise be returned. That placement is the point — the first caller to invoke the helper
+directly would bypass any prompt-level rule, and a consumer API's guarantees have to hold for
+the callers who never read the prompt.
+
+The contract was committed before either implementation, deliberately: the response shape is
+what consumers depend on, and pinning it first is what stopped each skill inventing its own
+error vocabulary. `tests/test_read_apis.py` asserts every sentinel, both exit codes, and that
+a non-T2 body never leaves the process.

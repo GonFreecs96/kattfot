@@ -1,0 +1,9 @@
+# Dependencies for the coverage helper (coverage_lookup.py).
+#
+# Offline by design — this skill reads the instrumentation register and never runs
+# a query, which is the whole point: "can I measure X yet" must be answerable
+# without measuring anything.
+#
+# Install into a venv so you don't fight your system Python (PEP 668):
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+pyyaml>=6.0.3                # config/coverage.yaml parsing

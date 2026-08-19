@@ -22,6 +22,7 @@ from .base import (
     CAP_PUSHDOWN_AGGREGATION,
     CAP_USER_IDENTITY,
     Adapter,
+    normalize_groups,
 )
 
 JOB_LABEL = "assay-spine-skill"
@@ -95,6 +96,7 @@ class BigQueryAdapter(Adapter):
         percentiles: list[int],
         params: dict,
         group_expr: str | None = None,
+        group_by: dict | list | None = None,
     ) -> list[dict]:
         """Computed inside BigQuery via APPROX_QUANTILES — no row transfer.
 
@@ -102,10 +104,13 @@ class BigQueryAdapter(Adapter):
         p-th percentile. NULLs are ignored by the aggregate, which is the
         intended semantics: a transition's timing is over the population that
         reached both of its endpoints.
+
+        Multi-column grouping groups and orders by every alias, so the row shape
+        matches the sqlite adapter's: one row per group tuple with each group
+        column under its own key.
         """
-        select_parts = []
-        if group_expr:
-            select_parts.append(f"{group_expr} AS grp")
+        groups = normalize_groups(group_expr, group_by)
+        select_parts = [f"{expr} AS {alias}" for alias, expr in groups]
         select_parts.append(f"COUNT({value_expr}) AS n")
         select_parts.append(f"AVG({value_expr}) AS mean")
         for pct in percentiles:
@@ -117,8 +122,9 @@ class BigQueryAdapter(Adapter):
             + ",\n  ".join(select_parts)
             + f"\nFROM {from_sql}\n{where_sql}"
         )
-        if group_expr:
-            sql += "\nGROUP BY grp\nORDER BY grp"
+        if groups:
+            aliases = ", ".join(alias for alias, _ in groups)
+            sql += f"\nGROUP BY {aliases}\nORDER BY {aliases}"
         rows = self.run_query(project, sql, params)
         for r in rows:
             r["_percentile_basis"] = "APPROX_QUANTILES (pushed down)"
