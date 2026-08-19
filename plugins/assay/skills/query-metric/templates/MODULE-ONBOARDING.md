@@ -75,7 +75,8 @@ that the number was observed.
 spine, and a pre-aggregated weekly view for the ratio metrics.
 
 `tests/test_view_ddl_pii.py` scans every DDL file for identifiers matching the R6
-denylist and fails CI on a hit. That is deliberate defense at the data layer: an
+denylist and fails `pytest` on a hit — there is no CI, so this only catches you if
+you run the suite. That is deliberate defense at the data layer: an
 allow-list above a view that exposes a personal column is moot. Use tokenized keys
 (`customer_token`) and aggregate geography (`market`, `postal_code`) — both are
 explicitly allow-listed as non-PII.

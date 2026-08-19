@@ -7,8 +7,8 @@
   - `decorate_display` (formatting codified in tested code, not left to the agent)
   - `post_run_warnings` (zero-row and typo'd-filter detection)
 
-All pure functions — no warehouse, no CSV — so they run in CI exactly as the
-governance suite does.
+All pure functions — no warehouse, no CSV — so they run under `pytest`
+anywhere, exactly as the governance suite does.
 """
 
 import pytest

@@ -1,4 +1,4 @@
-# Test/CI dependencies. Mirrors the runtime floors in the skills' own
+# Test dependencies (this repo has no CI). Mirrors the runtime floors in the skills' own
 # requirements.txt files where they overlap.
 #
 # Nothing numeric here on purpose: the forecasting skills that needed

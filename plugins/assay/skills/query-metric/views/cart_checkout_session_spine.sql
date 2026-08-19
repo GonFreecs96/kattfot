@@ -23,8 +23,9 @@
 -- PII       : none. Identity is carried only as opaque surrogate keys
 --             (checkout_session_id, customer_token, order_id) and aggregate
 --             geography (market). tests/test_view_ddl_pii.py scans this file
---             against the R6 denylist in _shared/pii.py and fails CI on any
---             match. That is deliberate defense at the data layer: an allow-list
+--             against the R6 denylist in _shared/pii.py and fails pytest on any
+--             match (this repo has no CI; you must run pytest yourself). That is
+--             deliberate defense at the data layer: an allow-list
 --             above a view that exposes a personal column is moot.
 --
 -- Dialect   : BigQuery. This is the documented production adapter. The offline

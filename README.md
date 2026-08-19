@@ -59,14 +59,17 @@ system prompt:
 The full reasoning behind each control — including what each one does
 **not** guarantee — is in [`docs/governance-model.md`](docs/governance-model.md).
 
-> **Status: Phase 3.** All **fifteen functional skills** run today, offline,
-> against committed fixtures — and that is checked rather than claimed:
-> `scripts/demo_skills.py` runs every one of them in an environment with
-> `HOME` scrubbed of credentials and `ASSAY_ENGINE` pinned to `sqlite`, and
-> fails if any cannot. Four skills ship as documented outlines only
-> (`funnel-nowcast`, `release-scorecard`, `customer-journey`, `publish`); the
-> module registry records each one's exclusion with a specific reason rather
-> than a TODO.
+> **Status: Phase 4 complete.** All **nineteen skills** are accounted for.
+> **Fifteen** run today, offline, against committed fixtures — and that is
+> checked rather than claimed: `scripts/demo_skills.py` runs every one of
+> them in an environment with `HOME` scrubbed of credentials and
+> `ASSAY_ENGINE` pinned to `sqlite`, and fails if any cannot. The remaining
+> **four** (`funnel-nowcast`, `release-scorecard`, `customer-journey`,
+> `publish`) ship as documented outlines, not code; the module registry
+> records each one's exclusion with a specific reason rather than a TODO —
+> that gap is unchanged and still real. Phase 4 added the rest: the full
+> eight-document suite under [`docs/`](docs/), real committed output under
+> [`examples/`](examples/), and a test suite now at **1,111** passing tests.
 
 ## Quick start
 
@@ -74,8 +77,14 @@ Nothing to configure. `ASSAY_ENGINE` defaults to `sqlite`, which runs each
 metric's real SQL against the committed fixture CSVs — no cloud account, no
 credentials, no network.
 
+**Want proof before you clone?** [`examples/`](examples/) has real, committed
+output — a governed metric artifact, an interactive chart, a dashboard, PDF
+exports (including one from a spine-analysis funnel breakdown), and the
+chart-spec provenance JSON behind it — all fixture-backed and watermarked,
+browsable on GitHub with nothing installed.
+
 ```bash
-git clone <this-repo> && cd assay
+git clone https://github.com/markreid-lab/assay.git && cd assay
 
 python3 -m venv .venv
 .venv/bin/pip install -r tests/requirements.txt

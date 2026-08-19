@@ -26,7 +26,9 @@ a team can adjust one metric without forking the catalog.
 
 ## Required frontmatter
 
-Every field below is checked by the catalog linter. A missing one fails CI.
+Every field below is checked by the catalog linter. A missing one fails
+`pytest` (`tests/test_metric_catalog.py`) — there is no CI here, so run it
+yourself before you commit.
 
 | Field | Type | Meaning |
 |---|---|---|
