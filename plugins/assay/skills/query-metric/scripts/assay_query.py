@@ -70,6 +70,7 @@ from pathlib import Path
 # Make `_shared` importable when this script is invoked directly.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from _shared import adapters as adapters_lib  # noqa: E402
+from _shared import audit_chain as audit_chain_lib  # noqa: E402
 from _shared import guardrails as guardrails_lib  # noqa: E402
 from _shared import manifest as manifest_lib  # noqa: E402
 from _shared import numfmt as numfmt_lib  # noqa: E402
@@ -750,9 +751,20 @@ def audit_log_path() -> Path:
 def build_audit_record(result: dict, user_email: str | None) -> dict:
     """The append-only trace entry: who ran what, against what, when — the fields
     a reviewer needs to reconstruct a query without the full artifact.
-    Deliberately excludes the row data (a trace, not a copy)."""
+    Deliberately excludes the row data (a trace, not a copy).
+
+    Attribution is recorded as a delegation pair, per the W3C PROV model of
+    agency (prov:SoftwareAgent acting, `actedOnBehalfOf` a person): ``agent``
+    is the software that executed the query — this skill, at this plugin
+    version — and ``user_email`` is the human principal it acted on behalf of
+    (resolved only on the BigQuery path, where identity is asserted; a fixture
+    read has no principal and records null). In an *agentic* analytics system
+    the acting-software half is the governance-relevant field: "who ran this"
+    has two answers, and a record that keeps only the human one cannot
+    distinguish an analyst's own query from one an agent ran in their name."""
     return {
         "generated_at": result.get("generated_at"),
+        "agent": result.get("agent"),
         "user_email": user_email,
         "metric": result.get("metric_name"),
         "accuracy_tier": result.get("accuracy_tier"),
@@ -770,13 +782,20 @@ def build_audit_record(result: dict, user_email: str | None) -> dict:
 
 
 def append_audit(record: dict, path: Path | None = None) -> bool:
-    """Append one JSON line. Best-effort: never raises — an audit-log write
-    failure must not break a query. Returns True on success."""
+    """Append one JSON line and advance the log's hash-chain head. Best-effort:
+    never raises — an audit-log write failure must not break a query. Returns
+    True on success (of the log write; the head sidecar is itself best-effort,
+    and a missing head surfaces as CHAIN_HEAD_ABSENT at verify time rather
+    than as a failure here)."""
     p = path or audit_log_path()
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
+        line = json.dumps(record, default=str)
         with p.open("a") as f:
-            f.write(json.dumps(record, default=str) + "\n")
+            f.write(line + "\n")
+        # Tamper evidence: fold this exact line into the chained head
+        # (see _shared/audit_chain.py for what that does and does not claim).
+        audit_chain_lib.advance_head(p, line)
         return True
     except Exception:
         return False
@@ -917,6 +936,14 @@ def main():
         "total_denominator_display": numfmt_lib.format_value(summary["total_denominator"], "count"),
         "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
         "metric_definition_path": metric["_path"],
+        # The acting software agent (PROV: a SoftwareAgent that ran the
+        # Activity). The human principal it acted on behalf of is recorded in
+        # the audit trace, where identity is resolved; here the pair names
+        # which code, at which version, produced this artifact.
+        "agent": {
+            "skill": "query-metric",
+            "plugin_version": manifest_lib.plugin_version(),
+        },
         "warnings": warnings,
     }
 
