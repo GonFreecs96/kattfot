@@ -146,7 +146,8 @@ def test_catalog_reports_spine_status_and_the_handoff_edge():
     checkout = spines[("checkout", "session")]
     assert checkout["status"] == "live"
     assert set(checkout["skills"]) == {
-        "funnel-dropoff", "stage-timing", "segment-compare", "funnel-pulse"
+        "funnel-dropoff", "stage-timing", "segment-compare", "funnel-pulse",
+        "funnel-nowcast",
     }
     browse = spines[("browse", "session")]
     assert browse["status"] == "declared"

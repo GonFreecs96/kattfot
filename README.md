@@ -59,17 +59,23 @@ system prompt:
 The full reasoning behind each control — including what each one does
 **not** guarantee — is in [`docs/governance-model.md`](docs/governance-model.md).
 
-> **Status: Phase 4 complete.** All **nineteen skills** are accounted for.
-> **Fifteen** run today, offline, against committed fixtures — and that is
-> checked rather than claimed: `scripts/demo_skills.py` runs every one of
-> them in an environment with `HOME` scrubbed of credentials and
-> `ASSAY_ENGINE` pinned to `sqlite`, and fails if any cannot. The remaining
-> **four** (`funnel-nowcast`, `release-scorecard`, `customer-journey`,
-> `publish`) ship as documented outlines, not code; the module registry
-> records each one's exclusion with a specific reason rather than a TODO —
-> that gap is unchanged and still real. Phase 4 added the rest: the full
-> eight-document suite under [`docs/`](docs/), real committed output under
-> [`examples/`](examples/), and a test suite now at **1,111** passing tests.
+> **Status: Phase 4 complete, plus a research pass (2026-08).** All
+> **nineteen skills** are accounted for. **Sixteen** run today, offline,
+> against committed fixtures — and that is checked rather than claimed:
+> `scripts/demo_skills.py` runs every one of them in an environment with
+> `HOME` scrubbed of credentials and `ASSAY_ENGINE` pinned to `sqlite`, and
+> fails if any cannot. The remaining **three** (`release-scorecard`,
+> `customer-journey`, `publish`) ship as documented outlines, not code; the
+> module registry records each one's exclusion with a specific reason rather
+> than a TODO — that gap is real and stated. The research pass promoted
+> `funnel-nowcast` from outline to functional (a run-time-estimated Mack
+> chain ladder dissolved the fit-the-generator objection), hash-chained the
+> audit log into tamper-evidence, added a measured maturity-calibration
+> script, an ambiguity refusal, and an indirect-injection adversarial suite —
+> each grounded in the literature reviewed in
+> [`docs/reference/research-review.md`](docs/reference/research-review.md).
+> Alongside the code sit the documentation suite under [`docs/`](docs/) and
+> real committed output under [`examples/`](examples/).
 
 ## Quick start
 
@@ -106,7 +112,7 @@ catches a leak.
 .venv/bin/python scripts/demo_skills.py
 ```
 
-That runs all fifteen functional skills and prints one line each. It is the
+That runs all sixteen functional skills and prints one line each. It is the
 third gate, alongside `pytest` and the scrub check, and it exists because
 "everything works offline" is the claim a reader cannot verify by inspection
 and the one most likely to quietly stop being true — a skill gains a
@@ -170,8 +176,8 @@ session-grain spine and the weekly aggregate built on it), with
 
 ## The skill surface
 
-Nineteen skills, invoked as `assay:<skill>`. Fifteen are complete and
-runnable today; four ship as documented outlines because giving them honest
+Nineteen skills, invoked as `assay:<skill>`. Sixteen are complete and
+runnable today; three ship as documented outlines because giving them honest
 numbers needs parameters calibrated against a real book, and fitting them to
 a synthetic fixture would produce a curve describing the generator rather
 than any business.
@@ -193,18 +199,18 @@ than any business.
 | `assay:stage-timing` | Percentile stage latency (p50/p90/p99, mean, n) per transition |
 | `assay:segment-compare` | A vs B, or before vs after, across funnel, leak mix, and timing |
 | `assay:funnel-pulse` | Stage-aware recent-vs-baseline regression monitor, ranked by impact |
+| `assay:funnel-nowcast` | Cohort-maturation now-cast (Mack chain ladder) for a not-yet-settled cohort: P10/P50/P90 capped at cohort size, with a self-scoring backtest |
 
-The last four read the **session-grain spine** rather than the weekly
+The last five read the **session-grain spine** rather than the weekly
 aggregate, because that is the only way to get what a `SUM/SUM` metric
-structurally cannot express: where each session actually ended up, and a
-median.
+structurally cannot express: where each session actually ended up, a median,
+and an immature cohort's projected ultimate.
 
 **Outlined, not implemented** (documented in the skill cheat sheet, excluded
 in the module registry with a specific reason):
 
 | Skill | What it would do |
 |---|---|
-| `assay:funnel-nowcast` | Cohort-maturation now-cast (chain-ladder / development-factor) for a not-yet-settled cohort, with P10/P50/P90 intervals |
 | `assay:release-scorecard` | A pre-registered release's causal verdict via BSTS counterfactual (and DiD when a control segment is specified) |
 | `assay:customer-journey` | Customer-grain journey analysis — the multi-order analog to the session-grain funnel |
 | `assay:publish` | Push a governed artifact to a wiki as a read-only page, gated on explicit human approval before any write |
@@ -281,12 +287,12 @@ plugins/assay/
     _shared/adapters/        one BigQuery adapter, one sqlite adapter, capability advertisement
     query-metric/            the governed metric runtime: 15 T2 metrics, 8 entities, doctrine,
                               templates, view DDL, AUTHORING.md
-    <15 skill dirs>/         one SKILL.md + scripts/ each — see docs/skill-cheatsheet.md
+    <16 skill dirs>/         one SKILL.md + scripts/ each — see docs/skill-cheatsheet.md
   contracts/consumer-api.md  the cross-plugin response contract (sentinels, formats)
 scripts/                     repo tooling, NOT part of the shipped plugin
   generate_fixtures.py       the deterministic fixture generator
   demo.py                    the compose chain, end to end, offline
-  demo_skills.py             all fifteen functional skills, offline, as a gate
+  demo_skills.py             all sixteen functional skills, offline, as a gate
   scrub_check.py             the deny-token gate
 data/assay/sample/           the two committed fixture CSVs + FIXTURES.md (seed, instant, trim)
 tests/                       governance tests + catalog linter, run by pytest
@@ -395,14 +401,24 @@ Worth stating plainly rather than discovering:
 - **The maturity lags are illustrative, not calibrated.** `calibrated_at` is
   `null` and `illustrative: true` on every stage-maturity block, and a test
   holds those flags in place so this cannot silently start implying it was
-  measured.
-- **Four of nineteen skills are outlines, not code.** `funnel-nowcast` and
-  `release-scorecard` need statistical parameters — development fractions,
-  bootstrap seeds, BSTS priors — that are judgment calls against a real book;
-  fitting them to synthetic fixtures would produce a curve describing the
-  generator rather than any business. `customer-journey` needs a person-grain
-  spine this template does not register. `publish` writes to an external
-  wiki, which a template has nowhere to write to.
+  measured. `stage-timing/scripts/calibrate_maturity.py` measures the settle
+  curve and proposes calibrated lags, but on the committed fixtures its output
+  keeps the illustrative flag on purpose — a measured *generator* is not a
+  measured business.
+- **`funnel-nowcast` runs, but on fixtures it now-casts the generator.** Its
+  Mack chain ladder estimates every development factor from the committed
+  spine, so the mechanism is real and offline-checkable; the *numbers* describe
+  the seeded generator, are watermarked as such, and its own `--backtest`
+  reports that the intervals undercover on this synthetic book (the documented
+  failure mode of model-based nowcasts — see
+  [`docs/reference/research-review.md`](docs/reference/research-review.md)).
+- **Three of nineteen skills are outlines, not code.** `release-scorecard`
+  needs causal parameters — BSTS priors, control-series selection, pre/post
+  windows — that are judgment calls against a real book and, unlike
+  `funnel-nowcast`'s development factors, cannot be estimated from the spine at
+  run time. `customer-journey` needs a person-grain spine this template does
+  not register. `publish` writes to an external wiki, which a template has
+  nowhere to write to.
 - **The `browse` module is `declared`, not `live`.** Its funnel spec is
   authored and linted; no view or fixture backs it, so every spine-backed
   skill is excluded on it in the module registry.
@@ -431,6 +447,7 @@ Worth stating plainly rather than discovering:
 | [`docs/module-registry-design.md`](docs/module-registry-design.md) | The registry + funnel-spec contract, and the handoff edge |
 | [`docs/adding-a-module.md`](docs/adding-a-module.md) | The "make this yours" path — swap the domain without touching the engine |
 | [`docs/reference/agentic-analytics-essay.md`](docs/reference/agentic-analytics-essay.md) | Background: ontologies, knowledge graphs, and semantic layers for agentic analytics |
+| [`docs/reference/research-review.md`](docs/reference/research-review.md) | The literature grounding every control — what it validates, critiques, and the improvements built in response (with citations) |
 | [`examples/`](examples/) | Real, committed output — a governed artifact, its chart, its PDF export, and a spine-analysis artifact, generated by actually running the skills |
 
 ## Contributing

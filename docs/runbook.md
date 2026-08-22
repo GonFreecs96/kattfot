@@ -100,7 +100,7 @@ A recurring question that has no registered metric belongs in
 | Explain why our number ≠ their number | `assay:reconcile` | Names the cause (window, maturity, timezone, filter, grain). |
 | Check an old artifact is still valid | `assay:verify` | Offline definition/query drift check via the manifest. |
 | Pull a governed **definition** into another tool | `assay:load-context metric/{slug}` | No warehouse access; the cross-plugin API. |
-| Project where an immature cohort is heading | *(not implemented — see below)* | Outlined as `assay:funnel-nowcast`. |
+| Project where an immature cohort is heading | `assay:funnel-nowcast` | Mack chain ladder over the spine; FORECAST-lane P10/P50/P90, capped at cohort size, with a self-scoring backtest. |
 | Measure a shipped release causally | *(not implemented — see below)* | Outlined as `assay:release-scorecard`. |
 | Answer a question about **people**, not sessions | *(not implemented — see below)* | Outlined as `assay:customer-journey`. |
 | Publish a governed artifact to a wiki | *(not implemented — see below)* | Outlined as `assay:publish`. |
@@ -108,9 +108,10 @@ A recurring question that has no registered metric belongs in
 **Rule of thumb:** `query-metric` to put a figure in front of someone;
 `load-context` to ground reasoning in the canonical definition.
 
-**On the four outlined skills:** their names, intended behavior, and the
-reason they are not implemented in this template all appear in the module
-registry (`config/modules.yaml`, each module's `excluded:` block) and in the
+**On the three outlined skills** (`release-scorecard`, `customer-journey`,
+`publish`): their names, intended behavior, and the reason they are not
+implemented in this template all appear in the module registry
+(`config/modules.yaml`, each module's `excluded:` block) and in the
 [skill cheat sheet](skill-cheatsheet.md#outlined-skills-documented-not-implemented).
 Do not invoke them expecting real output — there is no script behind them
 yet. Forking this template and building one is exactly what
@@ -271,7 +272,7 @@ can override one metric without forking the catalog. Adding to the
 ## 7. Publishing
 
 This template does **not** ship a publishing path. `assay:publish` is one of
-the four outlined skills — the intended shape (a read-only wiki page,
+the three outlined skills — the intended shape (a read-only wiki page,
 resolved through a page registry, composed with a tier stamp and verbatim
 caveats, gated on explicit human approval before any write) is described in
 the [skill cheat sheet](skill-cheatsheet.md#outlined-skills-documented-not-implemented),

@@ -20,7 +20,7 @@ need.
 | **Module** | A governed business domain — a set of metrics, optionally a spine, and the registry entry that ties them together. This template registers two: `checkout` (live) and `browse` (declared). |
 | **Spine** | One analysable grain within a module: a curated view with one row per instance of that grain, carrying every stage flag, stage timestamp, and terminal-branch classification the spine-backed skills need. A module may have several spines at different grains; exactly one is the default. |
 | **Grain** | The unit one row of a view represents. The checkout module's grain is **one checkout session (cart)**; the browse module's is **one visit to the catalog**. Choosing the wrong grain for a denominator is the single most common way a correct-looking query answers the wrong question — see `checkout-session.md`'s "why the cart, and not the order." |
-| **Weekly aggregate** vs. **session spine** | Two projections of the same stage ladder. The weekly aggregate (`cart_checkout_funnel_weekly`) is pre-summed at `cohort_week × dims` and backs the fifteen governed ratio metrics; the session spine (`cart_checkout_session_spine`) is one row per cart and backs the four spine-backed skills (drop-off, timing, compare, pulse), because a percentile or a terminal-branch decomposition cannot be recovered from sums. |
+| **Weekly aggregate** vs. **session spine** | Two projections of the same stage ladder. The weekly aggregate (`cart_checkout_funnel_weekly`) is pre-summed at `cohort_week × dims` and backs the fifteen governed ratio metrics; the session spine (`cart_checkout_session_spine`) is one row per cart and backs the five spine-backed skills (drop-off, timing, compare, pulse, nowcast), because a percentile, a terminal-branch decomposition, or an immature cohort's projected ultimate cannot be recovered from sums. |
 | **Handoff edge** | A declarative spine → spine composition (`config/modules.yaml`), naming a join key and a stated coverage, for when a question spans two grains — e.g. "what share of visits produce a cart" spans `browse/session` and `checkout/session`. Declarative rather than SQL buried in a skill, because the hard part is the denominator, not the join. |
 | **Consumer / consuming plugin** | Another tool that calls `assay` for a governed number or definition via `assay:query-metric` / `assay:load-context`, rather than reading files directly. The integration is agent-mediated skill invocation, defined by `contracts/consumer-api.md`. |
 | **Compose chain** | The intended skill pipeline: `query-metric → visualize-metric → export-report` (or `render-chart` / `render-dashboard`). One governed artifact flows through rendering and distribution without re-querying. |
@@ -68,8 +68,8 @@ apology, no workaround that violates the same rule, no artifact written.
 | **ADC** | *Application Default Credentials* — established by `gcloud auth application-default login`. Every query on the `bigquery` engine runs as **your own Google identity**. |
 | **Service account refused** | `_shared/identity.py` refuses service-account / impersonated credentials at the helper level (exit code 4). There is no shared key, no fallback. `GOOGLE_APPLICATION_CREDENTIALS` being set is the most common cause — unset it. |
 | **Allow-list** | Metrics, dimensions, and filters are explicitly enumerated per metric or per funnel spec. Off-list requests refuse (R1–R3). |
-| **Manifest (the receipt)** | A block stamped on every `query-metric` artifact: `plugin_version`, `metric_def_sha`, `query_sha`, `result_sha`. `generated_at` is excluded from every hash, so a faithful re-run reproduces them. `assay:verify` reads it back. |
-| **Audit / trace log** | `outputs/assay/audit-log.jsonl` — one append-only JSON line per run (metric, tier, engine, dims, filters, window, row count, the manifest, and — on the BigQuery path — the authenticated user's email). Row data is never logged. |
+| **Manifest (the receipt)** | A block stamped on every `query-metric` artifact: `plugin_version`, `metric_def_sha`, `query_sha`, `result_sha`, and the acting `agent` (skill + version). `generated_at` is excluded from every hash, so a faithful re-run reproduces them. `assay:verify` reads it back. |
+| **Audit / trace log** | `outputs/assay/audit-log.jsonl` — one append-only JSON line per run (metric, tier, engine, dims, filters, window, row count, the manifest, the acting **agent**, and — on the BigQuery path — the authenticated user's email, the PROV delegation pair). Row data is never logged. Each line is folded into a **hash chain** with a committed-head sidecar (`_shared/audit_chain.py`); `assay:verify --audit-log` replays it to detect any edit, reorder, insertion, or truncation. |
 | **Parameterized / bound params** | Filter values are passed as bound query parameters, never inlined into SQL — asserted by `tests/test_query_metric_governance.py`. |
 | **Access-path hook** | The `PreToolUse` (Claude Code) / `beforeShellExecution` (Cursor) hook that denies every warehouse access route except the plugin's vetted scripts. A blocklist over the Bash command text, not a sandbox. |
 | **Scrub gate** | `scripts/scrub_check.py` — the deny-token check that keeps the private repository this template was derived from, and its identifiers, out of the codebase. Runs as part of `pytest`. |
@@ -149,7 +149,7 @@ Order Confirmed → Shipped → Delivered → Return Window Complete
 
 ## Skills (19)
 
-Invoke as `assay:<skill>`. Fifteen are functional; four are documented
+Invoke as `assay:<skill>`. Sixteen are functional; three are documented
 outlines. See [`skill-cheatsheet.md`](skill-cheatsheet.md) for every flag and
 a worked example.
 
@@ -244,7 +244,7 @@ sliced/filtered by `channel`, `payment_method`, `market`, `category`,
 |---|---|
 | `generate_fixtures.py` | The deterministic fixture generator — seeded, so the same arguments produce byte-identical CSVs. |
 | `demo.py` | The compose chain, end to end, offline: query → artifact → chart → PDF. |
-| `demo_skills.py` | All fifteen functional skills, offline, as a gate — fails if any cannot run with no credentials. |
+| `demo_skills.py` | All sixteen functional skills, offline, as a gate — fails if any cannot run with no credentials. |
 | `scrub_check.py` | The deny-token gate. |
 
 ---

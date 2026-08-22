@@ -65,6 +65,21 @@ def test_the_record_captures_which_engine_served_it():
     assert rec["source_mode"] == "fixture_sql"
 
 
+def test_the_record_carries_the_delegation_pair():
+    """Who ran a query has two answers in an agentic system — the software
+    agent that executed it and the human it acted on behalf of (W3C PROV:
+    SoftwareAgent + actedOnBehalfOf). The record keeps both, so an agent-run
+    query can never masquerade as an analyst's own."""
+    result = dict(
+        SAMPLE_RESULT,
+        agent={"skill": "query-metric", "plugin_version": "0.1.0"},
+    )
+    rec = aq.build_audit_record(result, "analyst@example.com")
+    assert rec["agent"]["skill"] == "query-metric"
+    assert rec["agent"]["plugin_version"] == "0.1.0"
+    assert rec["user_email"] == "analyst@example.com"
+
+
 def test_missing_fields_do_not_raise():
     """A partial result (an early failure, a caller passing a subset) still produces a
     record. The log is best-effort by design, and a KeyError here would take down the

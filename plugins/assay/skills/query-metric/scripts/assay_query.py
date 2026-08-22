@@ -70,6 +70,7 @@ from pathlib import Path
 # Make `_shared` importable when this script is invoked directly.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from _shared import adapters as adapters_lib  # noqa: E402
+from _shared import audit_chain as audit_chain_lib  # noqa: E402
 from _shared import guardrails as guardrails_lib  # noqa: E402
 from _shared import manifest as manifest_lib  # noqa: E402
 from _shared import numfmt as numfmt_lib  # noqa: E402
@@ -184,6 +185,61 @@ def suggest_close_names(metric_name: str, available: list, n: int = 3) -> list:
     return ordered[:n]
 
 
+#: Ambiguity thresholds for the R1 refusal below. A miss is AMBIGUOUS — refused
+#: with every candidate named, never resolved by rank — when several registered
+#: names contain the query as a substring, or when the two best fuzzy matches
+#: are this close: both at least MATCH_FLOOR similar, separated by less than
+#: MATCH_MARGIN. Tuned to the failure the text-to-SQL ambiguity literature
+#: measures (AmbiQT, EMNLP 2023): models silently commit to ONE reading of an
+#: ambiguous ask, and top-1 acceptance of a near-tie is this system's version
+#: of that mistake.
+AMBIGUITY_MATCH_FLOOR = 0.6
+AMBIGUITY_MATCH_MARGIN = 0.08
+
+
+def ambiguous_candidates(metric_name: str, available: list) -> list:
+    """The registered names a miss matches ABOUT EQUALLY WELL, or [] when the
+    miss is unambiguous (zero or one plausible reading).
+
+    Two triggers, checked in order:
+    - **Generic-term ambiguity**: the query is a substring of several names
+      ('payment' — approval rate? decline rate? submit-to-decision?). Every
+      such name is a valid reading; returning them all is the point.
+    - **Near-tie ambiguity**: the two closest fuzzy matches sit within
+      AMBIGUITY_MATCH_MARGIN of each other above AMBIGUITY_MATCH_FLOOR — close
+      enough that picking the winner would answer a different question than
+      the one asked roughly half the time.
+
+    Pure, so the thresholds are unit-testable against real catalog names.
+    """
+    if not metric_name or not available:
+        return []
+    q = metric_name.lower()
+    substring = [x for x in available if q in x.lower()]
+    if len(substring) >= 2:
+        return substring
+    scored = sorted(
+        ((difflib.SequenceMatcher(None, q, x.lower()).ratio(), x) for x in available),
+        reverse=True,
+    )
+    if (
+        len(scored) >= 2
+        and scored[0][0] >= AMBIGUITY_MATCH_FLOOR
+        and scored[1][0] >= AMBIGUITY_MATCH_FLOOR
+        and scored[0][0] - scored[1][0] < AMBIGUITY_MATCH_MARGIN
+    ):
+        # Only the candidates genuinely tied with the top one — within the same
+        # margin of it — belong in the refusal. A distant third would be noise
+        # dressed as a rival reading.
+        top = scored[0][0]
+        return [
+            name
+            for score, name in scored[:3]
+            if top - score < AMBIGUITY_MATCH_MARGIN
+        ]
+    return []
+
+
 def find_metric_file(metric_name: str) -> Path:
     """Locate a metric definition by its frontmatter `name`.
 
@@ -199,6 +255,20 @@ def find_metric_file(metric_name: str) -> Path:
             return hit
 
     available = available_metric_names(consumer_root, bundled_root)
+    # Ambiguity outranks helpfulness: when a miss reads several registered
+    # metrics about equally well, resolving it by rank would silently answer a
+    # different question than the one asked (the top-1-commitment failure the
+    # ambiguity literature measures). Name every reading and refuse to choose.
+    ambiguous = ambiguous_candidates(metric_name, available)
+    if ambiguous:
+        raise SystemExit(
+            f"ERROR (R1-AMBIGUOUS): '{metric_name}' matches multiple registered "
+            f"metrics about equally well: {', '.join(ambiguous)}. Refusing to "
+            f"guess between readings — they are different questions with "
+            f"different denominators. Re-run with one exact name (or ask the "
+            f"requester which they meant); assay:catalog shows each metric's "
+            f"definition."
+        )
     suggestions = suggest_close_names(metric_name, available)
     did_you_mean = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
     registered = f" Registered metrics: {', '.join(available)}." if available else ""
@@ -750,9 +820,20 @@ def audit_log_path() -> Path:
 def build_audit_record(result: dict, user_email: str | None) -> dict:
     """The append-only trace entry: who ran what, against what, when — the fields
     a reviewer needs to reconstruct a query without the full artifact.
-    Deliberately excludes the row data (a trace, not a copy)."""
+    Deliberately excludes the row data (a trace, not a copy).
+
+    Attribution is recorded as a delegation pair, per the W3C PROV model of
+    agency (prov:SoftwareAgent acting, `actedOnBehalfOf` a person): ``agent``
+    is the software that executed the query — this skill, at this plugin
+    version — and ``user_email`` is the human principal it acted on behalf of
+    (resolved only on the BigQuery path, where identity is asserted; a fixture
+    read has no principal and records null). In an *agentic* analytics system
+    the acting-software half is the governance-relevant field: "who ran this"
+    has two answers, and a record that keeps only the human one cannot
+    distinguish an analyst's own query from one an agent ran in their name."""
     return {
         "generated_at": result.get("generated_at"),
+        "agent": result.get("agent"),
         "user_email": user_email,
         "metric": result.get("metric_name"),
         "accuracy_tier": result.get("accuracy_tier"),
@@ -770,13 +851,24 @@ def build_audit_record(result: dict, user_email: str | None) -> dict:
 
 
 def append_audit(record: dict, path: Path | None = None) -> bool:
-    """Append one JSON line. Best-effort: never raises — an audit-log write
-    failure must not break a query. Returns True on success."""
+    """Append one JSON line and advance the log's hash-chain head. Best-effort:
+    never raises — an audit-log write failure must not break a query. Returns
+    True on success (of the log write; the head sidecar is itself best-effort,
+    and a missing head surfaces as CHAIN_HEAD_ABSENT at verify time rather
+    than as a failure here)."""
     p = path or audit_log_path()
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
-        with p.open("a") as f:
-            f.write(json.dumps(record, default=str) + "\n")
+        line = json.dumps(record, default=str)
+        # UTF-8 explicitly: the hash chain folds the line as UTF-8 bytes, so the
+        # write must match or a non-ASCII value (an accented market/name) would
+        # round-trip to different bytes under a different locale and read as a
+        # false mismatch.
+        with p.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+        # Tamper evidence: fold this exact line into the chained head
+        # (see _shared/audit_chain.py for what that does and does not claim).
+        audit_chain_lib.advance_head(p, line)
         return True
     except Exception:
         return False
@@ -917,6 +1009,14 @@ def main():
         "total_denominator_display": numfmt_lib.format_value(summary["total_denominator"], "count"),
         "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
         "metric_definition_path": metric["_path"],
+        # The acting software agent (PROV: a SoftwareAgent that ran the
+        # Activity). The human principal it acted on behalf of is recorded in
+        # the audit trace, where identity is resolved; here the pair names
+        # which code, at which version, produced this artifact.
+        "agent": {
+            "skill": "query-metric",
+            "plugin_version": manifest_lib.plugin_version(),
+        },
         "warnings": warnings,
     }
 

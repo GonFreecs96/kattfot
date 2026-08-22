@@ -100,7 +100,7 @@ All six are checked by `tests/test_module_registry.py`, not left to prose:
    `excluded:` — never both, never neither. An `excluded:` entry needs a
    real reason ("this grain has no ordered stage ladder"), not a `TODO`.
    This is what turns "we didn't get to it" into a recorded decision, and
-   it is exactly why the `browse` module's four spine-backed exclusions each
+   it is exactly why the `browse` module's spine-backed exclusions each
    say something specific rather than reusing one blanket sentence.
 2. **Exactly one `default: true` spine per module with a non-empty
    `spines:`.** So a bare `--module checkout` is unambiguous about which
