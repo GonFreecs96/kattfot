@@ -100,7 +100,10 @@ stages:
   - { ordinal: 2, key: checkout_started,       label: "Checkout Started",       flag: checkout_started_flag,       maturity_stage: checkout_started }
   - { ordinal: 3, key: payment_submitted,      label: "Payment Submitted",      flag: payment_submitted_flag,      maturity_stage: payment_submitted }
   - { ordinal: 4, key: payment_decisioned,     label: "Payment Decisioned",     flag: payment_decisioned_flag,     maturity_stage: payment_decisioned }
-  - { ordinal: 5, key: order_confirmed,        label: "Order Confirmed",        flag: order_confirmed_flag,        maturity_stage: order_confirmed }
+  # `settle_column` names the arrival timestamp for a stage no timing
+  # transition arrives at, so calibrate_maturity.py can still measure its
+  # settle curve. Stages covered by a transition's `to:` don't need one.
+  - { ordinal: 5, key: order_confirmed,        label: "Order Confirmed",        flag: order_confirmed_flag,        maturity_stage: order_confirmed, settle_column: order_confirmed_at }
   - { ordinal: 6, key: shipped,                label: "Shipped",                flag: shipped_flag,                maturity_stage: shipped }
   - { ordinal: 7, key: delivered,              label: "Delivered",              flag: delivered_flag,              maturity_stage: delivered }
   - { ordinal: 8, key: return_window_complete, label: "Return Window Complete", flag: return_window_complete_flag, maturity_stage: return_window_complete }
