@@ -59,21 +59,23 @@ def test_the_gate_covers_every_skill_that_exists_on_disk():
     )
 
 
-def test_there_are_exactly_fifteen_functional_skills():
-    """The number this phase committed to. If it changes, the README, the plugin
+def test_there_are_exactly_sixteen_functional_skills():
+    """The number this repo commits to. If it changes, the README, the plugin
     description, and this gate all need to change together — so make that a decision
-    rather than a drift.
+    rather than a drift. (It last changed deliberately: the 2026-08 research pass
+    promoted funnel-nowcast from outline to functional, 15 -> 16, once a
+    run-time-estimated chain ladder dissolved the fit-the-generator objection.)
 
-    Fifteen is the count of *functional* skills specifically — the ones with a real
+    Sixteen is the count of *functional* skills specifically — the ones with a real
     helper the gate runs end to end. It is not the count of skill directories on
-    disk: four more ship as honest outlines (see `OUTLINE_ONLY_SKILLS`), so
+    disk: three more ship as honest outlines (see `OUTLINE_ONLY_SKILLS`), so
     `plugins/assay/skills/*/SKILL.md` currently totals nineteen. Both numbers are
     correct at once; they are counting different things.
     """
-    assert len(demo_skills.SKILL_ORDER) == 15
-    assert len(demo_skills.STEPS) == 15
+    assert len(demo_skills.SKILL_ORDER) == 16
+    assert len(demo_skills.STEPS) == 16
     assert set(demo_skills.STEPS) == set(demo_skills.SKILL_ORDER)
-    assert len(demo_skills.OUTLINE_ONLY_SKILLS) == 4
+    assert len(demo_skills.OUTLINE_ONLY_SKILLS) == 3
 
 
 def test_every_skill_has_a_skill_md_and_the_gate_runs_a_real_helper():

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""demo_skills.py — run all fifteen skills offline, and fail if any of them cannot.
+"""demo_skills.py — run all sixteen functional skills offline, and fail if any of them cannot.
 
 `scripts/demo.py` walks the compose chain (a governed metric becomes an artifact,
 becomes a chart, becomes a PDF) and is the best way to *see* what the plugin
@@ -29,7 +29,7 @@ contract `assay:verify` reads.
 
 Usage
 -----
-    python3 scripts/demo_skills.py                 # the gate: all fifteen
+    python3 scripts/demo_skills.py                 # the gate: all sixteen
     python3 scripts/demo_skills.py --only catalog,funnel-pulse
     python3 scripts/demo_skills.py --allow-missing-optional
     python3 scripts/demo_skills.py --json
@@ -37,7 +37,7 @@ Usage
 `visualize-metric` needs matplotlib and `export-report` needs fpdf2 — offline
 dependencies, not network ones, so by default a missing one is a failure with the
 install command. `--allow-missing-optional` downgrades that to a reported gap, and
-the summary then says how many of the fifteen actually ran.
+the summary then says how many of the sixteen actually ran.
 """
 
 from __future__ import annotations
@@ -65,7 +65,7 @@ SPINE_WINDOW = ["--time-range", "last_16_weeks", "--today", AS_OF]
 
 DEMO_METRIC = "cart_to_checkout_start_conversion"
 
-#: The fifteen functional skills, in dependency order — the compose chain first,
+#: The sixteen functional skills, in dependency order — the compose chain first,
 #: because `verify` needs an artifact to check.
 SKILL_ORDER = (
     "setup",
@@ -83,6 +83,7 @@ SKILL_ORDER = (
     "stage-timing",
     "segment-compare",
     "funnel-pulse",
+    "funnel-nowcast",
 )
 
 #: Skills that ship as a documented outline only — a `SKILL.md` exists on disk, but
@@ -92,7 +93,6 @@ SKILL_ORDER = (
 #: skill is in exactly one of `SKILL_ORDER` or this set, never both and never
 #: neither.
 OUTLINE_ONLY_SKILLS = {
-    "funnel-nowcast",
     "release-scorecard",
     "customer-journey",
     "publish",
@@ -526,6 +526,65 @@ def step_funnel_pulse(r: Runner, state: dict):
     )
 
 
+def step_funnel_nowcast(r: Runner, state: dict):
+    """Run the chain-ladder now-cast WITH its backtest, and require both halves:
+    projections for the immature cohorts, and an empirical-coverage read for the
+    interval. The backtest is not optional decoration here — a now-cast band
+    whose calibration was never measured is the exact overconfidence this skill
+    exists to avoid, so the gate demonstrates the measurement."""
+    out = r.json([helper("funnel-nowcast", "funnel_nowcast.py"),
+                  "--today", AS_OF, "--time-range", "last_19_weeks", "--backtest"])
+    assert out["lane"] == "FORECAST" and out["accuracy_tier"] == "FORECAST"
+    g = out["groups"][0]
+    projected = [c for c in g["cohorts"] if not c["mature"] and c.get("quantiles")]
+    assert projected, "no immature cohort produced a projection"
+    assert all(
+        c["quantiles"]["p10"] <= c["quantiles"]["p50"] <= c["quantiles"]["p90"]
+        for c in projected
+    )
+    bt = g["backtest"]
+    assert bt["replays"] > 0 and bt["overall_empirical_coverage"] is not None
+
+    rows = ["## Now-cast by cohort (FORECAST lane)", "",
+            "| Cohort | Age (w) | Observed | Method | P50 ult. | P10–P90 | Rate P50 |",
+            "| --- | --- | --- | --- | --- | --- | --- |"]
+    for c in g["cohorts"]:
+        if c["mature"]:
+            rows.append(
+                f"| {c['cohort_week']} | {c['age_weeks']} | {c['observed']:,} | "
+                f"mature | {c['observed']:,} | — | {_pct(c['observed_rate'])} |"
+            )
+        elif c.get("quantiles"):
+            q = c["quantiles"]
+            rows.append(
+                f"| {c['cohort_week']} | {c['age_weeks']} | {c['observed']:,} | "
+                f"{c['method']} | {q['p50']:,} | {q['p10']:,}–{q['p90']:,} | "
+                f"{_pct(c['ultimate_rate'])} |"
+            )
+    rows += ["", "## Backtest — nominal vs empirical interval coverage", "",
+             f"Nominal {bt['nominal_coverage']:.0%} · empirical "
+             f"{bt['overall_empirical_coverage']:.0%} over {bt['replays']} replays",
+             "", "| Age (w) | n | Coverage | Median APE |", "| --- | --- | --- | --- |"]
+    for h in bt["per_horizon"]:
+        rows.append(
+            f"| {h['age_weeks']} | {h['n']} | "
+            f"{h['empirical_coverage']:.0%} | "
+            f"{h['median_abs_pct_error']:.1%} |"
+        )
+    artifact = compose_spine_artifact(
+        out, state["outputs"] / f"{AS_OF}-funnel-nowcast.md", rows
+    )
+    youngest = projected[-1]
+    return (
+        f"{out['target_stage']}: {len(projected)} immature cohorts projected "
+        f"(youngest {youngest['cohort_week']} P50 "
+        f"{_pct(youngest['ultimate_rate'])}); backtest coverage "
+        f"{bt['overall_empirical_coverage']:.0%} vs nominal "
+        f"{bt['nominal_coverage']:.0%} over {bt['replays']} replays",
+        {"artifact": artifact},
+    )
+
+
 STEPS = {
     "setup": step_setup,
     "catalog": step_catalog,
@@ -542,6 +601,7 @@ STEPS = {
     "stage-timing": step_stage_timing,
     "segment-compare": step_segment_compare,
     "funnel-pulse": step_funnel_pulse,
+    "funnel-nowcast": step_funnel_nowcast,
 }
 
 
@@ -578,7 +638,7 @@ def rel(path) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--only", default=None,
-                    help="comma-separated skill names to run (default: all fifteen)")
+                    help="comma-separated skill names to run (default: all sixteen)")
     ap.add_argument("--allow-missing-optional", action="store_true",
                     help="report a missing matplotlib/fpdf2 as a gap instead of failing")
     ap.add_argument("--json", action="store_true", help="machine-readable summary")
@@ -620,7 +680,7 @@ def main() -> int:
                             "outputs": {k: rel(v) for k, v in produced.items()}})
         except Exception as exc:  # noqa: BLE001
             # Broad on purpose: one skill failing must not stop the summary, because
-            # "which of the fifteen are broken" is the whole output of this script.
+            # "which of the sixteen are broken" is the whole output of this script.
             results.append({"skill": skill, "status": "FAIL",
                             "detail": f"{type(exc).__name__}: {exc}", "outputs": {}})
 

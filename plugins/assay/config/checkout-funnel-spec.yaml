@@ -253,17 +253,52 @@ kpis:
     smes: [analytics-owner, payments-pm]
 
 # ---------------------------------------------------------------------------
-# Deliberately absent: `nowcast:` and `scorecard:`.
+# funnel-nowcast: chain-ladder projection of an immature cohort's ultimate.
 #
-# Both blocks configure statistical machinery (chain-ladder cohort maturation
-# now-casting; BSTS / difference-in-differences causal verdicts). Their
-# parameters — development-fraction floors, bootstrap seeds and sample counts,
-# minimum pre/post windows, dispersion thresholds — are judgment calls made
-# against a real book's observed behavior. Authoring them here would produce
-# numbers that describe this repo's fixture generator and nothing else, while
-# looking exactly like numbers that describe a business. The registry
-# (config/modules.yaml) marks funnel-nowcast and release-scorecard excluded for
-# precisely this reason, and tests/test_module_registry.py enforces that an
-# included skill has the spec keys it needs — so the absence is checked, not
-# just documented.
+# This block was deliberately absent through Phase 4, on the argument that
+# now-cast parameters are judgment calls against a real book and authoring
+# them here would fit the fixture generator. That argument was right about the
+# design it applied to — a hand-authored development curve — and dissolves for
+# the design that shipped instead: Mack's distribution-free chain ladder
+# ESTIMATES every development factor and variance from the triangle at run
+# time (Mack 1993; the same estimator is the epidemiological nowcasting
+# community's baseline). Nothing below is a fitted business parameter. These
+# are estimation controls: which stages have a tail worth projecting, how far
+# the triangle develops, and the floors that keep a thin cohort from wearing a
+# confident band. On fixtures the output is watermarked and its factors
+# describe the generator — same standing as every other skill's fixture
+# numbers. `--backtest` reports empirical interval coverage next to nominal,
+# which is the check that keeps a plausible-looking band honest.
+nowcast:
+  # Only stages with a genuine maturation tail. Fast-settling stages are
+  # refused as targets: their governed actuals exist within days, and a
+  # forecast of a knowable number is a downgrade wearing a confidence band.
+  stages:
+    - delivered
+    - return_window_complete
+  default_stage: return_window_complete
+  # Development horizon in whole weeks. Absent per-stage values derive from
+  # stage_maturity.lag_days (ceil((lag+1)/7)), so the horizon tracks the
+  # calibrated settle curve rather than being authored twice.
+  development_weeks: null
+  # Trailing cohorts used to estimate factors (null = all available). The
+  # standard trailing-diagonals defense against an old regime leaking into
+  # current factors; tighten it after a known cutover.
+  factor_window_cohorts: null
+  quantiles: [10, 50, 90]
+  # A cohort below this many carts is skipped rather than now-cast: a chain
+  # ladder on a thin cohort produces a band with nothing inside it.
+  min_cohort_size: 200
+
+# ---------------------------------------------------------------------------
+# Deliberately absent: `scorecard:`.
+#
+# release-scorecard's parameters — BSTS priors, control-series selection,
+# minimum pre/post windows — remain judgment calls against a real book's
+# observed behavior, and unlike the nowcast's development factors they cannot
+# be estimated from the triangle alone: a causal verdict computed over
+# generated data measures the generator's parameters, not a release. The
+# registry (config/modules.yaml) marks release-scorecard excluded with this
+# reason, and tests/test_module_registry.py enforces that an included skill
+# has the spec keys it needs — so the absence is checked, not just documented.
 # ---------------------------------------------------------------------------

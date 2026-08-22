@@ -15,9 +15,9 @@ exactly as the skill runtime does:
   - `chart_spec`         (visualize-metric's spec builder)
   - `doctor`             (the setup skill's environment doctor)
   - `scrub_check`        (the repo's deny-token gate)
-  - the eight skill helpers whose `main()` is the governance entry point:
+  - the nine skill helpers whose `main()` is the governance entry point:
     `funnel_dropoff`, `stage_timing`, `segment_compare`, `funnel_pulse`,
-    `catalog`, `load_context`, `coverage_lookup`, `reconcile`
+    `funnel_nowcast`, `catalog`, `load_context`, `coverage_lookup`, `reconcile`
 
 Skill helpers are imported and their `main()` called with a patched `sys.argv`,
 rather than shelled out to. Same entry point, same exit codes, and the sqlite
@@ -53,6 +53,7 @@ HELPER_SKILLS = (
     "stage-timing",
     "segment-compare",
     "funnel-pulse",
+    "funnel-nowcast",
     "catalog",
     "load-context",
     "coverage",

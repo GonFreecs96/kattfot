@@ -84,9 +84,16 @@ modules:
           - stage-timing
           - segment-compare
           - funnel-pulse
+          # Included as of the 2026-08 research pass. Excluded through Phase 4
+          # on the argument that now-cast parameters are judgment calls against
+          # a real book; the shipped design dissolves that objection by
+          # ESTIMATING every development factor at run time (Mack 1993
+          # distribution-free chain ladder) rather than authoring any — see the
+          # `nowcast:` block's comment in checkout-funnel-spec.yaml. Outputs
+          # are FORECAST-lane, never T2.
+          - funnel-nowcast
         excluded:
-          funnel-nowcast: "Ships as a documented outline only. Chain-ladder now-casting needs a `nowcast:` block (per-target open/arrival timestamps, bootstrap parameters, a development-fraction floor) that is deliberately NOT authored here: those numbers are judgment calls calibrated against a real book, and fitting them to synthetic fixtures would produce a curve that describes the generator rather than any business."
-          release-scorecard: "Ships as a documented outline only. Inherits funnel-nowcast's prerequisite, and a causal verdict (BSTS counterfactual or difference-in-differences) computed over generated data would measure the generator's parameters, not a release."
+          release-scorecard: "Ships as a documented outline only. A causal verdict (BSTS counterfactual or difference-in-differences) needs priors, control-series selection, and pre/post windows that are judgment calls against a real book — and unlike funnel-nowcast's development factors (estimable from the triangle at run time, which is why that skill now ships), they cannot be derived from the spine alone. Computed over generated data they would measure the generator's parameters, not a release."
           customer-journey: "Ships as a documented outline only, and is grain-scoped to a person spine this module does not register. Session grain cannot express 'did ANY of this customer's sessions reach X' — that is a different denominator, not a different filter."
 
   # The second module, and the reason the registry has a `handoff` concept at
@@ -118,8 +125,8 @@ modules:
           stage-timing: "Blocked on the same missing view. The spec's `transitions:` are authored and the adapter seam already serves percentiles on both engines, so there is no skill-side gap — only an absent browse_session_spine."
           segment-compare: "Blocked on the same missing view. Needs `stages` + `transitions`, both authored below; the comparison itself is grain-agnostic."
           funnel-pulse: "Blocked on the same missing view. The `pulse:` block is authored with a browse-appropriate window (every browse stage settles within a day, so the monitor can run tighter than checkout's return-window tail)."
-          funnel-nowcast: "Ships as a documented outline only, and would be pointless at this grain even with data: a browse session settles the day it opens, so there is no maturation tail to now-cast. Chain-ladder development factors need a target that genuinely withholds outcomes for weeks."
-          release-scorecard: "Ships as a documented outline only. Inherits funnel-nowcast's prerequisite and, like it, needs a `nowcast:` block that is deliberately unauthored because its parameters are judgment calls against a real book."
+          funnel-nowcast: "Blocked twice over: no browse view or fixture is provisioned (the same missing data as every skill above), and the skill would be pointless at this grain even with data — a browse session settles the day it opens, so there is no maturation tail to now-cast. Chain-ladder development factors need a target that genuinely withholds outcomes for weeks."
+          release-scorecard: "Ships as a documented outline only. Its causal parameters (BSTS priors, control-series selection, pre/post windows) are judgment calls against a real book that cannot be estimated from a spine at run time — see the checkout spine's entry for the full reason."
           customer-journey: "Ships as a documented outline only, and is grain-scoped to a person spine this module does not register. 'Did ANY of this visitor's sessions add to cart' is a different denominator from 'did this session add to cart', not a filter on it."
         # The edge this module exists to demonstrate. Read `coverage_note`
         # before using `coverage` for anything.

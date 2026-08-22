@@ -1,315 +1,187 @@
 ---
 name: funnel-nowcast
 description: >
-  OUTLINED, NOT IMPLEMENTED — see the status banner below. Cohort-maturation
-  now-cast for the checkout funnel's deep stages. Would project an IMMATURE
-  cohort's eventual MATURE conversion from what it has realized so far, using a
-  development-factor / chain-ladder estimator (familiar from actuarial loss
-  development): r_hat = r_obs(t) / f_s(t), with P10/P50/P90 intervals combining
-  the cohort-to-cohort spread of development factors with the eventual-rate
-  level dispersion. Scoped to the two stages that genuinely withhold a tail —
-  Delivered (~14d) and Return Window Complete (~44d). Every output would be
-  FORECAST (exploratory lane), would carry intervals, and would reconcile to
-  governed T2 as cohorts mature.
-version: 0.1.0
+  Cohort-maturation now-cast for the funnel's deep stages. Projects an IMMATURE
+  cohort's eventual mature conversion from what it has realized so far, using
+  Mack's distribution-free chain ladder over the session-grain spine: the
+  cohort x development-week run-off triangle, volume-weighted development
+  factors estimated at run time, closed-form MSEP, and lognormal P10/P50/P90
+  capped at cohort size. Cohorts too young to have any arrivals fall back to an
+  explicit level prior rather than a confident zero. Every output is
+  FORECAST-lane (never a governed T2 actual) and --backtest reports empirical
+  interval coverage next to nominal. Warehouse queries run as the individual
+  human via browser OAuth — never a service account.
+version: 0.2.0
 ---
 
 # Skill: funnel-nowcast
 
-## ⚠️ Status: outlined, not implemented
-
-**This skill ships as a documented outline only.** There is no helper script
-behind it — `scripts/funnel_nowcast.py` in this directory exits immediately
-with a clear, non-zero-exit refusal (see [Status in this template](#status-in-this-template)).
-Nothing here computes a number, and no artifact carrying the name
-`funnel-nowcast` is ever written. `plugins/assay/config/modules.yaml` records
-this exclusion against the `checkout/session` spine with the same reason given
-below, so the registry and this file cannot drift out of agreement.
-
-**Why outline it rather than build it, or drop it:** this is the one skill in
-the set whose *reason for existing* is a real limitation of the fixture data,
-not a scoping shortcut — see [Why this is not a stub away from working](#why-this-is-not-a-stub-away-from-working).
-Read that section before assuming a few hours of scripting would close the
-gap.
-
-**What implementing it for real would need:**
-- **Dependencies.** `numpy` for the bootstrap and array work, `scipy.stats`
-  for the interval quadrature, no `statsmodels` needed here (that is
-  `release-scorecard`'s dependency, for BSTS). All three offline — no network
-  calls, matching the rest of this template's "runs on a fresh clone" promise.
-- **A `nowcast:` block** in `config/checkout-funnel-spec.yaml` — target stage
-  pairs, the age grid in days, bootstrap sample count and seed, and a
-  `level_dispersion_min_denom` floor (see [The method](#the-method-development-factor--chain-ladder)).
-  `checkout-funnel-spec.yaml` currently omits this block **on purpose**, with
-  a comment explaining why (search it for `nowcast:`).
-- **Judgment calls calibrated against a real book.** The development curve
-  `f_s(t)`, the bootstrap sample count, and the level-dispersion floor are not
-  facts you derive from a schema — they are choices tuned against how *your*
-  cohorts actually mature. Fitting them to this repo's synthetic generator
-  would produce a curve that describes the generator, not any business (see
-  below).
-- **A backtest harness** (`scripts/backtest.py` in the private original) that
-  holds out mature cohorts, now-casts them at several ages, and reports MAPE
-  and P10–P90 interval coverage — the check that stops a plausible-looking
-  band from being a wrong one. No now-cast should be trusted before this has
-  run once per target/segment.
-
-## Purpose (what this skill would answer)
+## Purpose
 
 Answer *"this recent cohort can't be measured on Delivered or Return Window
 Complete yet — what will its mature rate be?"*, without waiting the full
-settle time. In a working deployment this would be the **keystone forecast
-model**: it removes the maturity blind spot for the deep stages and is the
-natural prerequisite for a leading read on a recent release
-(`assay:release-scorecard`, itself also outlined) and for any roadmap-level
-forward projection.
+settle time. This is the forecast complement to `assay:funnel-pulse`:
+`funnel-pulse` tells you what already moved on **settled** cohorts;
+`funnel-nowcast` projects what a **not-yet-settled** cohort is heading toward,
+with intervals whose calibration is *measured* rather than presumed.
 
-It would be the forecast complement to `assay:funnel-pulse`, which is real and
-running today: `funnel-pulse` tells you what already moved on **settled**
-cohorts; `funnel-nowcast` would project what a **not-yet-settled** cohort is
-heading toward, with honest intervals. Until it exists, the honest answer to
-"what will this week's cohort do" is: wait for `funnel-pulse` to see it once
-it is mature, or read `assay:stage-timing` for how long that wait typically
-is.
+The maturity machinery everywhere else in this plugin withholds an immature
+rate because presenting it as final is wrong in the flattering direction. This
+skill is the governed way back into that blind spot: the projection is
+lane-stamped **FORECAST** on every value, carries its interval, and reconciles
+to the governed T2 number as the cohort matures.
 
-## Why this is not a stub away from working
+## Status: implemented (it was an outline through Phase 4 — and why that changed)
 
-Three other skills in this repository (`funnel-dropoff`, `stage-timing`,
-`segment-compare`, `funnel-pulse`) run today, offline, against the committed
-fixtures, and produce real numbers. This one is different in kind, not just
-in effort:
+This skill shipped as a documented outline for a principled reason: a
+now-cast configured by *hand-authored* parameters — a fitted development
+curve, bootstrap constants, dispersion floors — would, on this template's
+synthetic fixtures, describe the fixture generator while looking exactly like
+it described a business.
 
-The chain-ladder estimator below needs a **development curve** — the shape of
-how a cohort's realized rate climbs toward its eventual rate as it ages — and
-that shape is a property of **real customer behavior**, not of the funnel's
-schema. `scripts/generate_fixtures.py` draws each cart's stage timestamps from
-a seeded random process with a hand-authored delay distribution
-(`stage_maturity.lag_days` in `checkout-funnel-spec.yaml`, explicitly flagged
-`illustrative: true` / `calibrated_at: null`). Fitting a development curve to
-that generator would not be wrong the way a bug is wrong — it would fit
-perfectly, produce a beautiful P10/P50/P90 band, and describe **the random
-number generator's own delay distribution** rather than anything a shopper
-did. A reader has no way to tell that artifact-fit curve apart from a real one
-by looking at the output; the intervals would look exactly as calibrated
-either way. That is a worse failure mode than refusing outright, which is why
-`config/modules.yaml` excludes this skill with a reason rather than shipping
-a script that runs cleanly and lies quietly.
+That argument was right about the design it applied to, and dissolves for the
+design that shipped instead. Mack's distribution-free chain ladder (Mack
+1993, ASTIN Bulletin 23(2) — the actuarial standard for "a cohort is still
+reporting outcomes and I need its eventual total", and the baseline method
+the epidemiological nowcasting literature measures newer models against)
+**estimates every development factor and every variance from the triangle at
+run time**. Nothing in this skill or its spec block is a fitted business
+parameter; the `nowcast:` block in the funnel spec carries estimation
+controls only (authorized target stages, quantiles, cohort-size floors). On
+fixture data the estimated factors describe the generator and the output says
+so — the same standing as every other skill's fixture-backed numbers — while
+the mechanism is exactly what a real deployment runs.
 
-## The method (development-factor / chain-ladder)
+Two disciplines guard the remaining honesty gaps:
 
-For a target stage `s` and segment, estimate the **development curve**
-`f_s(t)` = fraction of the cohort's *eventual* conversions realized by cohort
-age `t` (days since the cart was created), from fully-mature cohorts. Given an
-immature cohort observed at age `t` with realized rate `r_obs(t)`, project:
+- **The backtest is built in, not aspirational.** `--backtest` replays every
+  fully-developed cohort at every development age using only the data that
+  was observable at that pseudo as-of date, and reports empirical P10–P90
+  coverage next to nominal. The only preregistered real-time comparison of
+  nowcasting methods (Wolffram et al. 2023, PLOS Comp Bio) found model-based
+  intervals almost universally too narrow; on the committed fixtures this
+  skill's own backtest reproduces that finding (~56% empirical vs 80%
+  nominal) and emits an `INTERVALS UNDERCOVER` warning saying so. A band that
+  measures and reports its own miscalibration is the honest version of this
+  method; a band that presumes calibration is the failure mode.
+- **A zero is never dressed as a projection.** A stage behind a long pure
+  delay (a return window) shows no arrivals for weeks; chain ladder projects
+  zero from zero. Cohorts with nothing on the board fall back to an explicit
+  **level prior** — the mean and spread of recent mature cohorts' eventual
+  rates, labeled `level_prior_too_young` — and cohorts with neither history
+  nor arrivals report `unprojectable` rather than a number.
 
-```
-r_hat = r_obs(t) / f_s(t)            (development factor  λ_s(t) = 1 / f_s(t))
-```
-
-This is the chain-ladder method from actuarial loss development, applied to a
-checkout funnel instead of an insurance claims triangle: both problems are
-"a cohort is still reporting outcomes, and I need its eventual total before
-it has finished."
-
-Intervals would combine **two independent uncertainty sources** in
-quadrature:
-
-1. **Maturation** — the cohort-to-cohort spread of the development factor
-   (bootstrap the mature cohorts → distribution of `f_s(t)` → P10/P50/P90 on
-   `r_hat`). Dominates at young ages and widens as `t` shrinks (a younger
-   cohort carries less information).
-2. **Level** — the cohort-to-cohort spread of the *eventual* mature rate
-   itself (reported as `level_sd` in the output). This is the honest floor
-   that does **not** vanish as `f_s(t) → 1`. Without it, the maturation
-   spread collapses toward zero width on **fast-saturating** segments (every
-   mature cohort is fully developed by the read age) and on **thin** segments
-   (too few cohorts to bootstrap a spread) — so the band would look confident
-   while badly under-covering. The level term needs a `min_denom` gate with a
-   pooled-binomial-SE floor, the same shape as `nowcast.level_dispersion_min_denom`
-   would be in the (currently absent) spec block.
-
-The calibrated per-stage settle lag (`stage_maturity.lag_days` in the spec) is
-already a known point on `f_s(t)` — it is roughly `f_s(lag_days) ≈ 1.0` — so a
-real implementation would extend in-production calibration rather than
-estimating a curve from zero.
-
-## Scope: Delivered and Return Window Complete only
-
-The fast stages (Checkout Started ~0d, Payment Decisioned ~2d, Order
-Confirmed ~3d) settle within days — read those on governed actuals
-(`assay:query-metric` / `assay:stage-timing`), never here. This skill would
-exist only for the two stages with a real tail:
-
-| Target | From | To | Illustrative settle lag |
-| --- | --- | --- | --- |
-| `start_to_delivered` | Cart Created | Delivered | ~14d |
-| `shipped_to_delivered` | Shipped | Delivered | ~7d (shipping leg only) |
-| `start_to_return_window_complete` | Cart Created | Return Window Complete | ~44d — **the keystone target**, since this is the stage the return-window structure exists to make hard |
-
-("Illustrative" because `checkout-funnel-spec.yaml`'s `stage_maturity` block
-carries `illustrative: true`, `calibrated_at: null` — these lags are
-hand-authored to be plausible, not measured off a real book. A real
-implementation regenerates them, and this skill's development curves, from
-observed data.)
-
-## Composition matters
-
-Now-cast **per segment**, then re-aggregate over governed numerator/denominator
-counts — a blended curve drifts with segment mix (Simpson's paradox). Any
-future helper would need to enforce per-segment computation whenever
-`--group-by` is set, the same discipline `assay:segment-compare` already
-applies to its A/B reads.
-
-## Would-be invocation
+## Invocation
 
 ```
-assay:funnel-nowcast project start->delivered for the last 6 immature cohorts
-assay:funnel-nowcast nowcast start->return-window-complete, by channel
-assay:funnel-nowcast shipped->delivered nowcast for market=uk
+/funnel-nowcast project the return-window-complete rate for the open cohorts
+/funnel-nowcast nowcast delivered, by channel
+/funnel-nowcast return window nowcast for market=uk, with the backtest
 ```
 
-Today, running any of these returns the refusal in
-[Status in this template](#status-in-this-template) — no cohort, target, or
-segment parsing happens.
+The helper:
 
-## Would-be auth model
-
-Same as every other spine-backed skill: individual human identity via
-Application Default Credentials on `ASSAY_ENGINE=bigquery` (service accounts
-refused in code, exit 4); the committed fixtures with `fixture_backed: true`
-on the default `sqlite` engine. This part needs no new design — it would
-reuse `_shared/identity.py` and `_shared/spine.py` unchanged.
-
-## Would-be flow (for the implementer)
-
-1. **Load the spec.** Read the `nowcast:` block (`targets`, `age_grid_days`,
-   `bootstrap_samples`, `bootstrap_seed`, `level_dispersion_min_denom`) — once
-   it exists — and the `stage_maturity` table, both from
-   `config/checkout-funnel-spec.yaml` via `config/modules.yaml`.
-2. **Parse the question** — target stage pair, segment filters (`col=value`
-   against `allowed_filters`), an optional single group-by dimension (against
-   `allowed_dimensions`), and the mature-curve estimation window.
-3. **Refuse before computing** — group-by not allow-listed → R2; filter
-   column not allow-listed → R3; PII → R6, no override; unknown target → list
-   the configured target keys, same voice as every other spine skill's
-   allow-list refusal.
-4. **Run the (not-yet-written) helper**, `scripts/funnel_nowcast.py`, over the
-   session-grain spine, bootstrapping the development curve from mature
-   cohorts and applying it to each immature cohort in scope.
-5. **Write the artifact** to
-   `<cwd>/outputs/assay/{YYYY-MM-DD}-funnel-nowcast-{target}-{slug}.md`,
-   stamped **FORECAST** in the header and on every projected value — never as
-   a governed T2 actual.
-6. **Backtest before trusting it.** The first time a target/segment is
-   now-cast, run `scripts/backtest.py` and report MAPE + interval coverage. A
-   now-cast whose P10–P90 band does not cover mature truth at roughly 80% is
-   not decision-grade, and the artifact should say so rather than presenting
-   the band as calibrated by default.
-
-## Would-be output format
-
-```markdown
----
-skill: funnel-nowcast
-accuracy_tier: FORECAST   # exploratory lane — reconciles to T2 at maturity
-target: {target}
-source_view: {source_project}.{source_view}
-generated_at: {iso}
-maturity_stage: {stage}  ({lag_days}d illustrative settle)
----
-
-# Funnel now-cast (FORECAST) — {target_label}{ , by <dim>}
-
-**Lane:** FORECAST (exploratory) — projected, interval-bearing, would reconcile
-to governed T2 as cohorts mature. **Not** a governed actual.
-**Source:** `{source_project}.{source_view}` (session-grain spine)
-**Target stage:** {stage} (illustrative settle ~{lag_days}d) · curve from
-mature cohorts {curve_window}
-
-## Projected mature rate by immature cohort{ , per <dim>}
-
-| {dim?} | Cohort week | Age (d) | Realized so far | f(t) | Now-cast P50 | P10–P90 | n |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| … | {week} | {t} | {r_obs} | {f} | **{p50}** | {p10}–{p90} | {n} |
-
-## Development curve f(t)
-
-| {dim?} | t=7 | t=14 | t=28 | t=44 | settle |
-| --- | --- | --- | --- | --- | --- |
-
-## Narrative
-[Lead with the headline projection + interval for the most recent cohort(s).
-State the curve window and n. Flag any cohort whose r_obs(t) falls outside the
-historical development band.]
-
-## Caveats
-[The standing caveats below.]
-
-## Provenance
-- **SQL:** (parameterized, from the helper)
-- **Spec:** `config/checkout-funnel-spec.yaml` (`nowcast:` block)
-- **Backtest:** {MAPE / coverage if run}
+```
+python3 plugins/assay/skills/funnel-nowcast/scripts/funnel_nowcast.py \
+  [--module checkout] [--spine session] [--stage return_window_complete] \
+  [--group-by dim] [--filter col=value ...] [--time-range last_19_weeks] \
+  [--today YYYY-MM-DD] [--backtest] [--engine sqlite|bigquery]
 ```
 
-## Would-be standing caveats
+Reading the committed fixtures, always pass `--today 2026-08-17` (the
+observation instant in `data/assay/sample/FIXTURES.md`) and a window inside
+the trimmed spine (`--time-range last_19_weeks`).
 
-- **FORECAST, not actual.** Would reconcile to the governed T2 number at
-  maturity; a now-cast is never quoted as a settled figure.
-- **Intervals widen for young cohorts.** A cohort observed at 7d on a 44d
-  settle stage carries little information — a wide P10–P90 there is the
-  honest signal, not a defect.
-- **Development curve assumes a stable maturation shape.** A genuine
-  mid-maturation behavior change (a carrier slowdown, a policy change on
-  returns) can masquerade as a development anomaly, and vice versa — the
-  anomaly flag and the backtest calibration are the guard, not a substitute
-  for watching both.
-- **Per-segment then re-aggregate**, always — a blended now-cast drifts with
-  segment mix.
-- **Discontinuities in-window.** `config/guardrails.yaml`'s `feed_cutovers`
-  register carries dated discontinuities for this book — `checkout_v2_rollout`
-  (2025-05-12) and `return_window_extended_to_30d` (2025-11-03) are the two
-  most likely to fall inside a curve-estimation window and bias a development
-  curve fit across them. A real implementation would carry these as
-  intervention terms rather than silently fitting one curve across a step
-  change.
-- **Fixture-backed runs are synthetic**, and for this skill specifically, a
-  now-cast run against the committed fixtures would be fitting the generator's
-  own hand-authored delay distribution — see
-  [Why this is not a stub away from working](#why-this-is-not-a-stub-away-from-working).
+## The method, concretely
 
-## Out of scope (even once implemented)
+1. **Triangle.** For the target stage, cumulative arrivals per cohort week x
+   development week (`C_{i,j}` = arrivals within `j` weeks of the open
+   anchor), masked by each cohort's age so a cell exists only once the whole
+   cohort has aged through it. Built from two grouped queries (cohort sizes;
+   arrival-delay histogram) — never row-level export.
+2. **Factors.** Volume-weighted `f_j = ΣC_{i,j+1} / ΣC_{i,j}` over the
+   cohorts that cover both cells (optionally only the trailing
+   `factor_window_cohorts` — the standard defense against an old regime
+   leaking into current factors), with Mack's unbiased `σ²_j` and his
+   log-linear extrapolation for a thin tail age.
+3. **Projection.** Ultimate = observed x remaining factors; Mack's MSEP
+   recursion (process + estimation variance); lognormal quantiles matched by
+   moments — then **capped at cohort size** (a funnel has a ceiling claims do
+   not; raw chain ladder can breach it) and floored at the observed count.
+4. **Fallback.** No arrivals yet → the level prior above. No prior either →
+   `unprojectable`.
+5. **Backtest** (`--backtest`). Pseudo as-of replays over the settled
+   cohorts; per-horizon empirical coverage and median absolute percentage
+   error, plus the overall nominal-vs-empirical comparison, in the output and
+   in the warnings when the band undercovers.
 
-- A state-space / BSTS forward model for the multi-week-ahead forecast — that
-  belongs to `assay:release-scorecard`'s causal lane, not here.
-- Posting anywhere. The artifact is the deliverable; hand it to
-  `assay:publish` or `assay:export-report` yourself.
+Composition discipline: with `--group-by`, every group gets its own triangle,
+factors, prior, and backtest — a blended development curve drifts with
+segment mix (Simpson), so per-segment-then-reaggregate is enforced by
+construction, the same discipline `assay:segment-compare` applies.
+
+## Scope
+
+Only stages declared in the spec's `nowcast.stages` are accepted — the deep
+stages with a genuine maturation tail (`delivered`, `return_window_complete`
+on the checkout spine). A fast-settling stage is refused: its governed actual
+exists within days, and a forecast of a knowable number is a downgrade
+wearing a confidence band. The development horizon derives from the stage's
+calibrated `stage_maturity` lag, so the projection covers exactly the
+maturity blind spot and hands off to governed actuals beyond it.
+
+## Auth model
+
+Same as every spine-backed skill: on `ASSAY_ENGINE=bigquery` the query runs
+as the individual human via Application Default Credentials (service
+accounts refused in code, exit 4); on the default `sqlite` engine the
+committed fixtures serve with `fixture_backed: true`, which every downstream
+renderer turns into a MOCK DATA watermark.
+
+## Output artifact
+
+Written by the agent from the helper's JSON to
+`<cwd>/outputs/assay/{YYYY-MM-DD}-funnel-nowcast[-{slug}].md`, stamped
+**FORECAST** in the frontmatter (`accuracy_tier: FORECAST` — the lane *is*
+the tier here) and on every projected value. Include: the per-cohort table
+(observed, method, P50, P10–P90), the development factors with their
+stability read, the level prior when used, the backtest coverage table when
+run, and the standing caveats below. Never register a now-cast as a governed
+metric.
+
+## Standing caveats (repeat in every artifact)
+
+- **FORECAST, not actual.** Reconciles to the governed T2 number at maturity;
+  never quoted as a settled figure, and the interval travels with the point.
+- **Stability is an assumption with a name.** Mack assumption 1 (factors
+  depend on age, not cohort) is violated by mid-maturation regime changes — a
+  carrier slowdown, a returns-policy change. The `FACTOR INSTABILITY` warning
+  and the guardrails register's dated cutovers are the guard; a detected
+  regime change should truncate `factor_window_cohorts` rather than be
+  averaged into the factors.
+- **Model-based intervals run narrow** (Wolffram et al. 2023 — and this
+  skill's own fixture backtest). Treat the band as optimistic unless the
+  backtest shows otherwise for your book; the next honest upgrade is
+  inflating to the backtest's horizon-specific error quantiles
+  (conformal-style), which the output already gives you the numbers for.
+- **Per-segment, then re-aggregate** — never quote a blended now-cast across
+  a shifting mix.
+- **Fixture runs describe the generator.** Watermarked accordingly; nothing
+  about a fixture run calibrates this skill for any business.
+
+## Out of scope
+
+- Causal verdicts on releases — that is `assay:release-scorecard`'s outlined
+  lane (BSTS/DiD), which must consume matured or now-casted series, never raw
+  recent rates.
 - Individual or cart-level rows (R5) and PII columns (R6).
-- Registering any output as a governed metric — now-casts are FORECAST
-  artifacts, never T2.
+- Posting anywhere; hand the artifact to `assay:export-report` or
+  `assay:publish` yourself.
 
 ## Refusals
 
-Defer to `query-metric/doctrine/accuracy-tiers.md` for the R2/R3/R5/R6 voice.
-State the rule and the offending input; write no artifact on a refusal.
-
-## Status in this template
-
-There is no `funnel_nowcast.py` behind this skill. `scripts/nowcast_stub.py`
-in this directory is the only thing that runs — it prints the refusal below
-to stderr and exits non-zero, so invoking this skill fails loudly rather than
-silently returning nothing or, worse, a plausible-looking number:
-
-```
-$ python3 plugins/assay/skills/funnel-nowcast/scripts/nowcast_stub.py
-funnel-nowcast is not implemented in this template.
-See SKILL.md in this directory for the method, its scope, and exactly
-what implementing it would require.
-$ echo $?
-9
-```
-
-`config/modules.yaml` excludes `funnel-nowcast` on the `checkout/session`
-spine with the matching reason, and `checkout-funnel-spec.yaml` deliberately
-omits the `nowcast:` block this skill would read — both are checked by
-`tests/test_module_registry.py`, so this outline cannot silently drift into
-claiming more than it does.
+Same voice as every spine skill: name the rule and the offending input, write
+no artifact. Off-list group-by → R2; off-list filter → R3; PII → R6 (no
+override); a stage outside `nowcast.stages` → the allowed-targets refusal; a
+missing `nowcast:` block or missing calibrated lag → a named configuration
+refusal pointing at the spec.
