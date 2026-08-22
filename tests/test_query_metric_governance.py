@@ -128,6 +128,58 @@ def test_bundled_metric_loads():
     assert m["_def_sha"]  # the definition fingerprint the manifest pins
 
 
+# --- R1-AMBIGUOUS: a miss with several readings is refused, never ranked -----
+# The text-to-SQL ambiguity literature (AmbiQT, EMNLP 2023) measures the
+# failure this guards: models silently commit to ONE reading of an ambiguous
+# ask. Here the ambiguous miss must name every reading and refuse to choose —
+# because 'payment' answered as the approval rate is a different question than
+# 'payment' answered as the decline rate, with a different denominator.
+
+
+def test_generic_term_matching_many_metrics_is_ambiguous_not_ranked():
+    with pytest.raises(SystemExit) as exc:
+        aq.find_metric_file("payment")
+    msg = str(exc.value)
+    assert "R1-AMBIGUOUS" in msg
+    # Every substring reading is named, not just a winner.
+    assert "payment_approval_rate" in msg
+    assert "payment_decline_rate" in msg
+    assert "payment_submit_to_decision_rate" in msg
+    assert "Refusing to guess" in msg
+
+
+def test_unique_typo_still_gets_the_plain_did_you_mean_refusal():
+    """One plausible reading is a typo, not an ambiguity — the helpful R1 with
+    a suggestion stays, and must NOT escalate to the ambiguous form."""
+    with pytest.raises(SystemExit) as exc:
+        aq.find_metric_file("cart_to_stale_rte")
+    msg = str(exc.value)
+    assert "R1-AMBIGUOUS" not in msg
+    assert "R1" in msg
+    assert "cart_to_stale_rate" in msg  # the did-you-mean suggestion
+
+
+def test_near_tie_fuzzy_matches_are_ambiguous():
+    """Two candidates inside the score margin: picking the top one would
+    answer a different question about half the time, so both are surfaced."""
+    available = ["gross_revenue_rate", "gross_revenue_rank"]
+    got = aq.ambiguous_candidates("gross_revenue_rat", available)
+    assert set(got) == set(available)
+
+
+def test_a_clear_winner_is_not_ambiguous():
+    available = ["payment_approval_rate", "cart_to_checkout_start_conversion"]
+    assert aq.ambiguous_candidates("payment_approval_rte", available) == []
+
+
+def test_exact_names_never_trip_the_ambiguity_guard():
+    """Every registered name must keep resolving exactly — the guard fires
+    only on the refusal path, so governance gained a check without the happy
+    path losing one."""
+    m = aq.load_metric("payment_approval_rate")
+    assert m["name"] == "payment_approval_rate"
+
+
 # --- time-range parsing -----------------------------------------------------
 
 

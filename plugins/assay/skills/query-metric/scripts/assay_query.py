@@ -185,6 +185,53 @@ def suggest_close_names(metric_name: str, available: list, n: int = 3) -> list:
     return ordered[:n]
 
 
+#: Ambiguity thresholds for the R1 refusal below. A miss is AMBIGUOUS — refused
+#: with every candidate named, never resolved by rank — when several registered
+#: names contain the query as a substring, or when the two best fuzzy matches
+#: are this close: both at least MATCH_FLOOR similar, separated by less than
+#: MATCH_MARGIN. Tuned to the failure the text-to-SQL ambiguity literature
+#: measures (AmbiQT, EMNLP 2023): models silently commit to ONE reading of an
+#: ambiguous ask, and top-1 acceptance of a near-tie is this system's version
+#: of that mistake.
+AMBIGUITY_MATCH_FLOOR = 0.6
+AMBIGUITY_MATCH_MARGIN = 0.08
+
+
+def ambiguous_candidates(metric_name: str, available: list) -> list:
+    """The registered names a miss matches ABOUT EQUALLY WELL, or [] when the
+    miss is unambiguous (zero or one plausible reading).
+
+    Two triggers, checked in order:
+    - **Generic-term ambiguity**: the query is a substring of several names
+      ('payment' — approval rate? decline rate? submit-to-decision?). Every
+      such name is a valid reading; returning them all is the point.
+    - **Near-tie ambiguity**: the two closest fuzzy matches sit within
+      AMBIGUITY_MATCH_MARGIN of each other above AMBIGUITY_MATCH_FLOOR — close
+      enough that picking the winner would answer a different question than
+      the one asked roughly half the time.
+
+    Pure, so the thresholds are unit-testable against real catalog names.
+    """
+    if not metric_name or not available:
+        return []
+    q = metric_name.lower()
+    substring = [x for x in available if q in x.lower()]
+    if len(substring) >= 2:
+        return substring
+    scored = sorted(
+        ((difflib.SequenceMatcher(None, q, x.lower()).ratio(), x) for x in available),
+        reverse=True,
+    )
+    if (
+        len(scored) >= 2
+        and scored[0][0] >= AMBIGUITY_MATCH_FLOOR
+        and scored[1][0] >= AMBIGUITY_MATCH_FLOOR
+        and scored[0][0] - scored[1][0] < AMBIGUITY_MATCH_MARGIN
+    ):
+        return [name for _, name in scored[:3] if _ >= AMBIGUITY_MATCH_FLOOR]
+    return []
+
+
 def find_metric_file(metric_name: str) -> Path:
     """Locate a metric definition by its frontmatter `name`.
 
@@ -200,6 +247,20 @@ def find_metric_file(metric_name: str) -> Path:
             return hit
 
     available = available_metric_names(consumer_root, bundled_root)
+    # Ambiguity outranks helpfulness: when a miss reads several registered
+    # metrics about equally well, resolving it by rank would silently answer a
+    # different question than the one asked (the top-1-commitment failure the
+    # ambiguity literature measures). Name every reading and refuse to choose.
+    ambiguous = ambiguous_candidates(metric_name, available)
+    if ambiguous:
+        raise SystemExit(
+            f"ERROR (R1-AMBIGUOUS): '{metric_name}' matches multiple registered "
+            f"metrics about equally well: {', '.join(ambiguous)}. Refusing to "
+            f"guess between readings — they are different questions with "
+            f"different denominators. Re-run with one exact name (or ask the "
+            f"requester which they meant); assay:catalog shows each metric's "
+            f"definition."
+        )
     suggestions = suggest_close_names(metric_name, available)
     did_you_mean = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
     registered = f" Registered metrics: {', '.join(available)}." if available else ""
