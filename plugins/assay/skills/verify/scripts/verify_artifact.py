@@ -40,6 +40,8 @@ except ImportError:
 
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
+# Exit code per status. 0 = clear, 1 = a confirmed shift/tamper was DETECTED,
+# 2 = could not fully verify (inconclusive), 3 = usage/IO error.
 _EXIT = {
     verify_lib.VERIFY_OK: 0,
     verify_lib.DEFINITION_DRIFT: 1,
@@ -48,9 +50,24 @@ _EXIT = {
     verify_lib.DEFINITION_MISSING: 2,
     audit_chain_lib.CHAIN_OK: 0,
     audit_chain_lib.CHAIN_HEAD_MISMATCH: 1,
+    audit_chain_lib.CHAIN_HEAD_BEHIND: 2,
     audit_chain_lib.CHAIN_HEAD_ABSENT: 2,
     audit_chain_lib.CHAIN_ABSENT: 2,
 }
+
+# Severity for combining checks — NOT the exit code. A confirmed detection
+# outranks an inconclusive "cannot verify", even though its exit code (1) is
+# the smaller number: a tampered audit log co-occurring with a manifest-absent
+# artifact must exit 1 (detected), not 2 (inconclusive). Combining by numeric
+# max over exit codes would invert that and bury the alarm.
+_SEVERITY = {0: 0, 3: 1, 2: 2, 1: 3}  # ok < usage < inconclusive < detected
+
+
+def _worse(a: str | None, b: str) -> str:
+    """The higher-severity of two statuses (by _SEVERITY of their exit codes)."""
+    if a is None:
+        return b
+    return b if _SEVERITY[_EXIT.get(b, 3)] > _SEVERITY[_EXIT.get(a, 3)] else a
 
 
 def default_audit_log_path() -> Path:
@@ -88,7 +105,9 @@ def main() -> int:
     if args.artifact is None and args.audit_log is None:
         p.error("nothing to verify: pass an artifact path and/or --audit-log")
 
-    worst = 0
+    # Combine by severity, not by numeric exit code (see _worse): a detected
+    # tamper must not be masked by a co-occurring "cannot verify".
+    worst: str | None = None
 
     if args.artifact is not None:
         path = Path(args.artifact)
@@ -103,15 +122,15 @@ def main() -> int:
         print(f"{status} -- {result['detail']}")
         for finding in result.get("findings", []):
             print(f"  - {finding['status']}: {finding['detail']}")
-        worst = max(worst, _EXIT.get(status, 3))
+        worst = _worse(worst, status)
 
     if args.audit_log is not None:
         log_path = Path(args.audit_log) if args.audit_log else default_audit_log_path()
         chain = audit_chain_lib.verify_chain(log_path)
         print(f"{chain['status']} -- {chain['detail']}")
-        worst = max(worst, _EXIT.get(chain["status"], 3))
+        worst = _worse(worst, chain["status"])
 
-    return worst
+    return _EXIT.get(worst, 3) if worst is not None else 0
 
 
 if __name__ == "__main__":

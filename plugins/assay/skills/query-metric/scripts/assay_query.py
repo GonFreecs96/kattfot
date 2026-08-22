@@ -228,7 +228,15 @@ def ambiguous_candidates(metric_name: str, available: list) -> list:
         and scored[1][0] >= AMBIGUITY_MATCH_FLOOR
         and scored[0][0] - scored[1][0] < AMBIGUITY_MATCH_MARGIN
     ):
-        return [name for _, name in scored[:3] if _ >= AMBIGUITY_MATCH_FLOOR]
+        # Only the candidates genuinely tied with the top one — within the same
+        # margin of it — belong in the refusal. A distant third would be noise
+        # dressed as a rival reading.
+        top = scored[0][0]
+        return [
+            name
+            for score, name in scored[:3]
+            if top - score < AMBIGUITY_MATCH_MARGIN
+        ]
     return []
 
 
@@ -852,7 +860,11 @@ def append_audit(record: dict, path: Path | None = None) -> bool:
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         line = json.dumps(record, default=str)
-        with p.open("a") as f:
+        # UTF-8 explicitly: the hash chain folds the line as UTF-8 bytes, so the
+        # write must match or a non-ASCII value (an accented market/name) would
+        # round-trip to different bytes under a different locale and read as a
+        # false mismatch.
+        with p.open("a", encoding="utf-8") as f:
             f.write(line + "\n")
         # Tamper evidence: fold this exact line into the chained head
         # (see _shared/audit_chain.py for what that does and does not claim).

@@ -35,6 +35,21 @@ past it):
 
 - The log and its sidecar can no longer *silently* diverge — rewriting history
   means rewriting both, consistently.
+- **Unchained lines are never adopted.** ``advance_head`` extends the chain
+  only from a valid, exactly-up-to-date sidecar (or starts one on a genuinely
+  empty log); it never re-derives a head by replaying an existing non-empty
+  file. So deleting or corrupting the sidecar and appending planted lines does
+  not launder them into a valid head on the next append — that state verifies
+  as CHAIN_HEAD_ABSENT (no readable commitment), never CHAIN_OK. Re-committing
+  an existing log is the explicit ``adopt_log``, a deliberate operator action
+  off the append path.
+- **A missed sidecar write does not cry wolf.** If the log write lands but the
+  sidecar write is dropped once, the sidecar falls behind rather than
+  diverging; ``verify_chain`` reports CHAIN_HEAD_BEHIND ("committed history
+  intact through entry N; later entries unattested"), distinct from the
+  CHAIN_HEAD_MISMATCH it raises when a line *within* the committed region was
+  altered. A tampering alarm that fired on an ordinary I/O hiccup would train
+  operators to ignore it; this keeps the scream for real tampering.
 - A head recorded anywhere else — a git commit, a printed artifact, a weekly
   report — pins the entire log prefix behind it. Committing heads externally is
   the auditing half of the mechanism, and per Crosby & Wallach a tamper-evident
@@ -44,7 +59,7 @@ past it):
   external commitment lives is a deployment decision.
 - Appends are assumed single-writer, same as the log itself. Concurrent
   writers can interleave correctly-chained lines out of order; that surfaces
-  as a head mismatch, which is the honest outcome.
+  as CHAIN_HEAD_BEHIND or a mismatch, which is the honest outcome.
 
 Pure stdlib, no dependency on the rest of the engine; `assay_query.append_audit`
 calls `advance_head()` best-effort so an unwritable sidecar can never break a
@@ -64,6 +79,7 @@ GENESIS = "0" * 64
 # Single-line status sentinels, same style as verify.py / the consumer API.
 CHAIN_OK = "CHAIN_OK"
 CHAIN_HEAD_MISMATCH = "CHAIN_HEAD_MISMATCH"
+CHAIN_HEAD_BEHIND = "CHAIN_HEAD_BEHIND"
 CHAIN_HEAD_ABSENT = "CHAIN_HEAD_ABSENT"
 CHAIN_ABSENT = "CHAIN_ABSENT"
 
@@ -87,23 +103,35 @@ def link(prev_head: str, line: str) -> str:
     return h.hexdigest()
 
 
-def replay(log_path: Path) -> dict:
-    """Fold the chain over every line of the log file.
+def replay(log_path: Path, *, limit: int | None = None) -> dict:
+    """Fold the chain over the log file (optionally only its first ``limit``
+    non-blank lines).
 
     Returns ``{"head": <hex>, "entries": <int>}`` — GENESIS/0 for an empty or
     missing file. Blank lines are skipped, matching what a JSONL reader would
-    tolerate; a blank line therefore cannot carry (or hide) an entry.
+    tolerate; a blank line therefore cannot carry (or hide) an entry. Reads as
+    UTF-8 explicitly so the fold is a pure function of the file's bytes rather
+    than of the verifier's locale (``link`` encodes UTF-8; the read must match,
+    or an accented value round-trips to different bytes under a different
+    ``LANG`` and reports a false mismatch).
+
+    ``limit`` folds only the first N entries — used to check whether a
+    committed head still describes the log's *prefix*, which is what separates
+    an unattested tail (CHAIN_HEAD_BEHIND) from tampering in the attested
+    region (CHAIN_HEAD_MISMATCH).
     """
     head = GENESIS
     entries = 0
     p = Path(log_path)
     if not p.exists():
         return {"head": head, "entries": entries}
-    with p.open() as f:
+    with p.open(encoding="utf-8") as f:
         for raw in f:
             line = raw.rstrip("\n")
             if not line.strip():
                 continue
+            if limit is not None and entries >= limit:
+                break
             head = link(head, line)
             entries += 1
     return {"head": head, "entries": entries}
@@ -127,29 +155,83 @@ def write_head(log_path: Path, head: str, entries: int) -> None:
     )
 
 
-def advance_head(log_path: Path, line: str) -> bool:
-    """Advance the sidecar after one line was appended to the log.
+def _line_count(log_path: Path) -> int:
+    """Non-blank lines currently in the log — the file's own notion of how many
+    entries exist, independent of what any sidecar claims."""
+    p = Path(log_path)
+    if not p.exists():
+        return 0
+    with p.open(encoding="utf-8") as f:
+        return sum(1 for raw in f if raw.strip())
 
-    Incremental when a sidecar exists — ``new = link(old, line)`` — so lines
-    that were appended *without* chaining are never silently blessed: they stay
-    unattested and surface as a head mismatch at verify time. Only a log with
-    no sidecar at all (one that predates chaining) is adopted wholesale by
-    replaying the file, which includes the line just written.
+
+def advance_head(log_path: Path, line: str) -> bool:
+    """Advance the committed head after one line was appended to the log.
+
+    Advances in exactly two safe states, and refuses to write in every other:
+
+    - **Incremental** — a valid sidecar exists AND it accounted for every line
+      that preceded this append (``entries == line_count - 1``): chain from the
+      *committed* head, ``new = link(old, line)``. Chaining from the committed
+      head (not from a replay of the file) means a tampered earlier line is
+      never blessed — it still surfaces as a mismatch at verify time.
+    - **Genesis** — no sidecar and this line is the whole log
+      (``line_count == 1``): start the chain.
+
+    Every other state writes nothing and returns ``False``:
+
+    - **No sidecar over a non-empty log.** Either the log predates chaining or
+      its sidecar was deleted/corrupted to force adoption — indistinguishable
+      locally, so adopting wholesale would launder unchained (or planted) lines
+      into a valid-looking head. Left uncommitted, ``verify`` reports
+      CHAIN_HEAD_ABSENT. Re-establishing a commitment over an existing log is
+      the explicit, deliberate ``adopt_log`` below, never a silent side effect.
+    - **A stale sidecar** (``entries != line_count - 1``, e.g. a previous
+      sidecar write was missed). Advancing would chain the new line onto a head
+      that skips the gap, producing a commitment matching no prefix of the
+      file. Left as-is, ``verify`` reports CHAIN_HEAD_BEHIND — an honest
+      "committed through entry N; later entries unattested" — rather than a
+      false tampering alarm.
 
     Best-effort like the log write itself: returns False rather than raising.
+
+    Cost: one line-count scan of the log per append — O(n) each, O(n²) over the
+    log's lifetime. Negligible at this template's scale (a demo writes a
+    handful of lines); a real deployment that lets the log grow unbounded
+    should rotate it or move to a transparency-log backend (RFC 6962), which is
+    the same deployment step the module docstring names for external witnessing.
     """
     try:
         current = read_head(log_path)
+        n_lines = _line_count(log_path)  # includes the just-appended line
         if current is None:
-            state = replay(log_path)
-            write_head(log_path, state["head"], state["entries"])
-        else:
-            write_head(
-                log_path, link(current["head"], line), current["entries"] + 1
-            )
-        return True
+            if n_lines == 1:  # genesis only — never adopt a non-empty log
+                state = replay(log_path)
+                write_head(log_path, state["head"], state["entries"])
+                return True
+            return False
+        if current["entries"] == n_lines - 1:  # sidecar is exactly up to date
+            write_head(log_path, link(current["head"], line), current["entries"] + 1)
+            return True
+        return False  # stale sidecar: leave it for an honest CHAIN_HEAD_BEHIND
     except Exception:
         return False
+
+
+def adopt_log(log_path: Path) -> dict:
+    """Explicitly (re)commit the current log in full — the deliberate operation
+    that ``advance_head`` refuses to do silently.
+
+    For migrating a log that predates chaining, or re-committing after a
+    missed sidecar write (CHAIN_HEAD_BEHIND) once a human has confirmed the
+    unattested tail is legitimate. Because this trusts the file as it stands,
+    it must be an intentional human/operator action, never reachable from the
+    append path — that separation is exactly what closes the laundering hole.
+    Returns the committed ``{"head", "entries"}``.
+    """
+    state = replay(log_path)
+    write_head(log_path, state["head"], state["entries"])
+    return state
 
 
 def verify_chain(log_path: Path) -> dict:
@@ -199,13 +281,36 @@ def verify_chain(log_path: Path) -> dict:
             ),
             "replayed": state,
         }
+    # Distinguish an unattested TAIL from tampering in the attested region.
+    # If the committed head still describes the log's first `recorded[entries]`
+    # lines, that prefix is intact and only later lines are unaccounted for —
+    # a missed sidecar write or an unchained append, not evidence the committed
+    # history was altered. That is a weaker, honest signal (CHAIN_HEAD_BEHIND),
+    # not the tampering scream, and it exists so an ordinary I/O hiccup does not
+    # cry wolf. Any change WITHIN the first N lines fails this prefix check and
+    # stays CHAIN_HEAD_MISMATCH.
+    if state["entries"] > recorded["entries"]:
+        prefix = replay(p, limit=recorded["entries"])
+        if prefix["head"] == recorded["head"]:
+            return {
+                "status": CHAIN_HEAD_BEHIND,
+                "detail": (
+                    f"the committed head verifies the first {recorded['entries']} "
+                    f"entries, but the log now has {state['entries']} — the "
+                    f"{state['entries'] - recorded['entries']} later entries are "
+                    "unattested (a missed sidecar write, or lines appended "
+                    "without chaining). The committed history is intact; confirm "
+                    "the tail and re-commit with adopt_log to extend coverage."
+                ),
+                "replayed": state,
+            }
     return {
         "status": CHAIN_HEAD_MISMATCH,
         "detail": (
             f"replayed head over {state['entries']} entries is "
             f"{state['head'][:16]}… but the committed head says "
             f"{str(recorded['head'])[:16]}… over {recorded['entries']} entries "
-            "— the log was edited, truncated, or extended without chaining."
+            "— a line in the committed region was edited, reordered, or removed."
         ),
         "replayed": state,
     }

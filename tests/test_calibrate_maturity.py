@@ -68,6 +68,21 @@ def test_nearest_rank_boundary_is_inclusive():
     assert cm.nearest_rank(hist, 90.0) == 1
 
 
+def test_nearest_rank_fractional_percentile_does_not_truncate_the_tail():
+    """A total where pct*total is non-integer is where truncating the product
+    before the ceiling drops a rank — and p99.9 is the number the TRUNCATION
+    RISK warning turns on, so a too-shallow value here silently suppresses it.
+    total=995: the true p99.9 rank is ceil(994.0005)=995, landing on the
+    deepest bin; a truncate-first computation lands on 990 and reports 40."""
+    hist = {10: 993, 40: 1, 55: 1}  # total 995
+    # correct rank = ceil(99.9*995/100) = ceil(994.005) = 995 -> deepest bin.
+    # truncate-first = ceil(int(99400.5)/100) = ceil(994) = 994 -> reports 40.
+    assert cm.nearest_rank(hist, 99.9) == 55
+    # Integer percentiles were never affected — guard against a regression the
+    # other direction.
+    assert cm.nearest_rank({0: 95, 5: 4, 30: 1}, 99.0) == 5
+
+
 def test_tail_share_counts_strictly_later_arrivals():
     hist = {0: 90, 5: 9, 30: 1}
     assert cm.tail_share(hist, 5) == pytest.approx(0.01)

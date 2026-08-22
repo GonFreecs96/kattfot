@@ -374,7 +374,18 @@ pins the entire prefix behind it.
   the log's completeness depends on the filesystem being writable, not on
   the query having succeeded. The head sidecar is best-effort too; a missing
   head surfaces as `CHAIN_HEAD_ABSENT` at verify time rather than as a query
-  failure.
+  failure. A *dropped* sidecar write (log line lands, head does not) surfaces
+  as `CHAIN_HEAD_BEHIND` — "committed history intact through entry N; later
+  entries unattested" — kept distinct from `CHAIN_HEAD_MISMATCH` (a line in
+  the committed region altered) so an ordinary I/O hiccup cannot masquerade as
+  tampering, and re-committed with `adopt_log` once the tail is confirmed.
+- **Adoption is genesis-only, by design.** The chain extends only from an
+  up-to-date sidecar or starts on a genuinely empty log; it never re-derives a
+  head by replaying an existing non-empty file. So deleting or corrupting the
+  sidecar and appending planted lines does not launder them into a valid head
+  on the next query — that state verifies as `CHAIN_HEAD_ABSENT`, never
+  `CHAIN_OK`. Re-establishing a commitment over an existing log is the explicit
+  `adopt_log`, off the append path.
 - **The chain needs an external witness to be fully tamper-*evident*.** Per
   Crosby & Wallach (USENIX Security 2009), a tamper-evident log without
   auditing proves nothing: an attacker who rewrites both the log and its

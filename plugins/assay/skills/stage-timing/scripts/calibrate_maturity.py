@@ -58,6 +58,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -116,7 +117,12 @@ def nearest_rank(hist: dict[int, int], pct: float) -> int | None:
     total = sum(hist.values())
     if not total:
         return None
-    rank = max(1, -(-int(pct * total) // 100))  # ceil(pct/100 * total)
+    # ceil(pct/100 * total) computed WITHOUT truncating the product first: a
+    # fractional percentile (99.9) times a total can exceed a multiple-of-100
+    # boundary that int(pct*total) would drop below, yielding a rank one too
+    # small and a tail percentile one bin too shallow — which, at p99.9, is
+    # exactly the number the TRUNCATION RISK warning turns on.
+    rank = max(1, math.ceil(pct * total / 100))
     cum = 0
     for lag in sorted(hist):
         cum += hist[lag]
