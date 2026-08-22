@@ -47,7 +47,7 @@ and you inherit the governance engine unmodified.
 
 **2. Someone evaluating whether "governed analytics" is real or a slide.**
 Every mechanism described here is checked by a test, not merely documented.
-`scripts/demo_skills.py` runs all fifteen functional skills in an environment
+`scripts/demo_skills.py` runs all sixteen functional skills in an environment
 scrubbed of credentials and fails if any of them cannot; `tests/test_pii_refusal.py`
 asserts a personal column is refused even when a metric's own frontmatter
 allow-lists it by mistake. Read the code, not just this doc — or, to see the
@@ -107,23 +107,31 @@ number you are holding.
 
 ## Where it is today
 
-`assay` is Phase 4 complete: all fifteen functional skills run, offline,
+`assay` is Phase 4 complete (plus a 2026-08 research pass): all sixteen functional skills run, offline,
 against committed synthetic fixtures, and that claim is checked by a script
-rather than asserted in this paragraph. Four more skills — a cohort-maturation
-now-cast, a release scorecard with a causal verdict, a customer-grain journey
-analysis, and a wiki-publishing path — are documented as outlines in the
-skill cheat sheet but not implemented, because giving them honest numbers
-needs parameters (development fractions, bootstrap seeds, causal priors)
-that are judgment calls against a *real* book. Fitting them to this
-template's seeded fixture generator would produce a curve that describes the
-generator, not a business, and a template's job is to not teach that habit.
+rather than asserted in this paragraph. The research pass promoted
+`funnel-nowcast` from outline to functional — a cohort-maturation now-cast
+built on Mack's distribution-free chain ladder, which *estimates* every
+development factor from the spine at run time rather than baking in a fitted
+curve, so it can exist honestly in a template whose fixtures are synthetic
+(the numbers describe the generator and are watermarked; the mechanism is what
+a real deployment runs). Three more skills — a release scorecard with a
+causal verdict, a customer-grain journey analysis, and a wiki-publishing path
+— remain documented outlines, because giving them honest numbers needs
+parameters (causal priors, control-series selection) that are judgment calls
+against a *real* book and, unlike development factors, cannot be estimated from
+the spine. Fitting them to this template's seeded fixture generator would
+produce a verdict that describes the generator, not a business.
 
 The honest summary: the governance engine is complete, the checkout module is
-a full worked example end to end, and the remaining four skills are a
+a full worked example end to end, and the remaining three skills are a
 deliberate, stated gap rather than an oversight — see the module registry's
-`excluded:` entries for the specific reason behind each one. Alongside the
-code sit the eight-document suite under [`docs/`](.), real committed output
-under [`examples/`](../examples/), and 1,111 passing tests.
+`excluded:` entries for the specific reason behind each one. The research
+pass's full evidence base — what the literature validated, critiqued, and
+asked the template to build — is in
+[`reference/research-review.md`](reference/research-review.md). Alongside the
+code sit the documentation suite under [`docs/`](.) and real committed output
+under [`examples/`](../examples/).
 
 ## The case, in a sentence
 

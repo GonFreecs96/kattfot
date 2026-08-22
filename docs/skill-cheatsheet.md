@@ -505,6 +505,46 @@ unambiguous signal. The committed fixture spine is trimmed to 19 cohort
 weeks — exactly what the default windows need; a wider `--baseline-weeks`
 offline silently reads a truncated baseline.
 
+## `funnel-nowcast` — what will this immature cohort settle at?
+
+**Does:** project a not-yet-mature cohort's eventual conversion for a deep
+stage, from what it has realized so far, using Mack's distribution-free chain
+ladder over the session spine. Every projected value is **FORECAST**-lane
+(never a governed T2 actual) and reconciles to the T2 number as the cohort
+matures.
+
+```bash
+# the keystone target — return-window completion, projected for open cohorts
+.venv/bin/python plugins/assay/skills/funnel-nowcast/scripts/funnel_nowcast.py \
+  --today 2026-08-17 --time-range last_19_weeks --stage return_window_complete
+
+# by segment (per-group triangle; a blended curve drifts with mix), with the
+# self-scoring backtest that reports empirical vs nominal interval coverage
+.venv/bin/python .../funnel_nowcast.py --today 2026-08-17 \
+  --group-by channel --backtest
+```
+
+**Comes back:** per-cohort rows (observed, method, P50 ultimate, P10–P90,
+rate), the estimated development factors with a stability read, the level
+prior when a cohort is too young for its triangle to say anything, and — with
+`--backtest` — per-horizon empirical coverage next to nominal.
+
+**Why it exists (it was an outline through Phase 4):** the objection was that
+a now-cast's parameters are judgment calls that would fit the fixture
+generator. Mack's chain ladder *estimates* every factor and variance from the
+triangle at run time, so nothing is authored; the `nowcast:` block carries
+estimation controls only. See
+[`reference/research-review.md`](reference/research-review.md) §4.
+
+**Gotchas:** two funnel-specific ports of the actuarial method — ultimates are
+**capped at cohort size** (a funnel has a ceiling claims lack) and cohorts
+still inside a pure delay use a **level prior** rather than a confident zero.
+Model-based intervals run narrow (Wolffram et al. 2023); the built-in backtest
+measures it — on the committed fixtures it reports ~56% coverage against an 80%
+nominal band and warns `INTERVALS UNDERCOVER`. Maturity gating is **off by
+design** here (reading the withheld cohorts is the point); the FORECAST lane
+replaces it. Fixture runs now-cast the generator, watermarked as such.
+
 ---
 
 # Difference attribution & integrity
@@ -772,28 +812,14 @@ local file. Any T1/T3 metric is refused further upstream, by
 
 # Outlined skills (documented, not implemented)
 
-These four are named throughout this documentation suite and in the module
+These three are named throughout this documentation suite and in the module
 registry (`config/modules.yaml`), each excluded there with a specific,
 stated reason — but there is **no script behind any of them in this
 repository**. Do not invoke them expecting real output. They exist here so
-a fork knows what the next four skills would need, and so the boundary of
+a fork knows what the next skills would need, and so the boundary of
 "what this template actually does" is stated rather than implied.
-
-## `funnel-nowcast` — cohort-maturation now-cast
-
-**Would do:** project an **immature** cohort's eventual mature conversion
-from what it has realized so far, via a development-factor / chain-ladder
-estimator, with P10/P50/P90 intervals — scoped to the deep stages that
-genuinely withhold a tail (`payment_decisioned`, `delivered`,
-`return_window_complete` in this module).
-
-**Why it is not implemented here:** the estimator's parameters —
-development-fraction floors, bootstrap seeds and sample counts, a dispersion
-threshold that keeps intervals honest on thin or fast-saturating segments —
-are judgment calls calibrated against a real book's observed behavior.
-Fitting them to this template's seeded fixture generator would produce a
-curve that describes the generator, not any business, while looking exactly
-like one that does.
+(`funnel-nowcast` was here through Phase 4 and is now implemented — see its
+entry under *Spine-backed analyses* above.)
 
 ## `release-scorecard` — pre/post release verdict
 
@@ -803,9 +829,12 @@ read plus now-cast context for immature cohorts, and issue a causal verdict
 via a BSTS counterfactual (and difference-in-differences when a control
 segment is specified).
 
-**Why it is not implemented here:** it inherits `funnel-nowcast`'s
-prerequisite, and a causal verdict computed over generated data would
-measure the generator's parameters, not a release.
+**Why it is not implemented here:** unlike `funnel-nowcast`'s development
+factors — which are estimable from the triangle at run time, and which is why
+that skill now ships — a causal verdict's parameters (BSTS priors,
+control-series selection, pre/post windows) cannot be derived from the spine,
+and computed over generated data they would measure the generator's
+parameters, not a release.
 
 ## `customer-journey` — person-grain journey analysis
 

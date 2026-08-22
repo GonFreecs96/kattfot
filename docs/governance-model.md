@@ -242,6 +242,12 @@ inputs reproduces all three fingerprints exactly. `assay:verify` recomputes
 the definition and query fingerprints from the *current* repo state and
 compares them against what an old artifact recorded.
 
+Every artifact also records the acting **agent** (`{skill, plugin_version}`) —
+the software that produced it, the delegation counterpart to the human
+principal recorded in the audit trail. In an agentic system "who made this
+number" has two answers, and a receipt that kept only the human one could not
+tell an analyst's own query from one an agent ran in their name.
+
 **What this guarantees.** A number is replayable and tamper-evident. If a
 metric's definition changes after an artifact was produced, `verify` catches
 the drift (`DEFINITION_DRIFT`) without needing to re-run anything against a
@@ -346,21 +352,40 @@ in a separate CI job someone might skip.
 
 **Mechanism.** Every `query-metric` run appends one JSON line to
 `audit-log.jsonl`: the metric, tier, engine, dimensions, filters, time range,
-row count, the manifest, and — on the BigQuery path — the authenticated
-user's email.
+row count, the manifest, the acting software **agent** (skill + plugin
+version), and — on the BigQuery path — the authenticated user's email. The
+agent/email pair is a delegation record in the sense of W3C PROV: which
+software acted, on behalf of which person. Each line is folded into a
+**hash chain** (`_shared/audit_chain.py`): a sidecar `audit-log.jsonl.head`
+records `head_i = SHA-256(head_{i-1} || line_i)` and the entry count, and
+`assay:verify --audit-log` replays the file to detect any edit, reorder,
+insertion, or truncation.
 
 **What this guarantees.** A who-ran-what-when record exists for every
 governed query, append-only, and it never contains row-level data — a trace,
-not a copy.
+not a copy. With the hash chain, the log and its committed head can no longer
+*silently* diverge: falsifying history means rewriting both consistently, and
+a head recorded anywhere outside the file (a git commit, a printed artifact)
+pins the entire prefix behind it.
 
 **What this does not guarantee.**
 
 - **Writing is best-effort.** An audit-log failure never blocks a query, so
   the log's completeness depends on the filesystem being writable, not on
-  the query having succeeded.
+  the query having succeeded. The head sidecar is best-effort too; a missing
+  head surfaces as `CHAIN_HEAD_ABSENT` at verify time rather than as a query
+  failure.
+- **The chain needs an external witness to be fully tamper-*evident*.** Per
+  Crosby & Wallach (USENIX Security 2009), a tamper-evident log without
+  auditing proves nothing: an attacker who rewrites both the log and its
+  sidecar in one motion is caught only by a head they cannot reach. This
+  template ships the chain and the local sidecar; where the external
+  commitment lives (a git-committed head, a transparency-log backend à la
+  RFC 6962) is a deployment decision. The hash chain is the necessary first
+  step, not the whole of it.
 - **It is local to wherever `ASSAY_OUTPUTS_DIR` resolves.** This template
-  does not ship a central, tamper-evident log store; that is deployment
-  infrastructure a fork would add.
+  does not ship a central log store; that is deployment infrastructure a fork
+  would add.
 
 ## The one thing to remember
 

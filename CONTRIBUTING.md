@@ -6,7 +6,7 @@ proprietary content, so contributions here fall into two very different
 categories:
 
 1. **Improving the template itself** — the governance engine, the hooks, the
-   fifteen functional skills, the docs, the test suite.
+   sixteen functional skills, the docs, the test suite.
 2. **Forking it for your own domain** — swapping the `checkout` module for
    your own business, which is a local exercise on your fork and does not
    come back here. See [`docs/adding-a-module.md`](docs/adding-a-module.md)
@@ -52,7 +52,7 @@ plugins/assay/                         # the shipped plugin
 scripts/                               # repo tooling — NOT part of the shipped plugin
   generate_fixtures.py                 #   the deterministic fixture generator
   demo.py                              #   the compose chain, end to end, offline
-  demo_skills.py                       #   all fifteen functional skills, offline, as a gate
+  demo_skills.py                       #   all sixteen functional skills, offline, as a gate
   scrub_check.py                       #   the deny-token gate
 data/assay/sample/                     # the two committed fixture CSVs + FIXTURES.md
 tests/                                 # governance tests + catalog linter (run by pytest)
