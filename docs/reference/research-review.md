@@ -1,11 +1,11 @@
-# The research behind assay — what the literature validates, critiques, and asked us to build
+# The research behind kattfot — what the literature validates, critiques, and asked us to build
 
-*A grounding review, written 2026-08. Every mechanism in `assay` makes a claim
+*A grounding review, written 2026-08. Every mechanism in `kattfot` makes a claim
 about how governed agentic analytics should work; this document checks those
 claims against the peer-reviewed and heavily-cited literature in five areas —
 text-to-SQL reliability, LLM-agent security, semantic/metrics layers, data
 provenance, and the statistics of maturing cohort data — and records what that
-literature validated, where it found `assay` wanting, and which of its
+literature validated, where it found `kattfot` wanting, and which of its
 suggestions were implemented in response. The "IMPROVE → built" items are
 traceable to specific commits; the "IMPROVE → roadmap" items are deployment
 infrastructure a template cannot honestly ship. Full citations are at the end.*
@@ -19,7 +19,7 @@ guarantee" sections.
 
 ## 1. The core thesis is the measured consensus, not a slogan
 
-`assay`'s one-sentence claim — *a raw text-to-SQL agent produces
+`kattfot`'s one-sentence claim — *a raw text-to-SQL agent produces
 plausible-but-wrong numbers, so the fix is to constrain what it can do in code
 rather than review what it wrote* — is now the empirical finding of the field,
 replicated across independent benchmarks.
@@ -35,16 +35,16 @@ replicated across independent benchmarks.
   directly scored **16.7% overall and 0% on metric/KPI questions** — and
   **54.2%** when the same model queried through a semantic/knowledge-graph
   layer (Sequeda et al., SIGMOD workshop 2024). This is close to a direct
-  experimental test of `assay`'s design: the governed definition layer is the
+  experimental test of `kattfot`'s design: the governed definition layer is the
   active ingredient, not the model.
 - The intervention has been isolated to the *document*: in a paired benchmark
   (Rumiantsau & Fokeev, 2026), a **4 KB markdown semantic document** — the
-  same medium as `assay`'s metric files — accounted for essentially all of the
+  same medium as `kattfot`'s metric files — accounted for essentially all of the
   significant accuracy variance, while model choice within a tier accounted
   for none.
 - When wrong answers carry a real cost, **abstention is the optimal policy**:
   under TrustSQL's penalty scoring most models score below a trivial
-  "abstain on everything" baseline (KAIST, 2024). `assay`'s hard refusals
+  "abstain on everything" baseline (KAIST, 2024). `kattfot`'s hard refusals
   (off-list metric, service-account credential, PII column) are the
   code-enforced version of the policy this literature says wins.
 
@@ -65,7 +65,7 @@ far falls to adaptive attack; only architectural constraints hold** (the
 adaptive-attack papers breaking StruQ/SecAlign-class defenses; the
 "Design Patterns for Securing LLM Agents" consensus paper; Google's
 defense-in-depth white paper putting deterministic runtime policy as the
-load-bearing layer). Mapped to `assay`:
+load-bearing layer). Mapped to `kattfot`:
 
 **Validated.**
 - *Allow-listed metrics instead of free-form SQL* is the Action-Selector /
@@ -91,15 +91,15 @@ load-bearing layer). Mapped to `assay`:
   `git clone && pytest`.
 - *No data-flow integrity once data is in context.* CaMeL's result is that the
   dangerous flow is untrusted *data* steering subsequent *actions*.
-  `assay` constrains which actions exist — which is what shrinks the blast
+  `kattfot` constrains which actions exist — which is what shrinks the blast
   radius — but a poisoned warehouse string still enters context. The new
   **adversarial injection suite** (`tests/test_adversarial_injection.py`)
-  pins the part `assay` genuinely defends: untrusted data cannot select a
+  pins the part `kattfot` genuinely defends: untrusted data cannot select a
   non-allow-listed action (R2/R3/R6), and a filter value is bound as a
   parameter, never interpolated.
 - *The exfiltration leg is unaddressed.* Willison's "lethal trifecta" needs
   all three of private data, untrusted content, and an egress channel;
-  `assay` removes the second structurally and narrows the first, but does not
+  `kattfot` removes the second structurally and narrows the first, but does not
   close the third. Rather than imply otherwise, the adversarial suite asserts
   the gap as a tracked test that will flip to asserting a block if egress
   control is ever added.
@@ -111,7 +111,7 @@ load-bearing layer). Mapped to `assay`:
 
 ## 3. Provenance: standard-aligned, with the audit log upgraded to tamper-evident
 
-`assay`'s manifest-per-artifact, graded accuracy tiers, and offline drift check
+`kattfot`'s manifest-per-artifact, graded accuracy tiers, and offline drift check
 each match a heavily-cited consensus pattern — producer-written artifact
 documentation (Datasheets for Datasets; Model Cards), graded trust badges (ACM
 artifact badging), and hash-based reproducibility tooling (DVC/Pachyderm;
@@ -144,7 +144,7 @@ result a content-addressed `prov:Entity`, the manifest a `prov:Bundle`.
 
 ## 4. The maturity mechanism is textbook — and the outline it blocked is now built
 
-`assay`'s per-stage maturity is an *exact* instance of a problem three
+`kattfot`'s per-stage maturity is an *exact* instance of a problem three
 literatures already solved. The cohort-by-development-week table is a **run-off
 triangle** (actuarial claims reserving); the withheld quantity is **IBNR /
 occurred-but-not-reported** (Lawless 1994); the whole task is the epidemiological
@@ -204,7 +204,7 @@ is the *baseline* method the nowcasting community measures newer models against.
 | Maturity calibration from measured settle curves | Wolffram et al. 2023; Lawless 1994 | `stage-timing/scripts/calibrate_maturity.py` |
 | `funnel-nowcast` (Mack chain ladder, capped, level prior) | Mack 1993; England & Verrall 2002 | `funnel-nowcast/scripts/funnel_nowcast.py` |
 | Self-scoring backtest (empirical vs nominal coverage) | Wolffram et al. 2023 | `funnel_nowcast.py --backtest` |
-| Ambiguity refusal (name every reading, never top-1) | AmbiQT (EMNLP 2023); DTE (ACL 2023) | `assay_query.py` R1-AMBIGUOUS |
+| Ambiguity refusal (name every reading, never top-1) | AmbiQT (EMNLP 2023); DTE (ACL 2023) | `kattfot_query.py` R1-AMBIGUOUS |
 | Indirect-injection adversarial suite | Greshake 2023; CaMeL 2025; Willison | `tests/test_adversarial_injection.py` |
 
 **Deliberately roadmap, not built** — deployment infrastructure a template
@@ -223,7 +223,7 @@ cannot honestly ship, each with its literature anchor:
 - **A full adversarial eval harness** tracking attack-success-rate and
   utility-under-attack in CI (AgentDojo, InjecAgent).
 - **A metrics-layer maturity set** the semantic-layer literature converges on
-  but `assay` only partially has: structured CI validation of every metric's
+  but `kattfot` only partially has: structured CI validation of every metric's
   SQL against fixtures (test-suite verification, Zhong et al. 2020),
   additivity typing (Lenz & Shoshani 1997), a conformed-dimension registry,
   usage-based deprecation, and a golden-question regression suite

@@ -1,7 +1,7 @@
 # The module registry + funnel-spec contract
 
 *Descriptive, not a proposal: this is the design as actually implemented in
-`plugins/assay/config/modules.yaml` and the funnel specs it points at. If
+`plugins/kattfot/config/modules.yaml` and the funnel specs it points at. If
 you are about to register a third module, read this doc, then read
 `modules.yaml`'s own header comment (kept in sync with this doc) and
 [`adding-a-module.md`](adding-a-module.md) for the step-by-step.*
@@ -88,7 +88,7 @@ modules:
           coverage_note: "..."
 ```
 
-(Trimmed for readability — see `plugins/assay/config/modules.yaml` for the
+(Trimmed for readability — see `plugins/kattfot/config/modules.yaml` for the
 full, heavily-commented file, including every `excluded:` reason verbatim.)
 
 ## Rules the registry enforces
@@ -135,7 +135,7 @@ error on a real gap beats a silent wrong answer.
 Every spine-backed skill goes through `_shared/spine.py`'s
 `load_registry()` / `resolve_spine()` / `spec_path()`. Resolution order:
 
-1. **`ASSAY_FUNNEL_SPEC`** env var, if set — wins outright. Exists for tests
+1. **`KATTFOT_FUNNEL_SPEC`** env var, if set — wins outright. Exists for tests
    and one-off overrides, not for normal use.
 2. Otherwise, `--module` / `--spine` (defaulting to the module's
    `default: true` spine) resolved through `config/modules.yaml`.
@@ -206,7 +206,7 @@ instrumentation-coverage vocabulary rather than the registry's.
 
 The funnel spec carries its own `primary_entity:`, `entities:`, and
 `relationships:` blocks (kept consistent with the stage ladder), which is a
-*different* registry from `plugins/assay/skills/query-metric/entities/` — the
+*different* registry from `plugins/kattfot/skills/query-metric/entities/` — the
 named entity model, one markdown file per entity, that metrics reference via
 `entity:` / `relationships:` in their own frontmatter. The two describe the
 same underlying business objects from two angles: the funnel spec anchors a

@@ -1,0 +1,14 @@
+# Dependencies for the stage-timing helper (stage_timing.py).
+#
+# Only `pyyaml` is mandatory: the default engine is sqlite, which loads the
+# committed fixture CSVs into an in-memory database using nothing but the standard
+# library, so a fresh clone runs this skill with no cloud account.
+#
+# `google-cloud-bigquery` is needed only for KATTFOT_ENGINE=bigquery, where the
+# query runs as the individual human user via ADC. A missing dependency there is a
+# hard error (exit 3), never a silent fall back to fixture numbers.
+#
+# Install into a venv so you don't fight your system Python (PEP 668):
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+pyyaml>=6.0.3                  # module registry + funnel-spec parsing
+google-cloud-bigquery>=3.41.0  # KATTFOT_ENGINE=bigquery only; queries run as you via ADC

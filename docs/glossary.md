@@ -1,9 +1,9 @@
-# assay — Glossary
+# kattfot — Glossary
 
 *A reference for anyone reading this repo or a fork of it. Companion to
 [`runbook.md`](runbook.md) (how to use these), the
 [skill cheat sheet](skill-cheatsheet.md) (every flag + example), and
-[`what-is-assay.md`](what-is-assay.md) (why this exists).*
+[`what-is-kattfot.md`](what-is-kattfot.md) (why this exists).*
 
 How to read this: terms are grouped by theme — **Big picture**,
 **Governance**, **Data & funnel domain**, **Skills**, **Registered metrics**,
@@ -16,13 +16,13 @@ need.
 
 | Term | What it means |
 |---|---|
-| **assay** | The product this repo ships: a governed-analytics Claude Code / Cursor plugin, plus the repo tooling (fixture generator, demo scripts, scrub gate) around it. |
+| **kattfot** | The product this repo ships: a governed-analytics Claude Code / Cursor plugin, plus the repo tooling (fixture generator, demo scripts, scrub gate) around it. |
 | **Module** | A governed business domain — a set of metrics, optionally a spine, and the registry entry that ties them together. This template registers two: `checkout` (live) and `browse` (declared). |
 | **Spine** | One analysable grain within a module: a curated view with one row per instance of that grain, carrying every stage flag, stage timestamp, and terminal-branch classification the spine-backed skills need. A module may have several spines at different grains; exactly one is the default. |
 | **Grain** | The unit one row of a view represents. The checkout module's grain is **one checkout session (cart)**; the browse module's is **one visit to the catalog**. Choosing the wrong grain for a denominator is the single most common way a correct-looking query answers the wrong question — see `checkout-session.md`'s "why the cart, and not the order." |
 | **Weekly aggregate** vs. **session spine** | Two projections of the same stage ladder. The weekly aggregate (`cart_checkout_funnel_weekly`) is pre-summed at `cohort_week × dims` and backs the fifteen governed ratio metrics; the session spine (`cart_checkout_session_spine`) is one row per cart and backs the five spine-backed skills (drop-off, timing, compare, pulse, nowcast), because a percentile, a terminal-branch decomposition, or an immature cohort's projected ultimate cannot be recovered from sums. |
 | **Handoff edge** | A declarative spine → spine composition (`config/modules.yaml`), naming a join key and a stated coverage, for when a question spans two grains — e.g. "what share of visits produce a cart" spans `browse/session` and `checkout/session`. Declarative rather than SQL buried in a skill, because the hard part is the denominator, not the join. |
-| **Consumer / consuming plugin** | Another tool that calls `assay` for a governed number or definition via `assay:query-metric` / `assay:load-context`, rather than reading files directly. The integration is agent-mediated skill invocation, defined by `contracts/consumer-api.md`. |
+| **Consumer / consuming plugin** | Another tool that calls `kattfot` for a governed number or definition via `kattfot:query-metric` / `kattfot:load-context`, rather than reading files directly. The integration is agent-mediated skill invocation, defined by `contracts/consumer-api.md`. |
 | **Compose chain** | The intended skill pipeline: `query-metric → visualize-metric → export-report` (or `render-chart` / `render-dashboard`). One governed artifact flows through rendering and distribution without re-querying. |
 | **Engine** | Which adapter a query runs on: `sqlite` (default — committed fixture CSVs, no credentials) or `bigquery` (the curated view, as the authenticated human). Both run the *same* canonical SQL; see `dialect.py`. |
 | **Fixture-backed** / **MOCK DATA watermark** | `fixture_backed: true` on any result produced via the sqlite engine or a `status: dummy` metric. Every downstream chart, dashboard, and PDF turns this into a visible watermark — a fixture number cannot travel into a stakeholder-facing artifact and lose that label. |
@@ -34,7 +34,7 @@ need.
 The guarantees that make this safe to hand to an agent. Full detail (per
 control, what it guarantees and what it does not) is in
 [`governance-model.md`](governance-model.md); most of the underlying doctrine
-lives in `plugins/assay/skills/query-metric/doctrine/accuracy-tiers.md`.
+lives in `plugins/kattfot/skills/query-metric/doctrine/accuracy-tiers.md`.
 
 ### Accuracy tiers
 
@@ -68,17 +68,17 @@ apology, no workaround that violates the same rule, no artifact written.
 | **ADC** | *Application Default Credentials* — established by `gcloud auth application-default login`. Every query on the `bigquery` engine runs as **your own Google identity**. |
 | **Service account refused** | `_shared/identity.py` refuses service-account / impersonated credentials at the helper level (exit code 4). There is no shared key, no fallback. `GOOGLE_APPLICATION_CREDENTIALS` being set is the most common cause — unset it. |
 | **Allow-list** | Metrics, dimensions, and filters are explicitly enumerated per metric or per funnel spec. Off-list requests refuse (R1–R3). |
-| **Manifest (the receipt)** | A block stamped on every `query-metric` artifact: `plugin_version`, `metric_def_sha`, `query_sha`, `result_sha`, and the acting `agent` (skill + version). `generated_at` is excluded from every hash, so a faithful re-run reproduces them. `assay:verify` reads it back. |
-| **Audit / trace log** | `outputs/assay/audit-log.jsonl` — one append-only JSON line per run (metric, tier, engine, dims, filters, window, row count, the manifest, the acting **agent**, and — on the BigQuery path — the authenticated user's email, the PROV delegation pair). Row data is never logged. Each line is folded into a **hash chain** with a committed-head sidecar (`_shared/audit_chain.py`); `assay:verify --audit-log` replays it to detect any edit, reorder, insertion, or truncation. |
+| **Manifest (the receipt)** | A block stamped on every `query-metric` artifact: `plugin_version`, `metric_def_sha`, `query_sha`, `result_sha`, and the acting `agent` (skill + version). `generated_at` is excluded from every hash, so a faithful re-run reproduces them. `kattfot:verify` reads it back. |
+| **Audit / trace log** | `outputs/kattfot/audit-log.jsonl` — one append-only JSON line per run (metric, tier, engine, dims, filters, window, row count, the manifest, the acting **agent**, and — on the BigQuery path — the authenticated user's email, the PROV delegation pair). Row data is never logged. Each line is folded into a **hash chain** with a committed-head sidecar (`_shared/audit_chain.py`); `kattfot:verify --audit-log` replays it to detect any edit, reorder, insertion, or truncation. |
 | **Parameterized / bound params** | Filter values are passed as bound query parameters, never inlined into SQL — asserted by `tests/test_query_metric_governance.py`. |
 | **Access-path hook** | The `PreToolUse` (Claude Code) / `beforeShellExecution` (Cursor) hook that denies every warehouse access route except the plugin's vetted scripts. A blocklist over the Bash command text, not a sandbox. |
 | **Scrub gate** | `scripts/scrub_check.py` — the deny-token check that keeps the private repository this template was derived from, and its identifiers, out of the codebase. Runs as part of `pytest`. |
 
 ### Error sentinels (the consumer-API contract)
 
-Single-line responses `assay:load-context` and `assay:query-metric` return
+Single-line responses `kattfot:load-context` and `kattfot:query-metric` return
 when they cannot fulfill a request. Match on the prefix before `--`. Defined
-in `plugins/assay/contracts/consumer-api.md`.
+in `plugins/kattfot/contracts/consumer-api.md`.
 
 | Sentinel | Meaning |
 |---|---|
@@ -104,7 +104,7 @@ in `plugins/assay/contracts/consumer-api.md`.
 
 ## Data & funnel domain (checkout module)
 
-Definitions live in `plugins/assay/config/checkout-funnel-spec.yaml`, the
+Definitions live in `plugins/kattfot/config/checkout-funnel-spec.yaml`, the
 views doc (`skills/query-metric/views/checkout-views.md`), and the lineage
 note (`metrics/checkout/LINEAGE.md`).
 
@@ -149,7 +149,7 @@ Order Confirmed → Shipped → Delivered → Return Window Complete
 
 ## Skills (19)
 
-Invoke as `assay:<skill>`. Sixteen are functional; three are documented
+Invoke as `kattfot:<skill>`. Sixteen are functional; three are documented
 outlines. See [`skill-cheatsheet.md`](skill-cheatsheet.md) for every flag and
 a worked example.
 
@@ -203,7 +203,7 @@ a worked example.
 
 All are **T2**, back `analytics.cart_checkout_funnel_weekly`, and can be
 sliced/filtered by `channel`, `payment_method`, `market`, `category`,
-`checkout_version`. Full list via `assay:catalog`.
+`checkout_version`. Full list via `kattfot:catalog`.
 
 | Metric (`name`) | Measures |
 |---|---|
@@ -225,7 +225,7 @@ sliced/filtered by `channel`, `payment_method`, `market`, `category`,
 
 ---
 
-## Config files (`plugins/assay/config/`)
+## Config files (`plugins/kattfot/config/`)
 
 | File | Purpose |
 |---|---|
@@ -253,8 +253,8 @@ sliced/filtered by `channel`, `payment_method`, `market`, `category`,
 
 | Path | What's there |
 |---|---|
-| `outputs/` | All generated artifacts — git-ignored, reproducible. `outputs/assay/{date}-{slug}.md` are `query-metric` outputs; `charts/` holds SVG/PNG/HTML + spec JSON; `audit-log.jsonl` is the trace log. |
-| `data/assay/sample/` | The two committed fixture CSVs (`cart_checkout_funnel_weekly.csv`, `cart_checkout_session_spine.csv`) plus `FIXTURES.md` (seed, observation instant, trim). |
+| `outputs/` | All generated artifacts — git-ignored, reproducible. `outputs/kattfot/{date}-{slug}.md` are `query-metric` outputs; `charts/` holds SVG/PNG/HTML + spec JSON; `audit-log.jsonl` is the trace log. |
+| `data/kattfot/sample/` | The two committed fixture CSVs (`cart_checkout_funnel_weekly.csv`, `cart_checkout_session_spine.csv`) plus `FIXTURES.md` (seed, observation instant, trim). |
 | `tests/` | Governance tests + catalog linter, run by `pytest`. |
 
 ---

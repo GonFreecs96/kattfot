@@ -34,7 +34,7 @@ import yaml
 import calibrate_maturity as cm
 
 ROOT = Path(__file__).resolve().parents[1]
-SPEC_PATH = ROOT / "plugins" / "assay" / "config" / "checkout-funnel-spec.yaml"
+SPEC_PATH = ROOT / "plugins" / "kattfot" / "config" / "checkout-funnel-spec.yaml"
 
 TODAY = "2026-08-17"
 ARGS = ["--today", TODAY, "--time-range", "last_19_weeks"]

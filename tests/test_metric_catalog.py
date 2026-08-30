@@ -16,10 +16,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-import assay_query as aq
+import kattfot_query as aq
 
 ROOT = Path(__file__).resolve().parents[1]
-PLUGIN = ROOT / "plugins" / "assay"
+PLUGIN = ROOT / "plugins" / "kattfot"
 QUERY_METRIC_DIR = PLUGIN / "skills" / "query-metric"
 METRICS_DIR = QUERY_METRIC_DIR / "metrics"
 ENTITIES_DIR = QUERY_METRIC_DIR / "entities"

@@ -55,7 +55,7 @@ def run(argv, capsys) -> dict:
 def governed_value(metric: str, time_range: str, mature: bool = True, filters=()) -> float:
     """The number the governed path produces, via the CLI's own runner."""
     run_value, _trace = cli.make_runner(TODAY_DATE, "sqlite")
-    import assay_query as aq
+    import kattfot_query as aq
 
     m = aq.load_metric(metric)
     start, end = aq.parse_time_range(time_range, m.get("default_lookback_weeks", 8), TODAY_DATE)
@@ -232,7 +232,7 @@ def test_definition_drift_is_detected_from_an_artifact_manifest(tmp_path, capsys
 
 
 def test_a_matching_manifest_reports_no_drift(tmp_path, capsys):
-    import assay_query as aq
+    import kattfot_query as aq
 
     sha = aq.load_metric(SHALLOW)["_def_sha"]
     artifact = tmp_path / "current.md"
@@ -329,7 +329,7 @@ def test_a_t3_metric_is_refused_before_reconciling(tmp_path, monkeypatch):
         "allowed_dimensions: []\nallowed_filters: []\ndefault_lookback_weeks: 8\n"
         "entity: checkout_session\n---\n\n## Definition\nx\n"
     )
-    monkeypatch.setenv("ASSAY_METRICS_DIR", str(tmp_path))
+    monkeypatch.setenv("KATTFOT_METRICS_DIR", str(tmp_path))
     old = sys.argv
     sys.argv = ["reconcile", "--metric", "exploratory", "--their-value", "0.5",
                 "--time-range", "last_8_weeks", "--today", TODAY]

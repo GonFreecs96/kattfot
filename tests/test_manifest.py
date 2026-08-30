@@ -1,11 +1,11 @@
 """Manifest receipt: hashes are deterministic, content-sensitive, and exclude
-the wall-clock. These are the guarantees `assay:verify` and cross-artifact
+the wall-clock. These are the guarantees `kattfot:verify` and cross-artifact
 drift detection rely on.
 """
 
 import json
 
-from _shared import manifest as mf  # plugins/assay/skills on sys.path via conftest
+from _shared import manifest as mf  # plugins/kattfot/skills on sys.path via conftest
 
 
 # --- sha16 / canonical_json ------------------------------------------------

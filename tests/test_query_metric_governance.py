@@ -23,7 +23,7 @@ import datetime as dt
 
 import pytest
 
-import assay_query as aq
+import kattfot_query as aq
 
 
 # --- R2 / R3: allow-list validation -----------------------------------------
@@ -259,7 +259,7 @@ def test_live_status_routes_to_the_resolved_engine():
 
 def test_missing_status_routes_to_the_engine_not_to_mock(monkeypatch):
     """No silent mock fallback: anything not declared `dummy` runs its real SQL."""
-    monkeypatch.delenv("ASSAY_ENGINE", raising=False)
+    monkeypatch.delenv("KATTFOT_ENGINE", raising=False)
     assert aq.resolve_source_mode({})[0] == "fixture_sql"
 
 
@@ -284,33 +284,33 @@ def test_resolve_project_prefers_a_concrete_metric_field():
 
 
 def test_resolve_project_expands_an_env_placeholder(monkeypatch):
-    """The bundled catalog ships `${ASSAY_BIGQUERY_PROJECT}` rather than a real
+    """The bundled catalog ships `${KATTFOT_BIGQUERY_PROJECT}` rather than a real
     project id — a template that baked one in would ship somebody else's billing
     account."""
-    monkeypatch.setenv("ASSAY_BIGQUERY_PROJECT", "my-real-project")
+    monkeypatch.setenv("KATTFOT_BIGQUERY_PROJECT", "my-real-project")
     assert aq.resolve_project(
-        {"source_project": "${ASSAY_BIGQUERY_PROJECT}"}, "bigquery"
+        {"source_project": "${KATTFOT_BIGQUERY_PROJECT}"}, "bigquery"
     ) == "my-real-project"
 
 
 def test_unresolved_placeholder_is_a_hard_error_on_bigquery(monkeypatch):
-    monkeypatch.delenv("ASSAY_BIGQUERY_PROJECT", raising=False)
+    monkeypatch.delenv("KATTFOT_BIGQUERY_PROJECT", raising=False)
     with pytest.raises(SystemExit) as exc:
-        aq.resolve_project({"name": "m", "source_project": "${ASSAY_BIGQUERY_PROJECT}"}, "bigquery")
-    assert "ASSAY_BIGQUERY_PROJECT" in str(exc.value)
+        aq.resolve_project({"name": "m", "source_project": "${KATTFOT_BIGQUERY_PROJECT}"}, "bigquery")
+    assert "KATTFOT_BIGQUERY_PROJECT" in str(exc.value)
 
 
 def test_unresolved_placeholder_is_kept_verbatim_on_a_fixture_path(monkeypatch):
     """On a fixture read the project does not affect the result, and keeping the
     placeholder verbatim is both self-documenting and STABLE — which is what keeps the
     artifact's `query_sha` reproducible across runs."""
-    monkeypatch.delenv("ASSAY_BIGQUERY_PROJECT", raising=False)
-    got = aq.resolve_project({"source_project": "${ASSAY_BIGQUERY_PROJECT}"}, "fixture_sql")
-    assert got == "${ASSAY_BIGQUERY_PROJECT}"
+    monkeypatch.delenv("KATTFOT_BIGQUERY_PROJECT", raising=False)
+    got = aq.resolve_project({"source_project": "${KATTFOT_BIGQUERY_PROJECT}"}, "fixture_sql")
+    assert got == "${KATTFOT_BIGQUERY_PROJECT}"
 
 
 def test_resolve_project_missing_entirely_is_refused_on_bigquery(monkeypatch):
-    monkeypatch.delenv("ASSAY_BIGQUERY_PROJECT", raising=False)
+    monkeypatch.delenv("KATTFOT_BIGQUERY_PROJECT", raising=False)
     with pytest.raises(SystemExit):
         aq.resolve_project({}, "bigquery")
 
@@ -368,14 +368,14 @@ def test_build_sql_binds_every_filter_separately():
 def test_build_sql_is_canonical_bigquery_on_every_engine(monkeypatch):
     """The SQL text does not depend on the engine. That is what makes an artifact's
     `query_sha` receipt comparable between a fixture read and a warehouse read, so
-    `assay:verify` works across both."""
+    `kattfot:verify` works across both."""
     metric = {
         "name": "m", "source_view": "ds.v", "time_column": "cohort_week",
         "numerator_column": "num", "denominator_column": "den",
     }
-    monkeypatch.setenv("ASSAY_ENGINE", "sqlite")
+    monkeypatch.setenv("KATTFOT_ENGINE", "sqlite")
     sqlite_sql, _ = aq.build_sql(metric, "proj", [], {})
-    monkeypatch.setenv("ASSAY_ENGINE", "bigquery")
+    monkeypatch.setenv("KATTFOT_ENGINE", "bigquery")
     bq_sql, _ = aq.build_sql(metric, "proj", [], {})
     assert sqlite_sql == bq_sql
     assert "SAFE_DIVIDE" in sqlite_sql  # canonical BigQuery, not sqlite

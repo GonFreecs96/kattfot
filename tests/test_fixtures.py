@@ -35,10 +35,10 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 GENERATOR = ROOT / "scripts" / "generate_fixtures.py"
-FIXTURE_DIR = ROOT / "data" / "assay" / "sample"
+FIXTURE_DIR = ROOT / "data" / "kattfot" / "sample"
 WEEKLY_CSV = FIXTURE_DIR / "cart_checkout_funnel_weekly.csv"
 SPINE_CSV = FIXTURE_DIR / "cart_checkout_session_spine.csv"
-SPEC_PATH = ROOT / "plugins" / "assay" / "config" / "checkout-funnel-spec.yaml"
+SPEC_PATH = ROOT / "plugins" / "kattfot" / "config" / "checkout-funnel-spec.yaml"
 
 DIMENSIONS = ("channel", "payment_method", "market", "category", "checkout_version")
 

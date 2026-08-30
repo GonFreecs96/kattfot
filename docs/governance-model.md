@@ -2,12 +2,12 @@
 
 *What each control guarantees, and — just as important — what it honestly
 does not. Model this doc on the doctrine files it summarizes:
-`plugins/assay/skills/query-metric/doctrine/accuracy-tiers.md`,
+`plugins/kattfot/skills/query-metric/doctrine/accuracy-tiers.md`,
 `doctrine/ownership-governance.md`, and the code in `_shared/identity.py`,
 `_shared/pii.py`, and `_shared/manifest.py`. Those files are the canonical
 source; this doc is the fast overview.*
 
-`assay` is not a framework for building dashboards. It is a worked example of
+`kattfot` is not a framework for building dashboards. It is a worked example of
 one specific claim: that an agent can be given real access to a warehouse and
 still be structurally unable to produce a number nobody can defend. That
 claim rests on a stack of controls, each enforced in code rather than in a
@@ -26,7 +26,7 @@ treated as stronger than it is.
 | 4 | PII refusal (R6) | `_shared/pii.py` |
 | 5 | Accuracy tiers (R4) | doctrine + catalog linter |
 | 6 | Per-stage maturity | funnel spec `stage_maturity`, `_shared/spine.py` |
-| 7 | Content-addressed manifest | `_shared/manifest.py`, `assay:verify` |
+| 7 | Content-addressed manifest | `_shared/manifest.py`, `kattfot:verify` |
 | 8 | Warn-level guardrails | `config/guardrails.yaml`, `_shared/guardrails.py` |
 | 9 | Instrumentation coverage register | `config/coverage.yaml`, `_shared/coverage.py` |
 | 10 | The scrub gate | `scripts/scrub_check.py` |
@@ -75,7 +75,7 @@ and access is revoked the moment that person's own Google identity is.
 `beforeShellExecution` hook, sharing the same matcher,
 `bq_path_matcher.py`) inspects every Bash command before it runs and denies
 anything that reaches BigQuery or GCP outside the plugin's vetted skill
-scripts (`plugins/assay/skills/*/scripts/*.py`): the bare `bq` CLI, `gcloud`
+scripts (`plugins/kattfot/skills/*/scripts/*.py`): the bare `bq` CLI, `gcloud`
 referencing BigQuery, ad hoc `python -c` using `google-cloud-bigquery`
 directly, and `curl`/`wget` to `googleapis.com` — including inside
 `bash -c` and behind `sudo`/`env` prefixes.
@@ -238,7 +238,7 @@ immature cohort's rate as final).
 `metric_def_sha` (the definition as used), `query_sha` (the exact SQL plus
 bound parameters), and `result_sha` (the result volumes). `generated_at` is
 deliberately excluded from every hash, so a faithful re-run over unchanged
-inputs reproduces all three fingerprints exactly. `assay:verify` recomputes
+inputs reproduces all three fingerprints exactly. `kattfot:verify` recomputes
 the definition and query fingerprints from the *current* repo state and
 compares them against what an old artifact recorded.
 
@@ -303,8 +303,8 @@ query.
 
 **Mechanism.** `config/coverage.yaml` answers "can I measure X yet?" with a
 status (`live`, `partial`, `empty`, `blocked`, `declined`, `flag_gated`), a
-`blocker` verbatim, and an owner. It is read by `assay:coverage` and
-`assay:load-context coverage`, and it is never a gate on anything — a missing
+`blocker` verbatim, and an owner. It is read by `kattfot:coverage` and
+`kattfot:load-context coverage`, and it is never a gate on anything — a missing
 or unparseable register yields an empty result, same reasoning as layer 8.
 
 **What this guarantees.** "Not in the register" and "not measurable" are kept
@@ -358,7 +358,7 @@ agent/email pair is a delegation record in the sense of W3C PROV: which
 software acted, on behalf of which person. Each line is folded into a
 **hash chain** (`_shared/audit_chain.py`): a sidecar `audit-log.jsonl.head`
 records `head_i = SHA-256(head_{i-1} || line_i)` and the entry count, and
-`assay:verify --audit-log` replays the file to detect any edit, reorder,
+`kattfot:verify --audit-log` replays the file to detect any edit, reorder,
 insertion, or truncation.
 
 **What this guarantees.** A who-ran-what-when record exists for every
@@ -394,7 +394,7 @@ pins the entire prefix behind it.
   commitment lives (a git-committed head, a transparency-log backend à la
   RFC 6962) is a deployment decision. The hash chain is the necessary first
   step, not the whole of it.
-- **It is local to wherever `ASSAY_OUTPUTS_DIR` resolves.** This template
+- **It is local to wherever `KATTFOT_OUTPUTS_DIR` resolves.** This template
   does not ship a central log store; that is deployment infrastructure a fork
   would add.
 

@@ -1,4 +1,4 @@
-"""assay:verify — offline drift detection.
+"""kattfot:verify — offline drift detection.
 
 Builds a real artifact manifest from a temp metric, then confirms verify reports
 OK when nothing changed and the right drift status when the definition moves.
@@ -203,7 +203,7 @@ def _real_artifact_fm(metric_name: str, today: str = "2026-08-17") -> dict:
     """Frontmatter as the real helper would produce it for a real bundled metric."""
     import datetime as dt
 
-    import assay_query as real_aq
+    import kattfot_query as real_aq
 
     metric = real_aq.load_metric(metric_name)
     project = real_aq.resolve_project(metric, "fixture_sql")
@@ -250,7 +250,7 @@ def test_verify_ok_against_the_real_helper_and_a_real_metric():
     governed artifact ever produced. A verifier that always cries drift gets ignored,
     which is worse than not shipping one.
     """
-    import assay_query as real_aq
+    import kattfot_query as real_aq
 
     fm = _real_artifact_fm("cart_to_checkout_start_conversion")
     assert "maturity_cutoff" in fm, "a maturity-gated metric must record its cutoff"
@@ -261,7 +261,7 @@ def test_verify_ok_against_the_real_helper_and_a_real_metric():
 def test_verify_ok_against_a_deep_stage_metric():
     """The deepest cutoff in the catalog (~44 days), where the gap between recording and
     recomputing the cutoff is widest."""
-    import assay_query as real_aq
+    import kattfot_query as real_aq
 
     fm = _real_artifact_fm("delivered_to_return_window_complete_rate")
     result = vf.verify_frontmatter(fm, aq=real_aq)
@@ -272,7 +272,7 @@ def test_a_dropped_cutoff_is_query_drift_with_the_real_helper():
     """The failure mode the fix above prevents, asserted directly: an artifact whose
     recorded cutoff is missing rebuilds to different SQL, and verify says so rather than
     quietly matching."""
-    import assay_query as real_aq
+    import kattfot_query as real_aq
 
     fm = _real_artifact_fm("cart_to_checkout_start_conversion")
     del fm["maturity_cutoff"]
@@ -281,7 +281,7 @@ def test_a_dropped_cutoff_is_query_drift_with_the_real_helper():
 
 
 def test_a_moved_cutoff_is_query_drift_with_the_real_helper():
-    import assay_query as real_aq
+    import kattfot_query as real_aq
 
     fm = _real_artifact_fm("cart_to_checkout_start_conversion")
     fm["maturity_cutoff"] = "2026-01-05"
@@ -290,7 +290,7 @@ def test_a_moved_cutoff_is_query_drift_with_the_real_helper():
 
 
 def test_an_unregistered_metric_is_definition_missing_with_the_real_helper():
-    import assay_query as real_aq
+    import kattfot_query as real_aq
 
     fm = _real_artifact_fm("cart_to_checkout_start_conversion")
     fm["metric"] = "a_metric_that_was_deleted"
@@ -304,7 +304,7 @@ def test_a_quoted_cutoff_and_a_date_object_both_work():
     must verify identically."""
     import datetime as dt
 
-    import assay_query as real_aq
+    import kattfot_query as real_aq
 
     fm = _real_artifact_fm("cart_to_checkout_start_conversion")
     as_string = dict(fm)
@@ -323,7 +323,7 @@ def test_verify_matches_an_artifact_the_demo_actually_wrote(tmp_path):
     import sys
     from pathlib import Path
 
-    import assay_query as real_aq
+    import kattfot_query as real_aq
 
     root = Path(__file__).resolve().parents[1]
     proc = subprocess.run(
@@ -337,7 +337,7 @@ def test_verify_matches_an_artifact_the_demo_actually_wrote(tmp_path):
         cwd=root,
         capture_output=True,
         text=True,
-        env={**__import__("os").environ, "ASSAY_OUTPUTS_DIR": str(tmp_path),
+        env={**__import__("os").environ, "KATTFOT_OUTPUTS_DIR": str(tmp_path),
              "MPLCONFIGDIR": str(tmp_path / "mpl")},
     )
     if proc.returncode != 0:

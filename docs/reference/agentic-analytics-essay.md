@@ -1,11 +1,11 @@
 # Ontologies, Knowledge Graphs, Semantic Layers, and the Rise of Agentic Analytics
 
-*Background reading for anyone extending `assay`'s governance model. Ported
+*Background reading for anyone extending `kattfot`'s governance model. Ported
 from an internal research brief, generalized, and re-illustrated against
 this template's own e-commerce checkout domain rather than the original's.
 The external research cited (benchmarks, standards bodies, publication
 dates) is real and unrelated to any private system; only the worked
-examples have been swapped for `assay`'s own entities (`checkout_session`,
+examples have been swapped for `kattfot`'s own entities (`checkout_session`,
 `order`, `payment`, `customer`, `shipment`) so they read consistently with
 the rest of this documentation suite.*
 
@@ -26,7 +26,7 @@ the rest of this documentation suite.*
   The domain in that benchmark was insurance, but the structural lesson —
   that schema-intensive questions are where an LLM most needs explicit
   relationships rather than a raw schema — transfers directly to any
-  warehouse with more than a handful of joined tables, `assay`'s included.**
+  warehouse with more than a handful of joined tables, `kattfot`'s included.**
 - **You do not need to "boil the ocean." A workable sequence for a project
   like this one is: (1) governed metrics exposed to agents via an allow-list
   and a manifest (which is what `query-metric` already is); (2)
@@ -93,7 +93,7 @@ the rest of this documentation suite.*
 of these as a stack of increasing meaning:
 
 - **Data model / schema** — how data is physically stored: tables, columns,
-  types, primary/foreign keys. In `assay`'s world: a curated view with
+  types, primary/foreign keys. In `kattfot`'s world: a curated view with
   `checkout_session_id`, `customer_token`, `payment_method`, `channel`. The
   schema tells you the column is a `STRING`; it does not tell you what it
   means or how it connects to the business.
@@ -124,7 +124,7 @@ of these as a stack of increasing meaning:
   nowhere in your schemas but everywhere in how people actually work"), and
   definitions (e.g. one team computes "return rate" over all delivered
   orders, another only over orders past the return window — both valid, but
-  different, exactly the ambiguity `assay`'s `delivered_to_returned_rate`
+  different, exactly the ambiguity `kattfot`'s `delivered_to_returned_rate`
   vs. `delivered_to_return_window_complete_rate` split exists to avoid).
 
 - **Knowledge graph** — the instantiation: an ontology populated with actual
@@ -159,7 +159,7 @@ payment is #5591" lives implicitly in a foreign-key relationship between an
 writer who already knows the schema. This is the deep reason knowledge
 graphs help LLMs: the relationships that a human analyst carries in their
 head (and that an LLM otherwise has to *guess*) are made explicit and
-machine-traversable — which is exactly the gap `assay`'s entity registry
+machine-traversable — which is exactly the gap `kattfot`'s entity registry
 (`skills/query-metric/entities/`) exists to close cheaply, short of a graph
 database: it names `checkout_session → payment` as
 `one_to_zero_or_one via checkout_session_id`, in a file an agent reads, so
@@ -220,7 +220,7 @@ years (since SQL), developed by the same committee. It descends directly
 from Cypher (created at Neo4j in 2010; opened as openCypher in 2015). A
 companion standard, **SQL/PGQ** (SQL Property Graph Queries, part of
 SQL:2023), lets you define and run read-only graph queries over relational
-tables — relevant to any BigQuery-centric team, `assay`'s included, because
+tables — relevant to any BigQuery-centric team, `kattfot`'s included, because
 it means graph querying can increasingly happen *inside* a warehouse without
 a separate graph database.
 
@@ -249,7 +249,7 @@ a separate graph database.
 - **PuppyGraph / zero-ETL approaches** — expose graph querying over data
   that stays in your relational/warehouse/lakehouse, avoiding a separate
   graph store — architecturally appealing for a BigQuery-centric team like
-  `assay`'s.
+  `kattfot`'s.
 
 **Ontology engineering tools and methodology.**
 - **Protégé** is the dominant ontology editor — free, open-source,
@@ -333,7 +333,7 @@ question*. The failure is contextual, not syntactic. Evidence:
   in months 1–4 after first purchase," a general LLM interpreted "month" as
   elapsed days from each user's first purchase, so a Jan-31 + Feb-1 buyer
   landed in "month 0" — confidently wrong, because the business reports by
-  *calendar* month. This is exactly the shape of ambiguity `assay`'s own
+  *calendar* month. This is exactly the shape of ambiguity `kattfot`'s own
   `cohort_week` convention exists to remove: a metric's frontmatter states
   `time_column_type` and the query builder handles the bucketing once,
   centrally, rather than leaving it to be re-derived per question.
@@ -365,7 +365,7 @@ how to compute payment approval rate" and "here's what a checkout session
 is, how it relates to an order and a shipment, and the rule that a session
 which never confirmed has no order at all, so an order-grain denominator is
 structurally blind to the single largest exit in the funnel." (That last
-rule is, verbatim, `assay`'s own `confirmation_creates_the_order` business
+rule is, verbatim, `kattfot`'s own `confirmation_creates_the_order` business
 rule — a small, concrete instance of exactly the "ontology-lite" pattern
 described in §5 below.)
 
@@ -394,9 +394,9 @@ which an agent *discovers* and *queries* governed context instead of
 writing raw SQL. The flow: the agent discovers available governed
 metrics/dimensions, **selects** by name, and the semantic layer **compiles
 to SQL under governance** (row-/column-level security applied at compile
-time). `assay` implements the same pattern one layer down, without MCP: an
-agent invokes `assay:catalog` to discover what is registered, selects a
-metric by name, and `assay:query-metric` compiles that selection to a
+time). `kattfot` implements the same pattern one layer down, without MCP: an
+agent invokes `kattfot:catalog` to discover what is registered, selects a
+metric by name, and `kattfot:query-metric` compiles that selection to a
 parameterized query under the allow-list and PII checks — the same
 discover-select-compile shape, expressed as skills rather than as an MCP
 server, because that is the interface this template's runtime (Claude Code
@@ -436,7 +436,7 @@ is at Stage 4:
 - **Stage 3 — Relationship & rule context documented.** The relationships
   the schema *implies but doesn't state* are written down: which entities
   connect, which records to exclude, which segments behave differently.
-  (This is "ontology-lite" — where `assay`'s entity registry and
+  (This is "ontology-lite" — where `kattfot`'s entity registry and
   `LINEAGE.md` files sit.)
 - **Stage 4 — Ontology + knowledge graph.** Formal classes, relationships,
   axioms, reasoning; entity resolution across systems; agents reason over
@@ -519,7 +519,7 @@ models:
         description: "How the payment was attempted"
 ```
 
-*After (ontology-lite — this is, almost verbatim, the shape `assay`'s own
+*After (ontology-lite — this is, almost verbatim, the shape `kattfot`'s own
 entity files already take):*
 ```yaml
 models:
@@ -559,7 +559,7 @@ This is exactly the gap Tricot describes: *"Ask a data team who owns metric
 definitions and you get a clear answer. Ask who owns the entity model — who
 decided which foreign key means what, and which record types to exclude —
 and you get a pause."* Ontology-lite assigns and documents that knowledge.
-`assay`'s `LINEAGE.md` per module and its entity registry
+`kattfot`'s `LINEAGE.md` per module and its entity registry
 (`skills/query-metric/entities/`) are this pattern, implemented rather than
 merely described.
 
@@ -589,11 +589,11 @@ loop) but **human-in-the-loop is a design principle, not a workaround.**
 1. **Govern metrics first (weeks).** Define your core measures with a
    named numerator, denominator, allow-list, and owner — get the join paths
    and filters correct. This alone removes the biggest class of agent
-   errors. `assay`'s `AUTHORING.md` and metric template are exactly this
+   errors. `kattfot`'s `AUTHORING.md` and metric template are exactly this
    step, worked through for one domain.
 2. **Wire up a discovery surface (days).** Give the agent a way to
    *discover* governed metrics and documented models rather than raw
-   tables — `assay:catalog` / `assay:load-context`, or an MCP server if your
+   tables — `kattfot:catalog` / `kattfot:load-context`, or an MCP server if your
    stack already has one. Test against real business questions; verify
    consistency and that the allow-list holds.
 3. **Add ontology-lite context (ongoing).** Enrich your documentation with
@@ -619,7 +619,7 @@ formalize to OWL.
 
 ### 6. Applied to E-Commerce Checkout & Fulfilment
 
-**Domain ontology sketch.** This is, not coincidentally, close to `assay`'s
+**Domain ontology sketch.** This is, not coincidentally, close to `kattfot`'s
 own entity registry — the checkout domain is a reasonable worked example of
 exactly the "ontology-lite" pattern this essay recommends. Core classes:
 `Party` (super-class of `Customer`, `Merchant`), `CheckoutSession` (the
@@ -662,7 +662,7 @@ confirms.
 - **Basket-affinity / recommendation graphs** — model products, categories,
   and co-purchase edges to power "customers who bought this also bought"
   and merchandising decisions, distinct from — but complementary to — the
-  governed conversion-rate metrics `assay` itself serves.
+  governed conversion-rate metrics `kattfot` itself serves.
 - **Return-fraud and abuse rings** — the same graph techniques used for
   payment fraud apply to serial-return abuse: the same address or device
   recurring across accounts with an anomalous return rate.
@@ -678,7 +678,7 @@ confirms.
    denominator, allow-list, and owner, and expose them to an agent through
    a discovery surface it can query instead of guessing at raw tables.**
    This removes the largest, best-documented class of agent errors (wrong
-   joins, wrong metric logic) with no new infrastructure. `assay`'s
+   joins, wrong metric logic) with no new infrastructure. `kattfot`'s
    `query-metric` + `catalog` pairing is this step, already built.
 2. **Then invest in ontology-lite enrichment of your documentation** —
    entities, relationships, and especially the *unwritten business rules*
@@ -712,7 +712,7 @@ confirms.
   a correct semantic model, the LLM's *use* of it is probabilistic — "the
   context is a hint, not a guarantee." Production reliability needs
   deterministic compilation/guardrails (the semantic layer compiling to
-  SQL, validation of generated queries — exactly what `assay`'s allow-list
+  SQL, validation of generated queries — exactly what `kattfot`'s allow-list
   and refusal rules are), not just better prompts. GPT-5-class agentic
   modes still completed only ~29% of the hardest enterprise text-to-SQL
   tasks in one cited benchmark (BIRD-Interact).
@@ -737,6 +737,6 @@ confirms.
 - **Ontologies decay without ownership.** Both semantic layers and
   ontologies are abstractions that depend on metadata, lineage, and
   governance to stay accurate; without an owner and a maintenance process
-  they rot into misleading artifacts. `assay`'s own
+  they rot into misleading artifacts. `kattfot`'s own
   `doctrine/ownership-governance.md` exists because of exactly this
   failure mode. The hard part is organizational, not technical.

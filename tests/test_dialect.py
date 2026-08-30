@@ -118,7 +118,7 @@ QUERY_METRIC_SQL = """SELECT
   SAFE_DIVIDE(SUM(checkouts_started), SUM(carts_created)) AS cart_to_checkout_start_conversion,
   SUM(checkouts_started) AS numerator,
   SUM(carts_created) AS denominator
-FROM `${ASSAY_BIGQUERY_PROJECT}.analytics.cart_checkout_funnel_weekly`
+FROM `${KATTFOT_BIGQUERY_PROJECT}.analytics.cart_checkout_funnel_weekly`
 WHERE cohort_week BETWEEN @start_date AND @end_date AND cohort_week <= @maturity_cutoff
 GROUP BY cohort_week, channel
 ORDER BY cohort_week, channel"""
@@ -135,7 +135,7 @@ ORDER BY cohort_week, channel"""
 
 
 def test_query_metric_sql_golden():
-    """The exact shape `assay_query.build_sql` produces. If this drifts, every
+    """The exact shape `kattfot_query.build_sql` produces. If this drifts, every
     fixture-backed number in the repo drifted with it."""
     assert dialect.translate_sql(QUERY_METRIC_SQL) == QUERY_METRIC_SQLITE
 

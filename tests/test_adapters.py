@@ -3,7 +3,7 @@
 Covers the four things that could quietly go wrong now that there is more than one
 engine:
 
-  1. **Dispatch** — `ASSAY_ENGINE` selects the right adapter, defaults to sqlite so
+  1. **Dispatch** — `KATTFOT_ENGINE` selects the right adapter, defaults to sqlite so
      a fresh clone works, and refuses an unknown name rather than falling back.
   2. **ISO-8601 date ordering** — sqlite has no date type, so `BETWEEN` on a cohort
      column is a *string* comparison. ISO-8601 is the only common format whose
@@ -30,7 +30,7 @@ import sqlite3
 
 import pytest
 
-import assay_query as aq
+import kattfot_query as aq
 from _shared import adapters
 from _shared.adapters import base as adapters_base
 from _shared.adapters.sqlite_adapter import SqliteAdapter
@@ -41,7 +41,7 @@ WEEKLY_VIEW = "analytics.cart_checkout_funnel_weekly"
 @pytest.fixture(autouse=True)
 def clean_engine(monkeypatch):
     """Every test starts from the documented default and a cold adapter cache."""
-    monkeypatch.delenv("ASSAY_ENGINE", raising=False)
+    monkeypatch.delenv("KATTFOT_ENGINE", raising=False)
     adapters.reset_cache()
     yield
     adapters.reset_cache()
@@ -60,19 +60,19 @@ def test_default_engine_is_sqlite():
 
 
 def test_env_var_selects_engine(monkeypatch):
-    monkeypatch.setenv("ASSAY_ENGINE", "bigquery")
+    monkeypatch.setenv("KATTFOT_ENGINE", "bigquery")
     assert adapters.resolve_engine() == "bigquery"
     assert adapters.get_adapter().name == "bigquery"
 
 
 def test_explicit_argument_beats_env(monkeypatch):
-    monkeypatch.setenv("ASSAY_ENGINE", "bigquery")
+    monkeypatch.setenv("KATTFOT_ENGINE", "bigquery")
     assert adapters.resolve_engine("sqlite") == "sqlite"
     assert adapters.get_adapter("sqlite").name == "sqlite"
 
 
 def test_engine_name_is_case_and_space_insensitive(monkeypatch):
-    monkeypatch.setenv("ASSAY_ENGINE", "  SQLite ")
+    monkeypatch.setenv("KATTFOT_ENGINE", "  SQLite ")
     assert adapters.resolve_engine() == "sqlite"
 
 
@@ -80,7 +80,7 @@ def test_unknown_engine_refuses_rather_than_defaulting(monkeypatch):
     """A typo'd engine name must not silently fall back. Falling back to sqlite
     would mean a run the operator believed was hitting the warehouse quietly
     returned fixture numbers — the exact failure this repo exists to prevent."""
-    monkeypatch.setenv("ASSAY_ENGINE", "postgres")
+    monkeypatch.setenv("KATTFOT_ENGINE", "postgres")
     with pytest.raises(SystemExit) as exc:
         adapters.resolve_engine()
     assert "postgres" in str(exc.value)
@@ -186,7 +186,7 @@ def test_a_non_iso_date_format_would_have_broken_this():
 
 def test_allow_list_refusal_fires_on_the_sqlite_path(monkeypatch):
     """R2 runs before any adapter is touched, so the engine cannot relax it."""
-    monkeypatch.setenv("ASSAY_ENGINE", "sqlite")
+    monkeypatch.setenv("KATTFOT_ENGINE", "sqlite")
     metric = aq.load_metric("cart_to_checkout_start_conversion")
     with pytest.raises(SystemExit) as exc:
         aq.validate_request(metric, ["warehouse_region"], {})
@@ -194,7 +194,7 @@ def test_allow_list_refusal_fires_on_the_sqlite_path(monkeypatch):
 
 
 def test_filter_allow_list_refusal_fires_on_the_sqlite_path(monkeypatch):
-    monkeypatch.setenv("ASSAY_ENGINE", "sqlite")
+    monkeypatch.setenv("KATTFOT_ENGINE", "sqlite")
     metric = aq.load_metric("payment_approval_rate")
     with pytest.raises(SystemExit) as exc:
         aq.validate_request(metric, [], {"internal_risk_score": "high"})
@@ -206,7 +206,7 @@ def test_filter_allow_list_refusal_fires_on_the_sqlite_path(monkeypatch):
 )
 def test_pii_refusal_fires_on_the_sqlite_path(monkeypatch, column):
     """R6 is a hard refusal with no override, on every engine."""
-    monkeypatch.setenv("ASSAY_ENGINE", "sqlite")
+    monkeypatch.setenv("KATTFOT_ENGINE", "sqlite")
     metric = aq.load_metric("cart_to_checkout_start_conversion")
     with pytest.raises(SystemExit) as exc:
         aq.validate_request(metric, [column], {})
@@ -216,7 +216,7 @@ def test_pii_refusal_fires_on_the_sqlite_path(monkeypatch, column):
 def test_pii_refusal_beats_an_allow_listed_column(monkeypatch):
     """The ordering that matters: R6 is checked BEFORE the allow-lists, so a metric
     that allow-lists a personal column by mistake has not authorized it."""
-    monkeypatch.setenv("ASSAY_ENGINE", "sqlite")
+    monkeypatch.setenv("KATTFOT_ENGINE", "sqlite")
     metric = {
         "name": "bad_metric",
         "allowed_dimensions": ["customer_email"],
@@ -231,7 +231,7 @@ def test_pii_refusal_beats_an_allow_listed_column(monkeypatch):
 def test_tier_refusal_fires_on_the_sqlite_path(monkeypatch, tier):
     """R4 in code, not only in the agent prompt: a helper invoked directly — by a
     script, a scheduled job, another plugin — never sees the agent layer."""
-    monkeypatch.setenv("ASSAY_ENGINE", "sqlite")
+    monkeypatch.setenv("KATTFOT_ENGINE", "sqlite")
     with pytest.raises(SystemExit) as exc:
         aq.validate_tier({"name": "m", "accuracy_tier": tier})
     assert "R4" in str(exc.value)
@@ -624,7 +624,7 @@ def test_fixture_db_is_in_memory(tmp_path):
 
 def test_both_adapters_qualify_a_view_canonically():
     """Canonical SQL is dialect-stable on purpose: an artifact's `query_sha` receipt
-    must not depend on which engine served it, so `assay:verify` works across both.
+    must not depend on which engine served it, so `kattfot:verify` works across both.
     The flattening to a physical sqlite table happens in the translator, once."""
     for name in ("sqlite", "bigquery"):
         adapter = adapters.get_adapter(name)

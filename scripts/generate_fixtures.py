@@ -10,7 +10,7 @@ What it models
 --------------
 ~80,000 checkout sessions (one row per cart) across ~18 monthly cohorts,
 progressing through the eight-stage ladder in
-`plugins/assay/config/checkout-funnel-spec.yaml`:
+`plugins/kattfot/config/checkout-funnel-spec.yaml`:
 
     Cart Created -> Checkout Started -> Payment Submitted -> Payment Decisioned
     -> Order Confirmed -> Shipped -> Delivered -> Return Window Complete
@@ -38,13 +38,13 @@ It also plants three things worth being able to see:
 
 Outputs
 -------
-  data/assay/sample/cart_checkout_funnel_weekly.csv   (committed)
+  data/kattfot/sample/cart_checkout_funnel_weekly.csv   (committed)
       The weekly aggregate the governed query-metric catalog reads: one row per
       cohort_week x channel x payment_method x market x category, with a count
       column per stage. Always the whole book (~78 cohort weeks) — it is small,
       because it is pre-aggregated.
 
-  data/assay/sample/cart_checkout_session_spine.csv   (committed, TRIMMED)
+  data/kattfot/sample/cart_checkout_session_spine.csv   (committed, TRIMMED)
       The session-grain spine the spine-backed skills read: one row per cart with
       stage flags, stage timestamps, and a terminal-branch classification. One
       row per cart is ~280 bytes, so the whole book is ~22 MB — too large to
@@ -63,7 +63,7 @@ are genuinely unsettled for the deep stages.
 
     python3 scripts/generate_fixtures.py                     # both, spine trimmed
     python3 scripts/generate_fixtures.py --spine-weeks 0 \
-        --out-dir /tmp/assay-full                            # the full ~22 MB spine
+        --out-dir /tmp/kattfot-full                            # the full ~22 MB spine
 
 Both are deterministic from the same seed, and the trimmed file is a strict
 subset of the full one, so `--spine-weeks 0` regrows exactly what was trimmed
@@ -92,7 +92,7 @@ import random
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUT_DIR = REPO_ROOT / "data" / "assay" / "sample"
+DEFAULT_OUT_DIR = REPO_ROOT / "data" / "kattfot" / "sample"
 
 WEEKLY_VIEW = "cart_checkout_funnel_weekly"
 SPINE_VIEW = "cart_checkout_session_spine"
@@ -682,7 +682,7 @@ def write_manifest(out_dir: Path, meta: dict) -> Path:
         "python3 scripts/generate_fixtures.py                 # both, spine trimmed",
         "python3 scripts/generate_fixtures.py --emit weekly   # just the aggregate",
         "python3 scripts/generate_fixtures.py --spine-weeks 0 \\",
-        "    --out-dir /tmp/assay-full                        # the full ~22 MB spine",
+        "    --out-dir /tmp/kattfot-full                        # the full ~22 MB spine",
         "```",
         "",
         "Deterministic: the same arguments produce byte-identical files, so a diff",

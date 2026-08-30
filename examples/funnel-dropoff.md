@@ -1,7 +1,7 @@
 ---
 skill: funnel-dropoff
 accuracy_tier: T2
-source_view: ${ASSAY_BIGQUERY_PROJECT}.analytics.cart_checkout_session_spine
+source_view: ${KATTFOT_BIGQUERY_PROJECT}.analytics.cart_checkout_session_spine
 engine: sqlite
 fixture_backed: true
 generated_at: 2026-08-19T10:18:10
@@ -53,7 +53,7 @@ Over the single settled cohort through 2026-06-22; branches sum to 10,362 carts 
 - FIXTURE DATA: this read ran on the sqlite adapter against the committed synthetic fixtures. The numbers describe a seeded random process, not any real business; every downstream chart, dashboard, and PDF is watermarked accordingly.
 - MATURITY: each stage is gated to the cohort weeks mature FOR THAT STAGE; the deepest fully-settled cohort is 2026-06-22, which is what the terminal-branch mix and any single-cohort funnel use. The lags themselves are hand-authored and illustrative, NOT measured — a real deployment regenerates the stage_maturity table by measuring open-anchored settle time on the spine.
 - DISCONTINUITY: the 2026-04-27..2026-08-10 window crosses 2026-06-01 (delivery scan feed switched providers). Ship-to-deliver timestamps come from a different carrier feed after this date, with finer scan granularity. Delivered COUNTS are unaffected; ship-to-deliver percentiles shift by roughly half a day for feed reasons alone. Read a timing trend that crosses this date as two segments.
-- CAVEAT (spine_timestamps_are_utc_and_cohorts_are_iso_monday): Stage timestamps are UTC and `cohort_week` is the ISO-Monday week the cart was CREATED — a cart keeps that cohort forever, even if it confirms three weeks later. A same-day comparison against a local-timezone dashboard will differ by up to a day at the boundary; that is the single most common reconciliation cause (see `assay:reconcile`, cause `TIMEZONE`).
+- CAVEAT (spine_timestamps_are_utc_and_cohorts_are_iso_monday): Stage timestamps are UTC and `cohort_week` is the ISO-Monday week the cart was CREATED — a cart keeps that cohort forever, even if it confirms three weeks later. A same-day comparison against a local-timezone dashboard will differ by up to a day at the boundary; that is the single most common reconciliation cause (see `kattfot:reconcile`, cause `TIMEZONE`).
 
 ## About this artifact
 

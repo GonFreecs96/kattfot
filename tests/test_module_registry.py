@@ -20,7 +20,7 @@ import yaml
 from _shared import spine
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIG_DIR = ROOT / "plugins" / "assay" / "config"
+CONFIG_DIR = ROOT / "plugins" / "kattfot" / "config"
 REGISTRY_PATH = CONFIG_DIR / "modules.yaml"
 
 # The full universe of spine-backed skills a registry entry can name. The
@@ -84,7 +84,7 @@ VALID_SPINE_STATUS = {"live", "declared"}
 VALID_COVERAGE_BASIS = {"declared_estimate", "measured_source_share"}
 
 
-ENTITIES_DIR = ROOT / "plugins" / "assay" / "skills" / "query-metric" / "entities"
+ENTITIES_DIR = ROOT / "plugins" / "kattfot" / "skills" / "query-metric" / "entities"
 
 
 def _load_yaml(path: Path) -> dict:
@@ -578,8 +578,8 @@ def test_default_spec_path_resolves_to_the_checkout_funnel_spec():
     bare `spec_path()` must resolve to the default module's default spine."""
     import os
 
-    assert "ASSAY_FUNNEL_SPEC" not in os.environ, (
-        "ASSAY_FUNNEL_SPEC is set in this environment; this test cannot validate the "
+    assert "KATTFOT_FUNNEL_SPEC" not in os.environ, (
+        "KATTFOT_FUNNEL_SPEC is set in this environment; this test cannot validate the "
         "true default and would give a false result either way"
     )
     assert spine.spec_path().name == "checkout-funnel-spec.yaml"
@@ -588,16 +588,16 @@ def test_default_spec_path_resolves_to_the_checkout_funnel_spec():
 
 
 def test_funnel_spec_env_override_wins():
-    """`ASSAY_FUNNEL_SPEC` beats the registry outright — the seam the maturity tests
+    """`KATTFOT_FUNNEL_SPEC` beats the registry outright — the seam the maturity tests
     use to run against a synthetic spec instead of the live one."""
     import os
 
-    original = os.environ.get("ASSAY_FUNNEL_SPEC")
+    original = os.environ.get("KATTFOT_FUNNEL_SPEC")
     try:
-        os.environ["ASSAY_FUNNEL_SPEC"] = "/tmp/override-spec.yaml"
+        os.environ["KATTFOT_FUNNEL_SPEC"] = "/tmp/override-spec.yaml"
         assert spine.spec_path() == Path("/tmp/override-spec.yaml")
     finally:
         if original is None:
-            os.environ.pop("ASSAY_FUNNEL_SPEC", None)
+            os.environ.pop("KATTFOT_FUNNEL_SPEC", None)
         else:
-            os.environ["ASSAY_FUNNEL_SPEC"] = original
+            os.environ["KATTFOT_FUNNEL_SPEC"] = original

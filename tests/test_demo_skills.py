@@ -23,7 +23,7 @@ import pytest
 import demo_skills
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILLS_DIR = ROOT / "plugins" / "assay" / "skills"
+SKILLS_DIR = ROOT / "plugins" / "kattfot" / "skills"
 
 
 # --- coverage of the skill surface ------------------------------------------
@@ -69,7 +69,7 @@ def test_there_are_exactly_sixteen_functional_skills():
     Sixteen is the count of *functional* skills specifically — the ones with a real
     helper the gate runs end to end. It is not the count of skill directories on
     disk: three more ship as honest outlines (see `OUTLINE_ONLY_SKILLS`), so
-    `plugins/assay/skills/*/SKILL.md` currently totals nineteen. Both numbers are
+    `plugins/kattfot/skills/*/SKILL.md` currently totals nineteen. Both numbers are
     correct at once; they are counting different things.
     """
     assert len(demo_skills.SKILL_ORDER) == 16
@@ -116,24 +116,24 @@ def test_the_runner_scrubs_every_credential_path(tmp_path):
     env = runner.env
     assert env["HOME"] == str(home)
     assert not (home / ".config" / "gcloud").exists()
-    assert env["ASSAY_ENGINE"] == "sqlite"
+    assert env["KATTFOT_ENGINE"] == "sqlite"
     for var in (
         "GOOGLE_APPLICATION_CREDENTIALS",
         "GOOGLE_CLOUD_PROJECT",
-        "ASSAY_BIGQUERY_PROJECT",
+        "KATTFOT_BIGQUERY_PROJECT",
     ):
         assert var not in env, f"{var} survived the scrub"
 
 
 def test_the_runner_scrubs_config_overrides_so_the_gate_tests_the_shipped_config(tmp_path):
-    """A stray `ASSAY_FUNNEL_SPEC` or `ASSAY_METRICS_DIR` in the operator's shell would
+    """A stray `KATTFOT_FUNNEL_SPEC` or `KATTFOT_METRICS_DIR` in the operator's shell would
     make the gate certify somebody's local overrides instead of the committed
     template."""
     home = tmp_path / "home"
     home.mkdir()
     env = demo_skills.Runner(tmp_path / "out", home).env
-    for var in ("ASSAY_FUNNEL_SPEC", "ASSAY_METRICS_DIR", "ASSAY_COVERAGE_FILE",
-                "ASSAY_GUARDRAILS_FILE"):
+    for var in ("KATTFOT_FUNNEL_SPEC", "KATTFOT_METRICS_DIR", "KATTFOT_COVERAGE_FILE",
+                "KATTFOT_GUARDRAILS_FILE"):
         assert var not in env
 
 
@@ -145,7 +145,7 @@ def test_a_failing_step_is_reported_as_a_failure(tmp_path, monkeypatch):
 
     monkeypatch.setitem(demo_skills.STEPS, "catalog", boom)
     monkeypatch.setattr(sys, "argv", ["demo_skills", "--only", "catalog", "--json"])
-    monkeypatch.setenv("ASSAY_OUTPUTS_DIR", str(tmp_path))
+    monkeypatch.setenv("KATTFOT_OUTPUTS_DIR", str(tmp_path))
     code = demo_skills.main()
     assert code == 1
 
@@ -173,7 +173,7 @@ def test_a_slice_of_the_gate_runs_green_in_a_scrubbed_environment(slice_, tmp_pa
          "--only", slice_, "--json"],
         capture_output=True, text=True, cwd=ROOT,
         env={**{k: v for k, v in __import__("os").environ.items()},
-             "ASSAY_OUTPUTS_DIR": str(tmp_path)},
+             "KATTFOT_OUTPUTS_DIR": str(tmp_path)},
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
     summary = json.loads(proc.stdout)
@@ -187,7 +187,7 @@ def test_a_slice_of_the_gate_runs_green_in_a_scrubbed_environment(slice_, tmp_pa
 
 def test_the_spine_artifacts_record_their_maturity_cutoff(tmp_path):
     """The Phase-2 contract: any skill writing an artifact records its cutoff, because
-    `assay:verify` reads it and an artifact without one reports drift every time.
+    `kattfot:verify` reads it and an artifact without one reports drift every time.
 
     Checked on the composed file rather than on the JSON, since the frontmatter is
     where the contract actually lives.
@@ -197,7 +197,7 @@ def test_the_spine_artifacts_record_their_maturity_cutoff(tmp_path):
          "--only", "funnel-dropoff,stage-timing,segment-compare,funnel-pulse", "--json"],
         capture_output=True, text=True, cwd=ROOT,
         env={**{k: v for k, v in __import__("os").environ.items()},
-             "ASSAY_OUTPUTS_DIR": str(tmp_path)},
+             "KATTFOT_OUTPUTS_DIR": str(tmp_path)},
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
     artifacts = sorted(tmp_path.glob("*.md"))

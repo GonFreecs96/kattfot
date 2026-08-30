@@ -2,7 +2,7 @@
   "chart_type": "multi_series_line",
   "metric": "cart_to_checkout_start_conversion",
   "title": "Cart to Checkout Start conversion rate",
-  "subtitle": "T2 \u00b7 ${ASSAY_BIGQUERY_PROJECT}.analytics.cart_checkout_funnel_weekly \u00b7 generated 2026-08-19 10:18:13",
+  "subtitle": "T2 \u00b7 ${KATTFOT_BIGQUERY_PROJECT}.analytics.cart_checkout_funnel_weekly \u00b7 generated 2026-08-19 10:18:13",
   "x_label": "cohort_week",
   "y_label": "Cart to Checkout Start conversion rate",
   "value_format": "percent",

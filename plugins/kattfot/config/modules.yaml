@@ -1,0 +1,154 @@
+# modules.yaml
+# ---------------------------------------------------------------------------
+# The module registry: the single place that knows the on-disk
+#   module -> spine -> funnel-spec-file
+# shape. Read by `_shared/spine.py`'s load_registry() / resolve_spine() /
+# spec_path(); every spine-backed skill resolves its spec through this file (or
+# through the `KATTFOT_FUNNEL_SPEC` env var, which wins outright and exists for
+# tests and one-off overrides).
+#
+# A **module** is a governed business domain. A **spine** is one analysable grain
+# within it — a curated view with one row per instance of that grain, carrying
+# every stage flag, stage timestamp, and terminal-branch classification the
+# spine-backed skills need. A module may have several spines at different grains;
+# exactly one is the default.
+#
+# Rules this registry follows, all enforced by tests/test_module_registry.py:
+#   1. Every spine lists each spine-backed skill under EITHER `skills:` or
+#      `excluded:` — never both, never neither. An `excluded:` entry carries a
+#      real reason: "this grain has no ordered stage ladder", not "TODO".
+#   2. Exactly one `default: true` spine per module with a non-empty `spines:`.
+#   3. A skill under `skills:` must have what it needs in the spec, so inclusion
+#      is never a false promise.
+#   4. `handoff` is declarative (spine -> spine, on a join key) rather than
+#      bespoke SQL buried in a skill.
+#   5. `scoping_doc` is inert at query time — recorded so nobody wires a skill to
+#      a human-facing document by mistake.
+#   6. Every spine declares `status: live | declared`. `live` means a queryable
+#      view exists on the default engine — a committed fixture here, a curated
+#      view in a real deployment. `declared` means the contract is authored and
+#      linted but nothing is provisioned behind it, and a `declared` spine must
+#      therefore list NO skills: promising a skill on a spine with no data is the
+#      exact false promise rule 3 exists to prevent.
+#
+# IMPORTANT: `skills:` / `excluded:` are documentation plus a lint target, NOT a
+# runtime permission gate. resolve_spine() returns the spine's dict as-is and
+# spec_path() reads only `cfg["spec"]`. A caller who passes
+# `--module browse --spine session` to a skill this file marks excluded will run
+# it, then fail downstream — on a missing spec key, or (as with browse) on a view
+# that does not exist. That is intended: a clear error on a real gap beats a
+# silent wrong answer.
+#
+# ---------------------------------------------------------------------------
+# The `handoff` edge
+# ---------------------------------------------------------------------------
+# Declarative cross-grain composition: spine -> spine, on a join key, with a
+# stated coverage. Declarative rather than SQL in a skill because the interesting
+# part is not the join, it is the DENOMINATOR, and a join buried in a helper
+# cannot state one.
+#
+#     handoff:
+#       to: checkout/session          # "module/spine"; both must be registered,
+#                                     # and `on` must be the target spine's
+#                                     # primary key
+#       "on": checkout_session_id     # QUOTE the key — bare `on:` parses as the
+#                                     # boolean True under YAML 1.1 (PyYAML)
+#       coverage: 0.42                # share of SOURCE rows that reach the target
+#       coverage_basis: declared_estimate | measured_source_share
+#       coverage_measured_at: null    # a date iff the basis is measured
+#       coverage_denominator: "..."   # what the share is OF, in words
+#       coverage_note: "..."          # what the number is not
+#
+# `coverage` is the field that invites self-deception, so the linter is strict
+# about it: it must be in (0, 1), the basis must match whether a measurement date
+# is present, the denominator must be stated in words, and a `declared` source
+# spine may only ever carry a `declared_estimate` — you cannot report a
+# measurement from a spine that has no data behind it.
+# ---------------------------------------------------------------------------
+
+modules:
+  checkout:
+    label: "Checkout & Fulfilment"
+    scoping_doc: null
+    spines:
+      session:
+        spec: checkout-funnel-spec.yaml
+        primary_entity: checkout_session
+        default: true
+        status: live
+        # The four spine-backed skills that ship. The metric-layer skills
+        # (query-metric, visualize-metric) are not listed here at all — they
+        # resolve a metric's own `source_view`, not a spine.
+        skills:
+          - funnel-dropoff
+          - stage-timing
+          - segment-compare
+          - funnel-pulse
+          # Included as of the 2026-08 research pass. Excluded through Phase 4
+          # on the argument that now-cast parameters are judgment calls against
+          # a real book; the shipped design dissolves that objection by
+          # ESTIMATING every development factor at run time (Mack 1993
+          # distribution-free chain ladder) rather than authoring any — see the
+          # `nowcast:` block's comment in checkout-funnel-spec.yaml. Outputs
+          # are FORECAST-lane, never T2.
+          - funnel-nowcast
+        excluded:
+          release-scorecard: "Ships as a documented outline only. A causal verdict (BSTS counterfactual or difference-in-differences) needs priors, control-series selection, and pre/post windows that are judgment calls against a real book — and unlike funnel-nowcast's development factors (estimable from the triangle at run time, which is why that skill now ships), they cannot be derived from the spine alone. Computed over generated data they would measure the generator's parameters, not a release."
+          customer-journey: "Ships as a documented outline only, and is grain-scoped to a person spine this module does not register. Session grain cannot express 'did ANY of this customer's sessions reach X' — that is a different denominator, not a different filter."
+
+  # The second module, and the reason the registry has a `handoff` concept at
+  # all. Its spine is `declared`: the stage ladder, terminal branches,
+  # allow-lists, maturity lags, and the handoff key are authored and linted, but
+  # no browse-session view is provisioned and no browse fixture is committed, so
+  # nothing here is queryable and every spine-backed skill is excluded below.
+  #
+  # That is a deliberate, stated limit rather than an unfinished edge: a browse
+  # spine covering the same 19 cohort weeks as the committed checkout spine is
+  # ~2.4x as many rows, because most visits never produce a cart, and carrying
+  # both would put ~16 MB of synthetic CSV in a template whose whole promise is
+  # that a fresh clone runs offline. `coverage.yaml#browse_to_cart_handoff` says
+  # the same thing to a stakeholder.
+  browse:
+    label: "Catalog & Browse"
+    scoping_doc: null
+    spines:
+      session:
+        spec: browse-funnel-spec.yaml
+        primary_entity: browse_session
+        default: true
+        status: declared
+        # Empty because the spine is `declared` — rule 6. Each exclusion below
+        # names the same root cause and what would have to land first.
+        skills: []
+        excluded:
+          funnel-dropoff: "Blocked on data, not on code: the spec carries the `stages:` ladder and `terminal_branches:` this reads, but `analytics.browse_session_spine` is not provisioned and no browse fixture is committed. Land the sessionized browse stream (coverage.yaml#browse_to_cart_handoff, PLAT-112) and this runs unchanged."
+          stage-timing: "Blocked on the same missing view. The spec's `transitions:` are authored and the adapter seam already serves percentiles on both engines, so there is no skill-side gap — only an absent browse_session_spine."
+          segment-compare: "Blocked on the same missing view. Needs `stages` + `transitions`, both authored below; the comparison itself is grain-agnostic."
+          funnel-pulse: "Blocked on the same missing view. The `pulse:` block is authored with a browse-appropriate window (every browse stage settles within a day, so the monitor can run tighter than checkout's return-window tail)."
+          funnel-nowcast: "Blocked twice over: no browse view or fixture is provisioned (the same missing data as every skill above), and the skill would be pointless at this grain even with data — a browse session settles the day it opens, so there is no maturation tail to now-cast. Chain-ladder development factors need a target that genuinely withholds outcomes for weeks."
+          release-scorecard: "Ships as a documented outline only. Its causal parameters (BSTS priors, control-series selection, pre/post windows) are judgment calls against a real book that cannot be estimated from a spine at run time — see the checkout spine's entry for the full reason."
+          customer-journey: "Ships as a documented outline only, and is grain-scoped to a person spine this module does not register. 'Did ANY of this visitor's sessions add to cart' is a different denominator from 'did this session add to cart', not a filter on it."
+        # The edge this module exists to demonstrate. Read `coverage_note`
+        # before using `coverage` for anything.
+        handoff:
+          to: checkout/session
+          "on": checkout_session_id
+          coverage: 0.42
+          coverage_basis: declared_estimate
+          coverage_measured_at: null
+          coverage_denominator: "all browse sessions opened in the window, whether or not they produced a cart"
+          coverage_note: >-
+            This is a CONVERSION RATE, not a join-quality figure, and it is a
+            design-time estimate rather than a measurement — `coverage_basis`
+            says so and the linter enforces the pairing. The denominator is the
+            whole point: a browse session that never produces a cart has no
+            `checkout_session_id` at all, so the share of browse sessions that
+            reach the checkout spine IS the browse-to-cart conversion rate. It
+            cannot be derived from the checkout spine, because a session that
+            produced no cart does not appear there — this is a different
+            population, not a filter. Nor is it a data-quality number: a low
+            value here means shoppers left, not that rows failed to match. Once
+            `analytics.browse_session_spine` exists, measure it as
+            COUNTIF(checkout_session_id IS NOT NULL) / COUNT(*) over the browse
+            spine, set `coverage_basis: measured_source_share`, and record the
+            date.

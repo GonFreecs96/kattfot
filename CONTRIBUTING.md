@@ -1,6 +1,6 @@
-# Contributing to assay
+# Contributing to kattfot
 
-`assay` is a public template for **governed, defensible analytics** over a data
+`kattfot` is a public template for **governed, defensible analytics** over a data
 warehouse. It carries the architecture of a real internal system with zero
 proprietary content, so contributions here fall into two very different
 categories:
@@ -16,7 +16,7 @@ This file is about (1). If you are doing (2), you still want
 [Local setup](#local-setup) and [Running the checks](#running-the-checks)
 below, but you are not bound by [What stays out of a PR](#what-stays-out-of-a-pr).
 
-> **Before anything else: run the scrub gate.** `assay` was scrubbed out of a
+> **Before anything else: run the scrub gate.** `kattfot` was scrubbed out of a
 > private internal repository before it was made public. `python3
 > scripts/scrub_check.py` — a fixed, 40-token deny-list (the private repo's
 > own name, carrier/partner names, internal warehouse identifiers,
@@ -32,7 +32,7 @@ below, but you are not bound by [What stays out of a PR](#what-stays-out-of-a-pr
 ## Repository layout
 
 ```
-plugins/assay/                         # the shipped plugin
+plugins/kattfot/                         # the shipped plugin
   hooks/
     hooks.json                         # Claude Code PreToolUse — see "The access-path hook"
     scripts/bq_path_matcher.py         # shared matcher (both runtimes)
@@ -54,7 +54,7 @@ scripts/                               # repo tooling — NOT part of the shippe
   demo.py                              #   the compose chain, end to end, offline
   demo_skills.py                       #   all sixteen functional skills, offline, as a gate
   scrub_check.py                       #   the deny-token gate
-data/assay/sample/                     # the two committed fixture CSVs + FIXTURES.md
+data/kattfot/sample/                     # the two committed fixture CSVs + FIXTURES.md
 tests/                                 # governance tests + catalog linter (run by pytest)
 docs/                                  # this documentation suite
 outputs/                               # generated artifacts — git-ignored (reproducible)
@@ -67,13 +67,13 @@ examples/                              # committed, real generated output — wh
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r tests/requirements.txt                                     # to run tests
-.venv/bin/pip install -r plugins/assay/skills/query-metric/scripts/requirements.txt  # to run metrics live
-.venv/bin/pip install -r plugins/assay/skills/visualize-metric/scripts/requirements.txt  # charts
-.venv/bin/pip install -r plugins/assay/skills/export-report/scripts/requirements.txt     # PDFs
+.venv/bin/pip install -r plugins/kattfot/skills/query-metric/scripts/requirements.txt  # to run metrics live
+.venv/bin/pip install -r plugins/kattfot/skills/visualize-metric/scripts/requirements.txt  # charts
+.venv/bin/pip install -r plugins/kattfot/skills/export-report/scripts/requirements.txt     # PDFs
 ```
 
-The default `ASSAY_ENGINE=sqlite` needs only `pyyaml` and runs entirely
-offline against the committed fixtures. Live queries (`ASSAY_ENGINE=bigquery`)
+The default `KATTFOT_ENGINE=sqlite` needs only `pyyaml` and runs entirely
+offline against the committed fixtures. Live queries (`KATTFOT_ENGINE=bigquery`)
 authenticate as **you** via ADC (`gcloud auth application-default login`).
 Service-account credentials are refused by design — never wire one in.
 
@@ -123,12 +123,12 @@ language from somewhere else, run the gate before you commit, not after.
 
 ## The access-path hook
 
-`plugins/assay/hooks/hooks.json` registers a Claude Code `PreToolUse` hook on
+`plugins/kattfot/hooks/hooks.json` registers a Claude Code `PreToolUse` hook on
 the `Bash` tool. `.cursor/hooks.json` registers the same policy for Cursor via
 `beforeShellExecution`. Both call into the shared matcher at
-`plugins/assay/hooks/scripts/bq_path_matcher.py` and deny commands that reach
+`plugins/kattfot/hooks/scripts/bq_path_matcher.py` and deny commands that reach
 BigQuery/GCP outside the vetted skill scripts under
-`plugins/assay/skills/*/scripts/` (bare `bq` CLI, `gcloud` referencing
+`plugins/kattfot/skills/*/scripts/` (bare `bq` CLI, `gcloud` referencing
 BigQuery, inline python using `google-cloud-bigquery` directly, curl/wget to
 `googleapis.com`). This is a technical backstop for the sanctioned-path rule
 documented in every `SKILL.md` — it runs outside the model's control.
@@ -147,16 +147,16 @@ Scope and limits, worth knowing before you touch it:
   `tests/test_bq_bypass_hook.py` pins both directions (real vetted script
   invocations must stay allowed; bypass vectors must stay denied).
 - **This does not replace warehouse-side policy tags.** See
-  `plugins/assay/skills/query-metric/doctrine/accuracy-tiers.md` (R6) and
-  `plugins/assay/skills/_shared/pii.py`.
+  `plugins/kattfot/skills/query-metric/doctrine/accuracy-tiers.md` (R6) and
+  `plugins/kattfot/skills/_shared/pii.py`.
 
 ## Adding or changing a metric
 
-1. Read **`plugins/assay/skills/query-metric/AUTHORING.md`** — it documents
+1. Read **`plugins/kattfot/skills/query-metric/AUTHORING.md`** — it documents
    the full YAML contract, the required and optional frontmatter fields, and
    how to write a caveat that earns its place.
 2. Add/edit the metric file under
-   `plugins/assay/skills/query-metric/metrics/<module>/`. The directory name
+   `plugins/kattfot/skills/query-metric/metrics/<module>/`. The directory name
    must equal the metric's own `module:` field — the linter enforces it.
 3. Run `pytest` — the catalog linter validates your frontmatter, and the
    maturity contract checks your `maturity_stage` (if any) resolves against
@@ -168,7 +168,7 @@ Scope and limits, worth knowing before you touch it:
 For a whole new business domain rather than one metric, see
 [`docs/adding-a-module.md`](docs/adding-a-module.md), which points at the
 full checklist in
-`plugins/assay/skills/query-metric/templates/MODULE-ONBOARDING.md`.
+`plugins/kattfot/skills/query-metric/templates/MODULE-ONBOARDING.md`.
 
 ## Documentation ownership
 

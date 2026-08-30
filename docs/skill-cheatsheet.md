@@ -1,7 +1,7 @@
-# assay — Skill Cheat Sheet
+# kattfot — Skill Cheat Sheet
 
 *Deep per-skill reference: invocation, every helper flag, examples, what
-comes back, and the gotchas. The [`SKILL.md`](../plugins/assay/skills/) for
+comes back, and the gotchas. The [`SKILL.md`](../plugins/kattfot/skills/) for
 each skill is always the authoritative source; this is the fast lookup. See
 also the [glossary](glossary.md) and [runbook](runbook.md).*
 
@@ -9,7 +9,7 @@ also the [glossary](glossary.md) and [runbook](runbook.md).*
 
 ## Conventions that apply to every skill (read once)
 
-- **Invoke in chat** as `assay:<skill>`. Most skills take a **plain-English
+- **Invoke in chat** as `kattfot:<skill>`. Most skills take a **plain-English
   question** — the agent parses dimensions, filters, window, and toggles
   from it and then calls the underlying helper script. The helper commands
   below are what the agent runs; you rarely type them by hand, but they show
@@ -26,21 +26,21 @@ also the [glossary](glossary.md) and [runbook](runbook.md).*
   the `SKILL.md` you actually loaded. Substitute that wherever a helper
   path below is shown relative to a skill root.
 - **Auth (warehouse-touching skills):** run as **you** via ADC on
-  `ASSAY_ENGINE=bigquery`. **Exit 2** = ADC missing/stale
+  `KATTFOT_ENGINE=bigquery`. **Exit 2** = ADC missing/stale
   (`gcloud auth application-default login`); **exit 4** = service account
   refused (`unset GOOGLE_APPLICATION_CREDENTIALS`); **exit 5** = an
   allow-list breach (the spine-backed skills). There is no service-account
-  fallback. On the default `ASSAY_ENGINE=sqlite`, no identity is asserted at
+  fallback. On the default `KATTFOT_ENGINE=sqlite`, no identity is asserted at
   all — see [`governance-model.md`](governance-model.md#1-per-user-identity).
 - **`--output-format json`** is what the agent uses to get a parseable blob
   from every helper; **`--today YYYY-MM-DD`** pins the window for
   deterministic/scheduled runs, and is required to get sane numbers when
   reading the committed fixtures (their observation instant is
-  `2026-08-17`, recorded in `data/assay/sample/FIXTURES.md`).
+  `2026-08-17`, recorded in `data/kattfot/sample/FIXTURES.md`).
 - **Output:** query/analysis skills write a markdown artifact to
-  `outputs/assay/{date}-{slug}.md` (override `ASSAY_OUTPUTS_DIR`), print the
+  `outputs/kattfot/{date}-{slug}.md` (override `KATTFOT_OUTPUTS_DIR`), print the
   path, and **do not paste the artifact into chat**. `query-metric` also
-  appends a trace line to `outputs/assay/audit-log.jsonl`.
+  appends a trace line to `outputs/kattfot/audit-log.jsonl`.
 - **Refusals** name the rule (R1–R6) + the offending input, give the
   allow-list, propose no rule-violating workaround, and **write no
   artifact**. R6/PII is a hard, code-enforced refuse with no override.
@@ -63,19 +63,19 @@ engine, or a CSV-stub oracle when `status: dummy`), write a tier-stamped
 artifact with a manifest.
 
 ```
-assay:query-metric <natural-language question>
+kattfot:query-metric <natural-language question>
 ```
 
 **Examples**
 ```
-assay:query-metric Cart to checkout conversion by week for the last 12 weeks, split by channel.
-assay:query-metric What's the payment approval rate for bank transfers in the UK?
-assay:query-metric Show me the return rate by category over the last 26 weeks.
+kattfot:query-metric Cart to checkout conversion by week for the last 12 weeks, split by channel.
+kattfot:query-metric What's the payment approval rate for bank transfers in the UK?
+kattfot:query-metric Show me the return rate by category over the last 26 weeks.
 ```
 
 **Helper**
 ```bash
-<python> "$AQM_ROOT/scripts/assay_query.py" \
+<python> "$AQM_ROOT/scripts/kattfot_query.py" \
   --metric <metric_name> \
   --dimensions <comma-separated|empty> \
   --time-range <last_N_weeks | YYYY-MM-DD:YYYY-MM-DD> \
@@ -90,7 +90,7 @@ assay:query-metric Show me the return rate by category over the last 26 weeks.
 | `--dimensions` | Comma-separated group-by dims; must be in the metric's `allowed_dimensions` (else R2). |
 | `--time-range` | `last_N_weeks` or `YYYY-MM-DD:YYYY-MM-DD`. Omit → the metric's `default_lookback_weeks`. |
 | `--filter col=value` | Repeatable; column must be in `allowed_filters` (else R3); value is **bound**, never inlined. |
-| `--engine` | Override `ASSAY_ENGINE` for one run. |
+| `--engine` | Override `KATTFOT_ENGINE` for one run. |
 | `--today` | Pin "now" for deterministic fixture/scheduled runs. |
 
 **Returns / writes:** JSON with `rows[]` (each with a `_display` map — render
@@ -109,7 +109,7 @@ empty/typo'd-filter condition, doesn't narrate. `MATURITY:` /
 engine every result is `fixture_backed: true`, which becomes a MOCK DATA
 watermark downstream. Out of scope: multiple metrics in one call,
 cross-metric joins, anything T1/T3. After writing it, offers
-`assay:visualize-metric` (offer only, never auto-runs).
+`kattfot:visualize-metric` (offer only, never auto-runs).
 
 ---
 
@@ -119,7 +119,7 @@ cross-metric joins, anything T1/T3. After writing it, offers
 **scope**; pure file reads. Honors `contracts/consumer-api.md`.
 
 ```
-assay:load-context <scope> [--compact] [--limit N] [--offset N] [--freshness-days 90]
+kattfot:load-context <scope> [--compact] [--limit N] [--offset N] [--freshness-days 90]
 ```
 
 | Scope | Returns |
@@ -138,11 +138,11 @@ assay:load-context <scope> [--compact] [--limit N] [--offset N] [--freshness-day
 
 **Examples**
 ```
-assay:load-context catalog
-assay:load-context metric/cart_to_checkout_start_conversion
-assay:load-context module/checkout --compact
-assay:load-context entity/checkout_session
-assay:load-context spines
+kattfot:load-context catalog
+kattfot:load-context metric/cart_to_checkout_start_conversion
+kattfot:load-context module/checkout --compact
+kattfot:load-context entity/checkout_session
+kattfot:load-context spines
 ```
 
 **Returns:** single file = raw content incl. frontmatter; multiple =
@@ -170,12 +170,12 @@ listed with its tier and its body withheld instead.
 grouped by module. The friendly front door. Never queries anything.
 
 ```
-assay:catalog
+kattfot:catalog
 ```
 
 **Helper**
 ```bash
-python3 plugins/assay/skills/catalog/scripts/catalog.py --format markdown
+python3 plugins/kattfot/skills/catalog/scripts/catalog.py --format markdown
 # --format json for machine-readable
 ```
 
@@ -200,28 +200,28 @@ the blocker + owner + ref to watch. Reads `config/coverage.yaml`; never
 runs a query.
 
 ```
-assay:coverage <thing you want to measure>      # or no arg → list everything
+kattfot:coverage <thing you want to measure>      # or no arg → list everything
 ```
 
 **Helper**
 ```bash
 # the whole register, grouped by status — the triage view
-python3 plugins/assay/skills/coverage/scripts/coverage_lookup.py --format markdown
+python3 plugins/kattfot/skills/coverage/scripts/coverage_lookup.py --format markdown
 
 # match a stakeholder's phrasing
-python3 plugins/assay/skills/coverage/scripts/coverage_lookup.py \
+python3 plugins/kattfot/skills/coverage/scripts/coverage_lookup.py \
   --term "why was the cart abandoned" --format markdown
 
 # resolve one entry exactly
-python3 plugins/assay/skills/coverage/scripts/coverage_lookup.py \
+python3 plugins/kattfot/skills/coverage/scripts/coverage_lookup.py \
   --id cart_abandon_reason --format markdown
 ```
 
 **Examples**
 ```
-assay:coverage why was the cart abandoned
-assay:coverage carrier scan events
-assay:coverage promo code attribution
+kattfot:coverage why was the cart abandoned
+kattfot:coverage carrier scan events
+kattfot:coverage promo code attribution
 ```
 
 **Status verdicts:** `live` (yes — points at the metric/spine), `partial`
@@ -229,7 +229,7 @@ assay:coverage promo code attribution
 production), `blocked` (no — blocker + owner), `declined` (no, not coming),
 `flag_gated` (not yet — gating flag/launch). Always gives `blocker`
 **verbatim** + `blocker_ref` + `owner` + `verified:` date. No match → routes
-to `assay:catalog`, never invents a verdict. Exit 0 on a hit, 1 on a clean
+to `kattfot:catalog`, never invents a verdict. Exit 0 on a hit, 1 on a clean
 no-match.
 
 **Gotchas:** never present a `partial` entry's number as complete — the
@@ -248,14 +248,14 @@ metric." Runs an env doctor, walks per-user OAuth, a `SELECT 1` probe. Never
 runs a real metric or a service account.
 
 ```
-assay:setup
+kattfot:setup
 ```
 
 **Helper**
 ```bash
 <python> "$ROOT/scripts/doctor.py"            # offline: gcloud, sa-env, adc, deps
-<python> "$ROOT/scripts/doctor.py" --probe    # adds a SELECT 1 as you against $ASSAY_BIGQUERY_PROJECT
-<python> "$ROOT/scripts/doctor.py" --project <id>   # override ASSAY_BIGQUERY_PROJECT for the probe
+<python> "$ROOT/scripts/doctor.py" --probe    # adds a SELECT 1 as you against $KATTFOT_BIGQUERY_PROJECT
+<python> "$ROOT/scripts/doctor.py" --project <id>   # override KATTFOT_BIGQUERY_PROJECT for the probe
 ```
 
 **Remediation:** `deps` (agent runs the venv install) · `sa-env` (user
@@ -264,9 +264,9 @@ assay:setup
 non-fatal by design — fix reds, re-run until green.
 
 **Gotchas:** there is deliberately **no default project** — export
-`ASSAY_BIGQUERY_PROJECT` before the live probe means anything. The whole
+`KATTFOT_BIGQUERY_PROJECT` before the live probe means anything. The whole
 plugin is already usable (`pytest`, `scripts/demo.py`, a chart, a PDF) before
-any of the doctor's checks pass, because the default `ASSAY_ENGINE=sqlite`
+any of the doctor's checks pass, because the default `KATTFOT_ENGINE=sqlite`
 needs none of them — `setup` is only for pointing at a real warehouse.
 
 ---
@@ -288,19 +288,19 @@ terminal-branch decomposition (share of carts ending in each exit) for one
 segment.
 
 ```
-assay:funnel-dropoff <natural-language question>
+kattfot:funnel-dropoff <natural-language question>
 ```
 
 **Examples**
 ```
-assay:funnel-dropoff where does the mobile_app checkout funnel drop off?
-assay:funnel-dropoff checkout funnel by channel for the last 12 weeks
-assay:funnel-dropoff bank transfer drop-off split by market
+kattfot:funnel-dropoff where does the mobile_app checkout funnel drop off?
+kattfot:funnel-dropoff checkout funnel by channel for the last 12 weeks
+kattfot:funnel-dropoff bank transfer drop-off split by market
 ```
 
 **Helper**
 ```bash
-python3 plugins/assay/skills/funnel-dropoff/scripts/funnel_dropoff.py \
+python3 plugins/kattfot/skills/funnel-dropoff/scripts/funnel_dropoff.py \
   [--group-by <dim>] [--filter <col>=<value> ...] \
   [--time-range last_N_weeks | YYYY-MM-DD:YYYY-MM-DD] \
   [--maturity stage|flag|off] [--no-mature] [--include-legacy] \
@@ -339,19 +339,19 @@ A branch share is a **share of carts**, not a share of exits.
 that reached **both** endpoints.
 
 ```
-assay:stage-timing <natural-language question>
+kattfot:stage-timing <natural-language question>
 ```
 
 **Examples**
 ```
-assay:stage-timing how long does payment take from submit to decision, by payment_method?
-assay:stage-timing confirmation to ship timing for the mobile_app channel over the last quarter
-assay:stage-timing time to deliver by market
+kattfot:stage-timing how long does payment take from submit to decision, by payment_method?
+kattfot:stage-timing confirmation to ship timing for the mobile_app channel over the last quarter
+kattfot:stage-timing time to deliver by market
 ```
 
 **Helper**
 ```bash
-python3 plugins/assay/skills/stage-timing/scripts/stage_timing.py \
+python3 plugins/kattfot/skills/stage-timing/scripts/stage_timing.py \
   [--group-by <dim>[,<dim>]] [--filter <col>=<value> ...] \
   [--transitions confirm_to_ship,payment_to_decision] \
   [--percentiles 50,90,99] \
@@ -394,19 +394,19 @@ terminal-branch leak mix, and timing — as `A` · `B` · `Δ`. Two modes,
 descriptive only — no significance test, no causal claim.
 
 ```
-assay:segment-compare <natural-language question>
+kattfot:segment-compare <natural-language question>
 ```
 
 **Examples**
 ```
-assay:segment-compare within the web channel, compare card_instant vs bank_transfer_review
-assay:segment-compare did the mobile_app funnel change before vs after 2026-06-01?
-assay:segment-compare web vs marketplace, last 12 weeks
+kattfot:segment-compare within the web channel, compare card_instant vs bank_transfer_review
+kattfot:segment-compare did the mobile_app funnel change before vs after 2026-06-01?
+kattfot:segment-compare web vs marketplace, last 12 weeks
 ```
 
 **Helper — filter-compare** (A vs B in one window)
 ```bash
-python3 plugins/assay/skills/segment-compare/scripts/segment_compare.py \
+python3 plugins/kattfot/skills/segment-compare/scripts/segment_compare.py \
   --filter channel=web \
   --a-filter payment_method=card_instant --b-filter payment_method=bank_transfer_review \
   --a-label "Card (instant)" --b-label "Bank transfer (review)" \
@@ -417,7 +417,7 @@ python3 plugins/assay/skills/segment-compare/scripts/segment_compare.py \
 
 **Helper — pre/post** (one segment split at a date)
 ```bash
-python3 plugins/assay/skills/segment-compare/scripts/segment_compare.py \
+python3 plugins/kattfot/skills/segment-compare/scripts/segment_compare.py \
   --filter channel=mobile_app \
   --split-date 2026-06-01 \
   --time-range 2026-03-02:2026-08-10 --today 2026-08-17
@@ -454,19 +454,19 @@ ranked by impact (carts × Δpp). Stage-aware: each stage uses its own mature
 window. Emits a digest; **never posts**.
 
 ```
-assay:funnel-pulse [natural-language, or run with defaults]
+kattfot:funnel-pulse [natural-language, or run with defaults]
 ```
 
 **Examples**
 ```
-assay:funnel-pulse
-assay:funnel-pulse monitor by payment_method
-assay:funnel-pulse pulse for market=us only, last 6 weeks recent vs 12 baseline
+kattfot:funnel-pulse
+kattfot:funnel-pulse monitor by payment_method
+kattfot:funnel-pulse pulse for market=us only, last 6 weeks recent vs 12 baseline
 ```
 
 **Helper**
 ```bash
-python3 plugins/assay/skills/funnel-pulse/scripts/funnel_pulse.py \
+python3 plugins/kattfot/skills/funnel-pulse/scripts/funnel_pulse.py \
   [--by channel] [--filter market=us] \
   [--recent-weeks 4] [--baseline-weeks 8] \
   [--min-started 200] [--threshold-pp 3.0] \
@@ -515,7 +515,7 @@ matures.
 
 ```bash
 # the keystone target — return-window completion, projected for open cohorts
-.venv/bin/python plugins/assay/skills/funnel-nowcast/scripts/funnel_nowcast.py \
+.venv/bin/python plugins/kattfot/skills/funnel-nowcast/scripts/funnel_nowcast.py \
   --today 2026-08-17 --time-range last_19_weeks --stage return_window_complete
 
 # by segment (per-group triangle; a blended curve drifts with mix), with the
@@ -557,7 +557,7 @@ re-run goes through the **same** `query-metric` helper as a first-class
 query — same allow-lists, same PII refusal, same tier gate.
 
 ```
-assay:reconcile
+kattfot:reconcile
 ```
 Gather first (it asks if missing): their value, the metric, **our** window,
 **their** window, their filters/segment, their grain, and (if it's an old
@@ -565,7 +565,7 @@ artifact) its path.
 
 **Helper**
 ```bash
-python3 plugins/assay/skills/reconcile/scripts/reconcile_number.py \
+python3 plugins/kattfot/skills/reconcile/scripts/reconcile_number.py \
   --metric <name> --their-value <float> --time-range <ours> \
   [--their-time-range <theirs>] [--filter col=value ...] \
   [--their-filter col=value ...] [--their-metric <sibling>] \
@@ -578,7 +578,7 @@ python3 plugins/assay/skills/reconcile/scripts/reconcile_number.py \
 | `--time-range` / `--their-time-range` | Our window vs. theirs — window mismatch is the #1 cause. |
 | `--their-filter` | A slice they applied that we did not. |
 | `--their-metric` | A sibling metric, if they measured a different grain. |
-| `--their-artifact` | An old `assay` artifact → enables an exact, offline definition-drift check. |
+| `--their-artifact` | An old `kattfot` artifact → enables an exact, offline definition-drift check. |
 
 **Causes:** `AGREE`, `DATE_WINDOW`, `MATURITY_CUTOFF`, `TIMEZONE`,
 `FILTER_DIFF`, `GRAIN`, `UNKNOWN`. `definition_drift` is reported separately
@@ -602,12 +602,12 @@ mechanism rather than a real disagreement — the helper marks that in
 repo and compare to the artifact's manifest. **No warehouse access.**
 
 ```
-assay:verify <artifact-path>
+kattfot:verify <artifact-path>
 ```
 
 **Helper**
 ```bash
-python3 plugins/assay/skills/verify/scripts/verify_artifact.py <artifact-path>
+python3 plugins/kattfot/skills/verify/scripts/verify_artifact.py <artifact-path>
 ```
 
 **Statuses:** `VERIFY_OK` (consistent — the *number* itself wasn't
@@ -616,7 +616,7 @@ re-run), `DEFINITION_DRIFT` (the metric file changed — shows old→new hash),
 renamed/removed), `MANIFEST_ABSENT` (the artifact predates manifests).
 
 **Gotchas:** deliberately does **not** re-check `result_sha` — that needs a
-live re-run via `assay:query-metric`. Only verifies `query-metric` artifacts
+live re-run via `kattfot:query-metric`. Only verifies `query-metric` artifacts
 (the spine-backed skills' outputs have no manifest yet). Read-only.
 
 ---
@@ -630,15 +630,15 @@ live re-run via `assay:query-metric`. Only verifies `query-metric` artifacts
 Results table; for funnel mode, runs `query-metric` once per stage.
 
 ```
-assay:visualize-metric [artifact path] [intent]
+kattfot:visualize-metric [artifact path] [intent]
 ```
 
 **Examples**
 ```
-assay:visualize-metric                                    # newest artifact, inferred chart
-assay:visualize-metric outputs/assay/2026-08-17-payment-approval-rate.md
-assay:visualize-metric show the checkout funnel
-assay:visualize-metric compare the return rate across categories   # → ranked bar
+kattfot:visualize-metric                                    # newest artifact, inferred chart
+kattfot:visualize-metric outputs/kattfot/2026-08-17-payment-approval-rate.md
+kattfot:visualize-metric show the checkout funnel
+kattfot:visualize-metric compare the return rate across categories   # → ranked bar
 ```
 
 **Helpers** (needs `matplotlib` in the venv)
@@ -689,14 +689,14 @@ records both plus `maturity_cutoff_span`.
 interactive ECharts `.html`. Pure stdlib (no venv/pip/node).
 
 ```
-assay:render-chart [spec.json] [intent/caption]
+kattfot:render-chart [spec.json] [intent/caption]
 ```
 
 **Examples**
 ```
-assay:render-chart                                              # newest spec in the charts dir
-assay:render-chart outputs/assay/charts/2026-08-17-payment-approval-rate.spec.json
-assay:render-chart show the checkout funnel                    # build the spec, then render HTML
+kattfot:render-chart                                              # newest spec in the charts dir
+kattfot:render-chart outputs/kattfot/charts/2026-08-17-payment-approval-rate.spec.json
+kattfot:render-chart show the checkout funnel                    # build the spec, then render HTML
 ```
 
 **Helper**
@@ -735,7 +735,7 @@ blocks **are** `render-chart` specs, drawn by the same shared
 option-builders.
 
 ```
-assay:render-dashboard [spec.dashboard.json] [--theme auto|light|dark] [--cdn]
+kattfot:render-dashboard [spec.dashboard.json] [--theme auto|light|dark] [--cdn]
 ```
 
 **Helper**
@@ -778,9 +778,9 @@ e.g. `## Stage funnel` + `## Where it leaks (terminal branch)`, or
 `skill` is refused.
 
 ```
-assay:export-report [artifact path]
+kattfot:export-report [artifact path]
 ```
-Run `assay:visualize-metric` first so a metric artifact has a
+Run `kattfot:visualize-metric` first so a metric artifact has a
 `## Visualization` section (without one — or for a chart-less spine
 artifact — the PDF is still produced, just chart-less).
 
@@ -793,7 +793,7 @@ artifact — the PDF is still produced, just chart-less).
 ```
 
 **Returns:** prints `{"pdf_path", "title"}`; PDF written next to the
-artifact (`outputs/assay/{date}-{slug}.pdf` by default). Renders **every**
+artifact (`outputs/kattfot/{date}-{slug}.pdf` by default). Renders **every**
 table-bearing section in the artifact's own document order — not a single
 hardcoded `## Results` lookup — so a spine artifact's several
 skill-specific tables all render with no per-skill heading map to maintain
@@ -858,8 +858,8 @@ that lacks governed frontmatter, and never hand-editing a page it owns.
 
 **Why it is not implemented here:** it writes to an external system this
 template has nowhere to write to. Today, distribution means
-`assay:export-report` (a local PDF) or `assay:render-chart` /
-`assay:render-dashboard` (a local HTML file) — a human then sends, hosts, or
+`kattfot:export-report` (a local PDF) or `kattfot:render-chart` /
+`kattfot:render-dashboard` (a local HTML file) — a human then sends, hosts, or
 attaches the file themselves.
 
 ---

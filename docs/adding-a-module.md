@@ -3,7 +3,7 @@
 *This is the single most important doc in a template, because a template
 that nobody successfully forks was never worth writing. The full,
 step-by-step checklist lives in*
-**[`plugins/assay/skills/query-metric/templates/MODULE-ONBOARDING.md`](../plugins/assay/skills/query-metric/templates/MODULE-ONBOARDING.md)**
+**[`plugins/kattfot/skills/query-metric/templates/MODULE-ONBOARDING.md`](../plugins/kattfot/skills/query-metric/templates/MODULE-ONBOARDING.md)**
 *— read it, not a paraphrase of it. This page is the map, not the
 territory: what a module actually is, the two or three steps where people
 lose real time, and why the checklist orders things the way it does.*
@@ -114,7 +114,7 @@ each line) is in `MODULE-ONBOARDING.md`:
 
 ## What you are not forking
 
-Nothing under `plugins/assay/skills/_shared/`, the hooks, or the skill
+Nothing under `plugins/kattfot/skills/_shared/`, the hooks, or the skill
 scripts themselves needs to change for a new domain. If you find yourself
 editing `_shared/pii.py`, `_shared/identity.py`, or a skill's Python to make
 your domain work, stop — that is very likely a sign the domain belongs in

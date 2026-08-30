@@ -13,7 +13,7 @@ anywhere, exactly as the governance suite does.
 
 import pytest
 
-import assay_query as aq
+import kattfot_query as aq
 
 
 # --- nearest-match suggestion ------------------------------------------------

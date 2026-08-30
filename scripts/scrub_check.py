@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """scrub_check.py — the deny-token gate for this public template.
 
-`assay` is the sanitized, public-ready form of a private analytics repo. The
+`kattfot` is the sanitized, public-ready form of a private analytics repo. The
 governance engine, hook matchers, and skill prose were ported across; the
 warehouse identifiers, carrier names, internal project keys, and contact
 addresses were not. This script is the mechanical check that they stay out:
