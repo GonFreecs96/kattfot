@@ -31,10 +31,10 @@ from pathlib import Path
 
 import pytest
 
-import assay_query as aq
+import kattfot_query as aq
 
 ROOT = Path(__file__).resolve().parents[1]
-TEMPLATES = ROOT / "plugins" / "assay" / "skills" / "query-metric" / "templates"
+TEMPLATES = ROOT / "plugins" / "kattfot" / "skills" / "query-metric" / "templates"
 GOLDEN = json.loads((ROOT / "tests" / "golden" / "example_mock.json").read_text())
 
 METRIC = "example_checkout_completion_rate"
@@ -46,8 +46,8 @@ START, END = dt.date(2026, 3, 1), dt.date(2026, 6, 12)
 def point_at_templates(monkeypatch):
     """Resolve the example metric and its sample CSV from the templates dir, so this
     test exercises the shipped starter metric rather than a fixture written for it."""
-    monkeypatch.setenv("ASSAY_METRICS_DIR", str(TEMPLATES))
-    monkeypatch.setenv("ASSAY_SAMPLE_DIR", str(TEMPLATES))
+    monkeypatch.setenv("KATTFOT_METRICS_DIR", str(TEMPLATES))
+    monkeypatch.setenv("KATTFOT_SAMPLE_DIR", str(TEMPLATES))
 
 
 def _independent_aggregate(dimensions, filters, start, end):
@@ -154,7 +154,7 @@ def test_zero_denominator_yields_none_not_a_division_error(tmp_path, monkeypatch
     """`SAFE_DIVIDE` returns NULL on a zero denominator and so must this path — an
     absent rate is a different finding from a zero one, and a ZeroDivisionError would
     take down a whole governed run over one empty cell."""
-    monkeypatch.setenv("ASSAY_SAMPLE_DIR", str(tmp_path))
+    monkeypatch.setenv("KATTFOT_SAMPLE_DIR", str(tmp_path))
     (tmp_path / "example_view.csv").write_text(
         "week_start,segment,sessions_started,sessions_completed\n"
         "2026-04-06,segment_a,0,0\n"
@@ -166,8 +166,8 @@ def test_zero_denominator_yields_none_not_a_division_error(tmp_path, monkeypatch
 
 
 def test_missing_csv_is_a_clean_error(tmp_path, monkeypatch):
-    monkeypatch.setenv("ASSAY_SAMPLE_DIR", str(tmp_path))
+    monkeypatch.setenv("KATTFOT_SAMPLE_DIR", str(tmp_path))
     metric = aq.load_metric(METRIC)
     with pytest.raises(SystemExit) as exc:
         aq.run_query_mock(metric, [], {}, START, END)
-    assert "generate_fixtures" in str(exc.value) or "ASSAY_SAMPLE_DIR" in str(exc.value)
+    assert "generate_fixtures" in str(exc.value) or "KATTFOT_SAMPLE_DIR" in str(exc.value)

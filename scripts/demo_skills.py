@@ -19,13 +19,13 @@ Every step runs as a subprocess whose environment has been scrubbed:
     `~/.config/gcloud/application_default_credentials.json` does not exist and the
     identity guard would refuse a warehouse query outright;
   * `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`, and
-    `ASSAY_BIGQUERY_PROJECT` are removed;
-  * `ASSAY_ENGINE` is pinned to `sqlite`, so every query runs the skill's real
+    `KATTFOT_BIGQUERY_PROJECT` are removed;
+  * `KATTFOT_ENGINE` is pinned to `sqlite`, so every query runs the skill's real
     canonical SQL against the committed fixture CSVs.
 
 Nothing here is mocked. Each skill's real entry point runs, and the two skills that
 write numbers into an artifact record their maturity cutoff in the frontmatter — the
-contract `assay:verify` reads.
+contract `kattfot:verify` reads.
 
 Usage
 -----
@@ -52,10 +52,10 @@ import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SKILLS = REPO_ROOT / "plugins" / "assay" / "skills"
+SKILLS = REPO_ROOT / "plugins" / "kattfot" / "skills"
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-#: The fixtures' observation instant, recorded in data/assay/sample/FIXTURES.md.
+#: The fixtures' observation instant, recorded in data/kattfot/sample/FIXTURES.md.
 #: Reading a fixed fixture at the real today withholds more of the tail every week
 #: until the whole book looks immature, so every step pins it.
 AS_OF = "2026-08-17"
@@ -99,8 +99,8 @@ OUTLINE_ONLY_SKILLS = {
 }
 
 OPTIONAL_DEPS = {
-    "visualize-metric": ("matplotlib", "plugins/assay/skills/visualize-metric/scripts/requirements.txt"),
-    "export-report": ("fpdf", "plugins/assay/skills/export-report/scripts/requirements.txt"),
+    "visualize-metric": ("matplotlib", "plugins/kattfot/skills/visualize-metric/scripts/requirements.txt"),
+    "export-report": ("fpdf", "plugins/kattfot/skills/export-report/scripts/requirements.txt"),
 }
 
 
@@ -113,16 +113,16 @@ class Runner:
         for var in (
             "GOOGLE_APPLICATION_CREDENTIALS",
             "GOOGLE_CLOUD_PROJECT",
-            "ASSAY_BIGQUERY_PROJECT",
-            "ASSAY_FUNNEL_SPEC",
-            "ASSAY_METRICS_DIR",
-            "ASSAY_COVERAGE_FILE",
-            "ASSAY_GUARDRAILS_FILE",
+            "KATTFOT_BIGQUERY_PROJECT",
+            "KATTFOT_FUNNEL_SPEC",
+            "KATTFOT_METRICS_DIR",
+            "KATTFOT_COVERAGE_FILE",
+            "KATTFOT_GUARDRAILS_FILE",
         ):
             self.env.pop(var, None)
         self.env.update({
-            "ASSAY_ENGINE": "sqlite",
-            "ASSAY_OUTPUTS_DIR": str(outputs),
+            "KATTFOT_ENGINE": "sqlite",
+            "KATTFOT_OUTPUTS_DIR": str(outputs),
             "HOME": str(home),
             "MPLCONFIGDIR": str(home / "mpl"),
         })
@@ -158,7 +158,7 @@ def helper(skill: str, script: str) -> Path:
 # The spine skills print JSON; in normal use the AGENT composes the markdown
 # artifact, which is a judgment step. This writes a deliberately plain version so
 # the artifact contract is mechanically checked rather than described — in
-# particular `maturity_cutoff` in the frontmatter, which `assay:verify` reads and
+# particular `maturity_cutoff` in the frontmatter, which `kattfot:verify` reads and
 # whose absence makes verify report drift on every artifact.
 
 
@@ -284,7 +284,7 @@ def step_query_metric(r: Runner, state: dict):
     import demo  # the compose-chain helpers, reused rather than reimplemented
 
     out = r.json([
-        helper("query-metric", "assay_query.py"),
+        helper("query-metric", "kattfot_query.py"),
         "--metric", DEMO_METRIC, "--dimensions", "channel",
         "--time-range", "last_16_weeks", "--today", AS_OF,
     ])
@@ -344,7 +344,7 @@ def step_export_report(r: Runner, state: dict):
     pdf = state["outputs"] / f"{state['slug']}.pdf"
     out = r.json([
         helper("export-report", "report_pdf.py"),
-        "--artifact", state["artifact"], "--out", pdf, "--published-by", "assay demo",
+        "--artifact", state["artifact"], "--out", pdf, "--published-by", "kattfot demo",
     ])
     path = Path(out.get("pdf_path", pdf))
     assert path.exists() and path.stat().st_size > 1000
@@ -625,7 +625,7 @@ def missing_optional(skill: str) -> str | None:
 
 
 def outputs_dir() -> Path:
-    return Path(os.environ.get("ASSAY_OUTPUTS_DIR") or REPO_ROOT / "outputs" / "assay")
+    return Path(os.environ.get("KATTFOT_OUTPUTS_DIR") or REPO_ROOT / "outputs" / "kattfot")
 
 
 def rel(path) -> str:
@@ -654,7 +654,7 @@ def main() -> int:
 
     outputs = outputs_dir()
     outputs.mkdir(parents=True, exist_ok=True)
-    home = Path(tempfile.mkdtemp(prefix="assay-offline-home-"))
+    home = Path(tempfile.mkdtemp(prefix="kattfot-offline-home-"))
     runner = Runner(outputs, home)
     state: dict = {"outputs": outputs}
 
@@ -701,7 +701,7 @@ def main() -> int:
     if args.json:
         print(json.dumps(summary, indent=2))
     else:
-        print("assay — all skills, offline (engine sqlite, no credentials, no network)\n")
+        print("kattfot — all skills, offline (engine sqlite, no credentials, no network)\n")
         for r in results:
             mark = {"ok": "  ok  ", "FAIL": " FAIL ", "deps-missing": " deps "}[r["status"]]
             print(f"[{mark}] {r['skill']:<18} {r['detail']}")

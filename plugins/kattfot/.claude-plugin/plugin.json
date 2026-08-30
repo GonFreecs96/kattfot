@@ -1,0 +1,8 @@
+{
+  "name": "kattfot",
+  "version": "0.1.0",
+  "description": "kattfot — a template for governed, defensible analytics over a data warehouse. Its subject is governance, not dashboards: every number carries an accuracy tier, an allow-listed set of dimensions and filters, a content-addressed provenance receipt, and a refusal path for anything outside those bounds. Queries run as the individual human user via browser OAuth (ADC) and service accounts are refused in code; a PreToolUse hook denies every warehouse access route except the plugin's vetted scripts, so identity and PII guards cannot be skipped. Fifteen skills: discovery (kattfot:catalog, kattfot:coverage, kattfot:load-context), governed metric reads (kattfot:query-metric), spine-backed funnel drop-off with terminal-branch leak attribution (kattfot:funnel-dropoff), percentile stage timing (kattfot:stage-timing), A/B and pre-post comparison (kattfot:segment-compare), a stage-aware regression monitor (kattfot:funnel-pulse), difference attribution (kattfot:reconcile), offline drift checks (kattfot:verify), charting (kattfot:visualize-metric) and stdlib-only interactive rendering (kattfot:render-chart, kattfot:render-dashboard), self-contained PDFs (kattfot:export-report), and guided onboarding (kattfot:setup). Every one of them runs offline against committed fixtures with no cloud account. Fork it and point it at your own warehouse and domain.",
+  "author": {
+    "name": "markreid-lab"
+  }
+}

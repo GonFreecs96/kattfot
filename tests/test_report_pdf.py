@@ -31,7 +31,7 @@ import pytest
 pytest.importorskip("fpdf", reason="fpdf2 is an export-report extra, not a core test dependency")
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = ROOT / "plugins" / "assay" / "skills" / "export-report" / "scripts"
+SCRIPTS = ROOT / "plugins" / "kattfot" / "skills" / "export-report" / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 

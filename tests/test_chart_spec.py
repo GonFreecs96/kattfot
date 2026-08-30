@@ -34,7 +34,7 @@ ARTIFACT = textwrap.dedent(
     display_name: Cart to Checkout Start conversion rate
     accuracy_tier: T2
     source_view: analytics.cart_checkout_funnel_weekly
-    source_project: ${ASSAY_BIGQUERY_PROJECT}
+    source_project: ${KATTFOT_BIGQUERY_PROJECT}
     source_mode: fixture_sql
     fixture_backed: true
     generated_at: 2026-08-17T12:00:00
@@ -410,7 +410,7 @@ def test_funnel_withholds_the_product_when_a_stage_is_null():
 
 
 def test_the_bundled_funnels_config_loads_and_names_real_metrics():
-    import assay_query as aq
+    import kattfot_query as aq
 
     config = cs.load_funnels_config(None)
     assert set(config) >= {"checkout", "checkout-payment"}
@@ -437,6 +437,6 @@ def test_the_committed_example_spec_still_parses():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
-    example = root / "plugins" / "assay" / "skills" / "render-chart" / "examples" / "trend.spec.json"
+    example = root / "plugins" / "kattfot" / "skills" / "render-chart" / "examples" / "trend.spec.json"
     spec = json.loads(example.read_text())
     assert spec["chart_type"] in cs.ALLOWED_CHART_TYPES

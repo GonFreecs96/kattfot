@@ -23,7 +23,7 @@ No warehouse access.
 
 import json
 
-import assay_query as aq
+import kattfot_query as aq
 from _shared import audit_chain as ac
 
 
@@ -268,7 +268,7 @@ def test_verify_cli_covers_the_chain(tmp_path, monkeypatch, capsys):
 
     scripts = (
         Path(__file__).resolve().parents[1]
-        / "plugins" / "assay" / "skills" / "verify" / "scripts"
+        / "plugins" / "kattfot" / "skills" / "verify" / "scripts"
     )
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
@@ -300,7 +300,7 @@ def test_verify_cli_detected_tamper_outranks_cannot_verify(tmp_path, monkeypatch
 
     scripts = (
         Path(__file__).resolve().parents[1]
-        / "plugins" / "assay" / "skills" / "verify" / "scripts"
+        / "plugins" / "kattfot" / "skills" / "verify" / "scripts"
     )
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))

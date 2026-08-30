@@ -1,12 +1,12 @@
-# assay — Runbook
+# kattfot — Runbook
 
 *No-fluff how-to. Pair with the [glossary](glossary.md) (what the terms
 mean), the [skill cheat sheet](skill-cheatsheet.md) (every flag + example),
-and [`what-is-assay.md`](what-is-assay.md) (why this exists). Want to see
+and [`what-is-kattfot.md`](what-is-kattfot.md) (why this exists). Want to see
 real output before running anything? [`examples/`](../examples/) has it.*
 
 Everything here is invoked in chat with Claude Code / Cursor. Skills are
-`assay:<skill>`. When in doubt, start at `assay:catalog`.
+`kattfot:<skill>`. When in doubt, start at `kattfot:catalog`.
 
 ---
 
@@ -27,12 +27,12 @@ three jobs, in the order a new user actually needs them:
 
 ## 1. One-time setup
 
-Nothing is required to start. `ASSAY_ENGINE` defaults to `sqlite`, which
+Nothing is required to start. `KATTFOT_ENGINE` defaults to `sqlite`, which
 reads the committed fixtures — no cloud account, no credentials, no network.
 Everything below is only needed to point at a **real** warehouse.
 
 ```
-assay:setup
+kattfot:setup
 ```
 
 It runs an offline doctor (gcloud, service-account env, ADC, Python deps),
@@ -42,12 +42,12 @@ then a `SELECT 1` probe. Manual equivalent:
 # 1. deps (the sqlite path needs only pyyaml; the bigquery path also needs
 #    google-cloud-bigquery)
 python3 -m venv .venv
-.venv/bin/pip install -r plugins/assay/skills/query-metric/scripts/requirements.txt
+.venv/bin/pip install -r plugins/kattfot/skills/query-metric/scripts/requirements.txt
 .venv/bin/pip install -r tests/requirements.txt          # to run the test suite
 
 # 2. point at your project and auth as YOURSELF (never a service account)
-export ASSAY_ENGINE=bigquery
-export ASSAY_BIGQUERY_PROJECT=<your-gcp-project>
+export KATTFOT_ENGINE=bigquery
+export KATTFOT_BIGQUERY_PROJECT=<your-gcp-project>
 gcloud auth application-default login
 
 # 3. if a query is refused with a service-account error, this is usually why:
@@ -62,7 +62,7 @@ unset GOOGLE_APPLICATION_CREDENTIALS
   no fallback).
 - macOS/Homebrew global `pip install` hits PEP 668; the venv avoids it.
 - There is **no default project baked in.** Shipping one would hand every
-  fork somebody else's billing account — `ASSAY_BIGQUERY_PROJECT` must be set
+  fork somebody else's billing account — `KATTFOT_BIGQUERY_PROJECT` must be set
   explicitly before the live probe means anything.
 
 ---
@@ -71,11 +71,11 @@ unset GOOGLE_APPLICATION_CREDENTIALS
 
 This is the muscle memory to teach a new user (and yourself):
 
-1. **What can I ask?** → `assay:catalog` — every governed metric and latency
+1. **What can I ask?** → `kattfot:catalog` — every governed metric and latency
    KPI, by module.
-2. **Can I measure ⟨X⟩ yet?** → `assay:coverage cart abandon reason` — is it
+2. **Can I measure ⟨X⟩ yet?** → `kattfot:coverage cart abandon reason` — is it
    instrumented; if not, who owns the blocker and what to watch.
-3. **Ask a real question** → `assay:query-metric cart to checkout-started
+3. **Ask a real question** → `kattfot:query-metric cart to checkout-started
    conversion by week for the last 8 weeks` — a governed, tier-stamped
    number, run as you.
 
@@ -90,20 +90,20 @@ A recurring question that has no registered metric belongs in
 
 | You want to… | Use | Notes |
 |---|---|---|
-| Get one governed number / rate | `assay:query-metric` | Plain-English question; it picks the metric, validates the allow-list, writes an artifact. |
-| See what's available to ask | `assay:catalog` | Or `assay:load-context catalog` for the machine form. |
-| Know if something is instrumented | `assay:coverage <thing>` | Returns live / partial / empty / blocked / declined / flag_gated + blocker + owner. |
-| Find **where** a funnel leaks | `assay:funnel-dropoff` | Stage drop-off + terminal-branch attribution for a segment. |
-| Find **how slow** a stage is | `assay:stage-timing` | p50/p90/p99 per transition, with n. |
-| Compare two segments or before/after | `assay:segment-compare` | Shown as `A` · `B` · `Δ`; filter-compare or pre/post. Descriptive only. |
-| Catch a regression across all groups | `assay:funnel-pulse` | Scheduled, mature-cohort sweep; tells you *which* group to dig into. |
-| Explain why our number ≠ their number | `assay:reconcile` | Names the cause (window, maturity, timezone, filter, grain). |
-| Check an old artifact is still valid | `assay:verify` | Offline definition/query drift check via the manifest. |
-| Pull a governed **definition** into another tool | `assay:load-context metric/{slug}` | No warehouse access; the cross-plugin API. |
-| Project where an immature cohort is heading | `assay:funnel-nowcast` | Mack chain ladder over the spine; FORECAST-lane P10/P50/P90, capped at cohort size, with a self-scoring backtest. |
-| Measure a shipped release causally | *(not implemented — see below)* | Outlined as `assay:release-scorecard`. |
-| Answer a question about **people**, not sessions | *(not implemented — see below)* | Outlined as `assay:customer-journey`. |
-| Publish a governed artifact to a wiki | *(not implemented — see below)* | Outlined as `assay:publish`. |
+| Get one governed number / rate | `kattfot:query-metric` | Plain-English question; it picks the metric, validates the allow-list, writes an artifact. |
+| See what's available to ask | `kattfot:catalog` | Or `kattfot:load-context catalog` for the machine form. |
+| Know if something is instrumented | `kattfot:coverage <thing>` | Returns live / partial / empty / blocked / declined / flag_gated + blocker + owner. |
+| Find **where** a funnel leaks | `kattfot:funnel-dropoff` | Stage drop-off + terminal-branch attribution for a segment. |
+| Find **how slow** a stage is | `kattfot:stage-timing` | p50/p90/p99 per transition, with n. |
+| Compare two segments or before/after | `kattfot:segment-compare` | Shown as `A` · `B` · `Δ`; filter-compare or pre/post. Descriptive only. |
+| Catch a regression across all groups | `kattfot:funnel-pulse` | Scheduled, mature-cohort sweep; tells you *which* group to dig into. |
+| Explain why our number ≠ their number | `kattfot:reconcile` | Names the cause (window, maturity, timezone, filter, grain). |
+| Check an old artifact is still valid | `kattfot:verify` | Offline definition/query drift check via the manifest. |
+| Pull a governed **definition** into another tool | `kattfot:load-context metric/{slug}` | No warehouse access; the cross-plugin API. |
+| Project where an immature cohort is heading | `kattfot:funnel-nowcast` | Mack chain ladder over the spine; FORECAST-lane P10/P50/P90, capped at cohort size, with a self-scoring backtest. |
+| Measure a shipped release causally | *(not implemented — see below)* | Outlined as `kattfot:release-scorecard`. |
+| Answer a question about **people**, not sessions | *(not implemented — see below)* | Outlined as `kattfot:customer-journey`. |
+| Publish a governed artifact to a wiki | *(not implemented — see below)* | Outlined as `kattfot:publish`. |
 
 **Rule of thumb:** `query-metric` to put a figure in front of someone;
 `load-context` to ground reasoning in the canonical definition.
@@ -124,31 +124,31 @@ yet. Forking this template and building one is exactly what
 ### 4a. Answer → chart → share
 
 ```
-assay:query-metric payment approval rate by payment_method, last 12 weeks
-assay:visualize-metric          # newest artifact; infers chart type, injects it back
-assay:export-report             # → self-contained PDF
+kattfot:query-metric payment approval rate by payment_method, last 12 weeks
+kattfot:visualize-metric          # newest artifact; infers chart type, injects it back
+kattfot:export-report             # → self-contained PDF
 #   …or…
-assay:render-chart               # → interactive self-contained HTML
+kattfot:render-chart               # → interactive self-contained HTML
 ```
 
-- `query-metric` writes `outputs/assay/{date}-{slug}.md` and prints the path
+- `query-metric` writes `outputs/kattfot/{date}-{slug}.md` and prints the path
   — it does **not** paste the artifact into chat.
 - `visualize-metric` and `render-chart` read the **same chart-spec JSON**, so
   the PNG (for the PDF) and the HTML (for sharing) are the same governed
   data.
-- Funnel chart in one shot: `assay:visualize-metric show the checkout
+- Funnel chart in one shot: `kattfot:visualize-metric show the checkout
   funnel` (composes the stage metrics from `funnels.yaml`).
 - Want a whole multi-panel view instead of one chart?
-  `assay:render-dashboard` composes several chart specs, KPI cards, and
+  `kattfot:render-dashboard` composes several chart specs, KPI cards, and
   tables into one governed HTML.
 
 ### 4b. Investigate a regression (the deep-dive loop)
 
 ```
-assay:funnel-pulse                          # broad sweep → which group moved?
-assay:funnel-dropoff <that segment>         # where in the funnel it leaks (terminal branches)
-assay:stage-timing <that segment>           # did a stage just get slower?
-assay:segment-compare before vs after <ship date>   # describe the shift (no causal claim)
+kattfot:funnel-pulse                          # broad sweep → which group moved?
+kattfot:funnel-dropoff <that segment>         # where in the funnel it leaks (terminal branches)
+kattfot:stage-timing <that segment>           # did a stage just get slower?
+kattfot:segment-compare before vs after <ship date>   # describe the shift (no causal claim)
 ```
 
 This is the recurring shape of a real investigation, turned into governed
@@ -164,10 +164,10 @@ outlined skills — not available in this template.
 > surfaces within days while deep stages stay settled. `--maturity flag`
 > reverts to a legacy single-window gate.
 
-### 4c. "My dashboard says X, assay says Y"
+### 4c. "My dashboard says X, kattfot says Y"
 
 ```
-assay:reconcile
+kattfot:reconcile
 ```
 
 Gather first (it asks if you don't give them): their value, the metric, our
@@ -182,22 +182,22 @@ read and one that reaches into recent, still-immature cohorts is enormous
 ### 4d. "Can we even measure this?"
 
 ```
-assay:coverage cart abandonment
+kattfot:coverage cart abandonment
 ```
 
 If `blocked`/`empty`/`flag_gated`, it gives the blocker, the owner, and the
 ref to watch — so the ask stops bouncing back days later as "sorry, no." If
-it's not in the register, it routes you to `assay:catalog` rather than
+it's not in the register, it routes you to `kattfot:catalog` rather than
 guessing at a verdict.
 
 ### 4e. Hand a governed number to another tool
 
 Consumers call the read APIs and parse the contract
-(`plugins/assay/contracts/consumer-api.md`):
+(`plugins/kattfot/contracts/consumer-api.md`):
 
-- `assay:load-context metric/cart_to_checkout_start_conversion` → the
+- `kattfot:load-context metric/cart_to_checkout_start_conversion` → the
   canonical definition.
-- `assay:query-metric …` → a live number + manifest.
+- `kattfot:query-metric …` → a live number + manifest.
 
 Watch for the sentinels (`TIER_REFUSED`, `OFF_ALLOWLIST`, `AUTH_REQUIRED`, …)
 and the `STALE:` / `MATURITY:` suffixes — they are stable, prefix-matchable
@@ -207,15 +207,15 @@ lines. See the [glossary](glossary.md#error-sentinels-the-consumer-api-contract)
 
 ## 5. Authoring & maintaining metrics
 
-Full detail in `plugins/assay/skills/query-metric/AUTHORING.md` — read it
+Full detail in `plugins/kattfot/skills/query-metric/AUTHORING.md` — read it
 before writing a fifth caveat that says the same thing three ways.
 
 ### Add a metric (dummy → live lifecycle)
 
 ```bash
 # 1. copy the annotated template
-cp plugins/assay/skills/query-metric/templates/example-metric.md \
-   plugins/assay/skills/query-metric/metrics/checkout/<your-metric>.md
+cp plugins/kattfot/skills/query-metric/templates/example-metric.md \
+   plugins/kattfot/skills/query-metric/metrics/checkout/<your-metric>.md
 
 # 2. edit YAML: name, display_name, accuracy_tier: T2, source_view,
 #    source_project, time_column, numerator_column, denominator_column,
@@ -223,10 +223,10 @@ cp plugins/assay/skills/query-metric/templates/example-metric.md \
 #    default_lookback_weeks, entity, module, status: dummy
 
 # 3. (dummy mode) drop a sample CSV with the referenced columns
-#    data/assay/sample/<view_slug>.csv, or reuse the shipped example_view.csv
+#    data/kattfot/sample/<view_slug>.csv, or reuse the shipped example_view.csv
 
 # 4. smoke-test in dummy mode — inspect the artifact + the SQL in Provenance
-assay:query-metric <question that maps to your metric>
+kattfot:query-metric <question that maps to your metric>
 
 # 5. validate frontmatter
 .venv/bin/python -m pytest
@@ -249,7 +249,7 @@ metric's `maturity_stage` (if set) resolves against the module's funnel spec;
 at least one query spot-checked against an external reference.
 
 **Bundled vs. consumer metrics:** the helper walks the consumer dir
-(`$ASSAY_METRICS_DIR`, default `context/assay/metrics/`) first, then the
+(`$KATTFOT_METRICS_DIR`, default `context/kattfot/metrics/`) first, then the
 plugin-bundled catalog — **consumer wins on a `name:` collision**, so a team
 can override one metric without forking the catalog. Adding to the
 *bundled* catalog is a PR against this repository (see
@@ -271,14 +271,14 @@ can override one metric without forking the catalog. Adding to the
 
 ## 7. Publishing
 
-This template does **not** ship a publishing path. `assay:publish` is one of
+This template does **not** ship a publishing path. `kattfot:publish` is one of
 the three outlined skills — the intended shape (a read-only wiki page,
 resolved through a page registry, composed with a tier stamp and verbatim
 caveats, gated on explicit human approval before any write) is described in
 the [skill cheat sheet](skill-cheatsheet.md#outlined-skills-documented-not-implemented),
 but there is no script behind it in this repository. Distribution today
-means `assay:export-report` (a local PDF) or `assay:render-chart` /
-`assay:render-dashboard` (a local HTML file) — both of which a human then
+means `kattfot:export-report` (a local PDF) or `kattfot:render-chart` /
+`kattfot:render-dashboard` (a local HTML file) — both of which a human then
 sends, hosts, or attaches themselves.
 
 ---
@@ -303,7 +303,7 @@ limits) in [`governance-model.md`](governance-model.md).
   Surface them; don't suppress them.
 - **Every number carries a receipt.** The manifest
   (`metric_def_sha` / `query_sha` / `result_sha`) plus the append-only
-  audit log make a number replayable and attributable. Run `assay:verify`
+  audit log make a number replayable and attributable. Run `kattfot:verify`
   on any artifact you're about to reuse.
 - **One way to the warehouse.** The access-path hook denies every route
   except the vetted skill scripts — never satisfy "just check something
@@ -342,7 +342,7 @@ limits) in [`governance-model.md`](governance-model.md).
   expect `--module browse --spine session` to return real numbers.
 - **On the sqlite engine, no identity is asserted.** That is a documented,
   tested exception (see [`governance-model.md`](governance-model.md#1-per-user-identity)), not an oversight — but it is
-  worth knowing before assuming "assay always runs as a real person" holds
+  worth knowing before assuming "kattfot always runs as a real person" holds
   on every path.
 
 ---
@@ -350,8 +350,8 @@ limits) in [`governance-model.md`](governance-model.md).
 ## 10. Where things live (fast map)
 
 ```
-plugins/assay/skills/<skill>/SKILL.md         # how each skill behaves (the source of truth)
-plugins/assay/skills/query-metric/
+plugins/kattfot/skills/<skill>/SKILL.md         # how each skill behaves (the source of truth)
+plugins/kattfot/skills/query-metric/
   AUTHORING.md                                # how to add/change a metric
   doctrine/accuracy-tiers.md                  # tiers + refusal rules R1–R6
   doctrine/ownership-governance.md            # owner / review-cadence doctrine
@@ -359,8 +359,8 @@ plugins/assay/skills/query-metric/
   entities/                                   # the named entity model
   views/checkout-views.md                     # spine/weekly data dictionary + caveats
   templates/MODULE-ONBOARDING.md              # the "make this yours" checklist
-plugins/assay/config/                         # modules.yaml, funnel specs, funnels, coverage, guardrails
-plugins/assay/contracts/consumer-api.md       # the cross-plugin response contract
+plugins/kattfot/config/                         # modules.yaml, funnel specs, funnels, coverage, guardrails
+plugins/kattfot/contracts/consumer-api.md       # the cross-plugin response contract
 scripts/                                      # generate_fixtures, demo, demo_skills, scrub_check
 tests/                                        # governance tests + catalog linter
 outputs/                                      # generated artifacts (git-ignored, reproducible)

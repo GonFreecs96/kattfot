@@ -1,6 +1,6 @@
 # Examples
 
-Eight sample outputs, committed so a reader can see what `assay` actually
+Eight sample outputs, committed so a reader can see what `kattfot` actually
 produces without cloning the repo or running anything.
 
 **These are real generated output, not mockups.** Every file here came out of
@@ -9,15 +9,15 @@ and `scripts/demo_skills.py` — against the committed fixture CSVs on the
 `sqlite` engine, then copying the result here verbatim. Nothing was
 hand-written. The only edits made to any file below are two relative link
 paths inside `query-metric-artifact.md` (pointing at `query-metric-chart.png`
-and `chart-spec.json` instead of their original `outputs/assay/charts/...`
+and `chart-spec.json` instead of their original `outputs/kattfot/charts/...`
 locations), so the artifact's embedded image and spec link resolve from this
 flat folder. No numbers, text, or structure were touched.
 
-**`${ASSAY_BIGQUERY_PROJECT}` in these files is a literal, unexpanded
+**`${KATTFOT_BIGQUERY_PROJECT}` in these files is a literal, unexpanded
 placeholder, not a broken value.** This template ships with no real project
 id, so every artifact's `source_view` / `source_project` carries the
 environment-variable name verbatim rather than a substituted (and
-inevitably fake-looking) project string — point `ASSAY_BIGQUERY_PROJECT` at
+inevitably fake-looking) project string — point `KATTFOT_BIGQUERY_PROJECT` at
 a real project and it resolves normally.
 
 Because they're fixture-backed rather than warehouse-backed, every one of
@@ -50,7 +50,7 @@ interactive twin, and the PDF export side by side. The artifact has
 everything the format promises: YAML frontmatter with the accuracy tier and
 manifest fingerprints, a Results table, a `## Visualization` section, a
 `## Narrative`, verbatim `## Caveats` and run warnings, and a `## Provenance`
-section with the parameterized SQL and the manifest receipt (`assay:verify`
+section with the parameterized SQL and the manifest receipt (`kattfot:verify`
 checks these fingerprints offline, without touching a warehouse).
 
 `funnel-dropoff.md` is included because it demonstrates something a plain
@@ -83,8 +83,8 @@ preview. To reproduce (or refresh) it yourself:
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r tests/requirements.txt
-.venv/bin/pip install -r plugins/assay/skills/visualize-metric/scripts/requirements.txt
-.venv/bin/pip install -r plugins/assay/skills/export-report/scripts/requirements.txt
+.venv/bin/pip install -r plugins/kattfot/skills/visualize-metric/scripts/requirements.txt
+.venv/bin/pip install -r plugins/kattfot/skills/export-report/scripts/requirements.txt
 
 # every skill, including render-dashboard and the spine analyses — run this FIRST
 .venv/bin/python scripts/demo_skills.py
@@ -93,9 +93,9 @@ python3 -m venv .venv
 .venv/bin/python scripts/demo.py --all
 
 # a PDF export of a spine-analysis artifact (demo_skills.py builds the .md, not the PDF)
-.venv/bin/python plugins/assay/skills/export-report/scripts/report_pdf.py \
-  --artifact outputs/assay/2026-08-17-funnel-dropoff.md \
-  --out outputs/assay/2026-08-17-funnel-dropoff.pdf --published-by "assay demo"
+.venv/bin/python plugins/kattfot/skills/export-report/scripts/report_pdf.py \
+  --artifact outputs/kattfot/2026-08-17-funnel-dropoff.md \
+  --out outputs/kattfot/2026-08-17-funnel-dropoff.pdf --published-by "kattfot demo"
 ```
 
 Run `demo_skills.py` before `demo.py --all`, not after: both write the same
@@ -103,7 +103,7 @@ metric-chain artifact filename, but only `demo.py --all` re-injects the
 `## Visualization` section into it — running `demo_skills.py` second would
 silently strip the chart back out.
 
-Both scripts write into `outputs/assay/` (git-ignored, since it's
+Both scripts write into `outputs/kattfot/` (git-ignored, since it's
 regenerated), with the real "as of" date in each filename. The files in this
 folder are copies of that run, renamed for a stable layout so they can be
 linked to directly.

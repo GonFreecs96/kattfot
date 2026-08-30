@@ -1,4 +1,4 @@
-"""Setup doctor: non-fatal environment checks for `/assay:setup`.
+"""Setup doctor: non-fatal environment checks for `/kattfot:setup`.
 
 Unlike `_shared.identity.assert_user_identity` (which exits), the doctor reports
 the full state at once. These tests lock the per-check verdicts that drive the
@@ -127,7 +127,7 @@ def test_render_all_ok_message():
 
 def test_no_default_project_is_hardcoded():
     """DEFAULT_PROJECT is exactly the env var — never a literal fallback."""
-    assert doctor.DEFAULT_PROJECT == os.environ.get("ASSAY_BIGQUERY_PROJECT")
+    assert doctor.DEFAULT_PROJECT == os.environ.get("KATTFOT_BIGQUERY_PROJECT")
 
 
 def test_probe_without_project_is_a_fixable_check():
@@ -136,4 +136,4 @@ def test_probe_without_project_is_a_fixable_check():
     r = doctor.probe_bigquery(project=None)
     assert r["status"] == doctor.FAIL
     assert r["check"] == "probe"
-    assert "ASSAY_BIGQUERY_PROJECT" in r["fix"]
+    assert "KATTFOT_BIGQUERY_PROJECT" in r["fix"]

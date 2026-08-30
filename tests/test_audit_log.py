@@ -15,7 +15,7 @@ No warehouse access.
 
 import json
 
-import assay_query as aq
+import kattfot_query as aq
 
 
 SAMPLE_RESULT = {
@@ -26,7 +26,7 @@ SAMPLE_RESULT = {
     "engine": "sqlite",
     "fixture_backed": True,
     "source_view": "analytics.cart_checkout_funnel_weekly",
-    "source_project": "${ASSAY_BIGQUERY_PROJECT}",
+    "source_project": "${KATTFOT_BIGQUERY_PROJECT}",
     "dimensions": ["channel"],
     "filters": {"market": "us"},
     "time_range": {"start": "2026-04-27", "end": "2026-08-10"},
@@ -125,9 +125,9 @@ def test_append_audit_serializes_dates(tmp_path):
 
 
 def test_audit_log_path_honours_the_env_overrides(monkeypatch, tmp_path):
-    monkeypatch.setenv("ASSAY_AUDIT_LOG", str(tmp_path / "custom.jsonl"))
+    monkeypatch.setenv("KATTFOT_AUDIT_LOG", str(tmp_path / "custom.jsonl"))
     assert aq.audit_log_path() == tmp_path / "custom.jsonl"
 
-    monkeypatch.delenv("ASSAY_AUDIT_LOG")
-    monkeypatch.setenv("ASSAY_OUTPUTS_DIR", str(tmp_path / "out"))
+    monkeypatch.delenv("KATTFOT_AUDIT_LOG")
+    monkeypatch.setenv("KATTFOT_OUTPUTS_DIR", str(tmp_path / "out"))
     assert aq.audit_log_path() == tmp_path / "out" / "audit-log.jsonl"

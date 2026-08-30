@@ -24,10 +24,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MATCHER_PATH = (
-    ROOT / "plugins" / "assay" / "hooks" / "scripts" / "bq_path_matcher.py"
+    ROOT / "plugins" / "kattfot" / "hooks" / "scripts" / "bq_path_matcher.py"
 )
 CLAUDE_HOOK = (
-    ROOT / "plugins" / "assay" / "hooks" / "scripts" / "enforce_bq_path.py"
+    ROOT / "plugins" / "kattfot" / "hooks" / "scripts" / "enforce_bq_path.py"
 )
 CURSOR_HOOK = ROOT / ".cursor" / "hooks" / "enforce_bq_path.py"
 
@@ -41,22 +41,22 @@ deny_reason = matcher.deny_reason
 
 MUST_ALLOW = [
     # query-metric — every documented plugin-root resolution form.
-    'python3 plugins/assay/skills/query-metric/scripts/assay_query.py --metric cart-to-checkout-started-conversion --time-range last_8_weeks --output-format json',
-    'python3 "${CLAUDE_PLUGIN_ROOT}/skills/query-metric/scripts/assay_query.py" --metric foo --output-format json',
-    'python3 .cursor/plugins/assay/skills/query-metric/scripts/assay_query.py --metric foo',
-    '.venv/bin/python plugins/assay/skills/query-metric/scripts/assay_query.py --metric foo',
+    'python3 plugins/kattfot/skills/query-metric/scripts/kattfot_query.py --metric cart-to-checkout-started-conversion --time-range last_8_weeks --output-format json',
+    'python3 "${CLAUDE_PLUGIN_ROOT}/skills/query-metric/scripts/kattfot_query.py" --metric foo --output-format json',
+    'python3 .cursor/plugins/kattfot/skills/query-metric/scripts/kattfot_query.py --metric foo',
+    '.venv/bin/python plugins/kattfot/skills/query-metric/scripts/kattfot_query.py --metric foo',
     # Spine-backed skills.
-    'python3 plugins/assay/skills/funnel-dropoff/scripts/funnel_dropoff.py --funnel checkout --time-range last_4_weeks',
-    'python3 plugins/assay/skills/funnel-pulse/scripts/funnel_pulse.py --funnel checkout',
-    'python3 plugins/assay/skills/stage-timing/scripts/stage_timing.py --kpi time-to-order-confirmed-days --time-range last_8_weeks',
-    'python3 plugins/assay/skills/stage-timing/scripts/calibrate_maturity.py --kpi time-to-order-confirmed-days',
-    'python3 plugins/assay/skills/segment-compare/scripts/segment_compare.py --mode ab --segment-a channel=paid_social --segment-b channel=email',
-    'python3 plugins/assay/skills/reconcile/scripts/reconcile_number.py --metric payment_approval_rate --their-value 0.81 --time-range last_8_weeks',
+    'python3 plugins/kattfot/skills/funnel-dropoff/scripts/funnel_dropoff.py --funnel checkout --time-range last_4_weeks',
+    'python3 plugins/kattfot/skills/funnel-pulse/scripts/funnel_pulse.py --funnel checkout',
+    'python3 plugins/kattfot/skills/stage-timing/scripts/stage_timing.py --kpi time-to-order-confirmed-days --time-range last_8_weeks',
+    'python3 plugins/kattfot/skills/stage-timing/scripts/calibrate_maturity.py --kpi time-to-order-confirmed-days',
+    'python3 plugins/kattfot/skills/segment-compare/scripts/segment_compare.py --mode ab --segment-a channel=paid_social --segment-b channel=email',
+    'python3 plugins/kattfot/skills/reconcile/scripts/reconcile_number.py --metric payment_approval_rate --their-value 0.81 --time-range last_8_weeks',
     # setup doctor (offline + live probe).
-    'python3 plugins/assay/skills/setup/scripts/doctor.py',
-    'python3 plugins/assay/skills/setup/scripts/doctor.py --probe',
+    'python3 plugins/kattfot/skills/setup/scripts/doctor.py',
+    'python3 plugins/kattfot/skills/setup/scripts/doctor.py --probe',
     # Chained sanctioned scripts.
-    'python3 plugins/assay/skills/setup/scripts/doctor.py && python3 plugins/assay/skills/query-metric/scripts/assay_query.py --metric foo',
+    'python3 plugins/kattfot/skills/setup/scripts/doctor.py && python3 plugins/kattfot/skills/query-metric/scripts/kattfot_query.py --metric foo',
     # Required auth / deps — must never be blocked.
     "gcloud auth application-default login",
     "gcloud config set project my-warehouse-uat",
@@ -64,23 +64,23 @@ MUST_ALLOW = [
     "pip install --user google-cloud-bigquery",
     "pip3 install --user google-cloud-bigquery pyyaml",
     # Non-warehouse plugin scripts (command text never names the client library).
-    "python3 plugins/assay/skills/verify/scripts/verify_artifact.py outputs/assay/foo.md",
-    "python3 plugins/assay/skills/visualize-metric/scripts/chart_spec.py --artifact foo.md",
-    "python3 plugins/assay/skills/render-chart/scripts/render_html.py --spec charts/foo.spec.json",
-    "python3 plugins/assay/skills/render-dashboard/scripts/render_dashboard.py --spec foo.dashboard.json",
+    "python3 plugins/kattfot/skills/verify/scripts/verify_artifact.py outputs/kattfot/foo.md",
+    "python3 plugins/kattfot/skills/visualize-metric/scripts/chart_spec.py --artifact foo.md",
+    "python3 plugins/kattfot/skills/render-chart/scripts/render_html.py --spec charts/foo.spec.json",
+    "python3 plugins/kattfot/skills/render-dashboard/scripts/render_dashboard.py --spec foo.dashboard.json",
     # Offline test suites.
     "python3 -m pytest tests/test_pii_refusal.py",
     "python3 tests/test_bq_bypass_hook.py",
     # The repo's own scrub gate.
     "python3 scripts/scrub_check.py",
     # Ordinary dev commands.
-    'git commit -m "fix assay skill wording"',
+    'git commit -m "fix kattfot skill wording"',
     'git commit -m "Harden BigQuery access docs"',
     "git status",
-    "ls -la plugins/assay/skills/query-metric",
-    "cat plugins/assay/skills/query-metric/scripts/assay_query.py",
+    "ls -la plugins/kattfot/skills/query-metric",
+    "cat plugins/kattfot/skills/query-metric/scripts/kattfot_query.py",
     'grep -rn "bigquery" README.md',
-    "curl -s https://api.github.com/repos/markreid-lab/assay",
+    "curl -s https://api.github.com/repos/markreid-lab/kattfot",
     "wget https://example.com/file.txt",
     # Path fragments that merely contain "dbt"/"mf" as a substring or a path
     # component, never as a command token, must stay allowed.
@@ -97,7 +97,7 @@ MUST_ALLOW = [
     'gh pr create --body "| dbt promotion | Shipped |"',
     'grep -n "dbt\\|mf " tests/test_bq_bypass_hook.py',
     'git commit -m "docs: promote the views into the dbt DAG"',
-    'git commit -m "docs(assay): dbt-ize the two hand-deployed views"',
+    'git commit -m "docs(kattfot): dbt-ize the two hand-deployed views"',
     'git commit -m "note that dbt models now carry schema tests"',
     "echo 'the dbt project lives in a separate repo'",
     # Flags without a subcommand never reach the warehouse.
@@ -131,8 +131,8 @@ MUST_DENY = [
     "curl https://bigquery.googleapis.com/bigquery/v2/projects/x/datasets",
     "wget https://www.googleapis.com/bigquery/v2/projects/x/queries",
     # Adversarial: chain a real sanctioned call with a bypass afterward.
-    'python3 plugins/assay/skills/query-metric/scripts/assay_query.py --metric foo && bq query "SELECT email FROM t"',
-    'python3 plugins/assay/skills/setup/scripts/doctor.py --probe; bq ls',
+    'python3 plugins/kattfot/skills/query-metric/scripts/kattfot_query.py --metric foo && bq query "SELECT email FROM t"',
+    'python3 plugins/kattfot/skills/setup/scripts/doctor.py --probe; bq ls',
     'bash -c "bq query \'SELECT email FROM t\'"',
     'sh -c "bq ls"',
     "bash -c \"python3 -c 'from google.cloud import bigquery; bigquery.Client()'\"",
@@ -205,7 +205,7 @@ MUST_DENY = [
     "cd vendor/data-dbt && dbt run",
     "mf query --metrics cart_to_checkout_started_conversion --group-by metric_time",
     "mf health-checks",
-    'python3 plugins/assay/skills/query-metric/scripts/assay_query.py --metric foo && dbt run',
+    'python3 plugins/kattfot/skills/query-metric/scripts/kattfot_query.py --metric foo && dbt run',
     'bash -c "dbt run --select foo"',
     'sh -c "mf query --metrics foo"',
     # Global flags before the subcommand, including a flag taking a
@@ -272,7 +272,7 @@ def test_claude_adapter_deny_and_allow():
         {
             "tool_name": "Bash",
             "tool_input": {
-                "command": "python3 plugins/assay/skills/query-metric/scripts/assay_query.py --metric foo",
+                "command": "python3 plugins/kattfot/skills/query-metric/scripts/kattfot_query.py --metric foo",
             },
         },
     )
@@ -298,7 +298,7 @@ def test_cursor_adapter_deny_and_allow():
     code, out = _run_hook(
         CURSOR_HOOK,
         {
-            "command": "python3 plugins/assay/skills/funnel-dropoff/scripts/funnel_dropoff.py --funnel checkout",
+            "command": "python3 plugins/kattfot/skills/funnel-dropoff/scripts/funnel_dropoff.py --funnel checkout",
         },
     )
     assert code == 0

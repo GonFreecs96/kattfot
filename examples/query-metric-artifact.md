@@ -3,7 +3,7 @@ metric: cart_to_checkout_start_conversion
 display_name: Cart to Checkout Start conversion rate
 accuracy_tier: T2
 source_view: analytics.cart_checkout_funnel_weekly
-source_project: ${ASSAY_BIGQUERY_PROJECT}
+source_project: ${KATTFOT_BIGQUERY_PROJECT}
 source_mode: fixture_sql
 engine: sqlite
 fixture_backed: true
@@ -24,13 +24,13 @@ manifest:
 
 **Accuracy tier:** T2 (operational — decision-grade for product and process
 discussions, not regulator-facing)
-**Source view:** `${ASSAY_BIGQUERY_PROJECT}.analytics.cart_checkout_funnel_weekly` (fixture_sql)
+**Source view:** `${KATTFOT_BIGQUERY_PROJECT}.analytics.cart_checkout_funnel_weekly` (fixture_sql)
 **Engine:** sqlite — capabilities: pushdown_aggregation
 **Generated:** 2026-08-19T10:18:13
 
 > ⚠️ **FIXTURE DATA** — these numbers come from committed synthetic
 > fixtures, not from a warehouse. They describe a seeded random process.
-> (ASSAY_ENGINE=sqlite — the metric's SQL is running against the committed fixture CSVs loaded into in-memory sqlite)
+> (KATTFOT_ENGINE=sqlite — the metric's SQL is running against the committed fixture CSVs loaded into in-memory sqlite)
 
 **Volume:** 13,199 / 19,007 over the period (64 rows).
 
@@ -153,15 +153,15 @@ fixture-backed and describe a seeded random process, not a business.
 
 
 ### Run warnings
-- FIXTURE DATA: source mode is fixture_sql — ASSAY_ENGINE=sqlite — the metric's SQL is running against the committed fixture CSVs loaded into in-memory sqlite. These numbers come from committed synthetic fixtures and describe a seeded random process, not any real business. Every downstream chart, dashboard, and PDF is watermarked accordingly.
+- FIXTURE DATA: source mode is fixture_sql — KATTFOT_ENGINE=sqlite — the metric's SQL is running against the committed fixture CSVs loaded into in-memory sqlite. These numbers come from committed synthetic fixtures and describe a seeded random process, not any real business. Every downstream chart, dashboard, and PDF is watermarked accordingly.
 - MATURITY: 'cart_to_checkout_start_conversion' uses a per-metric maturity lag of 0d (stage_maturity[checkout_started]); cohort weeks after 2026-08-10 are withheld as not-yet-settled for stage 'checkout_started'. The lag itself is hand-authored and illustrative, NOT measured — a real deployment regenerates the stage_maturity table by measuring settle time on the spine.
 - DISCONTINUITY: the 2026-04-27..2026-08-10 window crosses 2026-06-01 (delivery scan feed switched providers). Ship-to-deliver timestamps come from a different carrier feed after this date, with finer scan granularity. Delivered COUNTS are unaffected; ship-to-deliver percentiles shift by roughly half a day for feed reasons alone. Read a timing trend that crosses this date as two segments.
 - CAVEAT (weekly_aggregate_is_a_narrower_interface): This view is pre-summed at cohort_week x channel x payment_method x market x category x checkout_version. It cannot express a percentile, a terminal-branch decomposition, or "did ANY of this customer's carts reach X" — those need the session spine. That narrowness is deliberate: R5 (no individual-level data) is easier to honour on a surface with no individuals on it.
 
 ## Provenance
 
-- **Metric definition:** `plugins/assay/skills/query-metric/metrics/checkout/cart-to-checkout-start-conversion.md`
-- **Source mode:** fixture_sql (ASSAY_ENGINE=sqlite — the metric's SQL is running against the committed fixture CSVs loaded into in-memory sqlite)
+- **Metric definition:** `plugins/kattfot/skills/query-metric/metrics/checkout/cart-to-checkout-start-conversion.md`
+- **Source mode:** fixture_sql (KATTFOT_ENGINE=sqlite — the metric's SQL is running against the committed fixture CSVs loaded into in-memory sqlite)
 - **Maturity:** stage `checkout_started`, lag 0d, cohorts through 2026-08-10 (stage_maturity[checkout_started])
 - **Query (parameterized):**
 
@@ -171,11 +171,11 @@ SELECT
   SAFE_DIVIDE(SUM(checkouts_started), SUM(carts_created)) AS cart_to_checkout_start_conversion,
   SUM(checkouts_started) AS numerator,
   SUM(carts_created) AS denominator
-FROM `${ASSAY_BIGQUERY_PROJECT}.analytics.cart_checkout_funnel_weekly`
+FROM `${KATTFOT_BIGQUERY_PROJECT}.analytics.cart_checkout_funnel_weekly`
 WHERE cohort_week BETWEEN @start_date AND @end_date AND cohort_week <= @maturity_cutoff
 GROUP BY cohort_week, channel
 ORDER BY cohort_week, channel
 ```
 
 - **Parameters:** `{"start_date": "2026-04-27", "end_date": "2026-08-10", "maturity_cutoff": "2026-08-10"}`
-- **Manifest (receipt):** plugin `0.1.0` · metric-def `e2cacac998b43381` · query `c7586e697c6f5f6b` · result `9960f2458b68254c` — a faithful re-run reproduces these; check with `assay:verify`.
+- **Manifest (receipt):** plugin `0.1.0` · metric-def `e2cacac998b43381` · query `c7586e697c6f5f6b` · result `9960f2458b68254c` — a faithful re-run reproduces these; check with `kattfot:verify`.

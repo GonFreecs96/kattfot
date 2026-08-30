@@ -23,12 +23,12 @@ from pathlib import Path
 import pytest
 import yaml
 
-import assay_query as aq
+import kattfot_query as aq
 from _shared import spine
 
 ROOT = Path(__file__).resolve().parents[1]
-METRICS_DIR = ROOT / "plugins" / "assay" / "skills" / "query-metric" / "metrics"
-CONFIG_DIR = ROOT / "plugins" / "assay" / "config"
+METRICS_DIR = ROOT / "plugins" / "kattfot" / "skills" / "query-metric" / "metrics"
+CONFIG_DIR = ROOT / "plugins" / "kattfot" / "config"
 SPEC = CONFIG_DIR / "checkout-funnel-spec.yaml"
 
 

@@ -24,7 +24,7 @@ Three things get specific attention:
    returns `None` for an uncalibrated stage, which would make the monitor run ungated
    and say nothing about it. The refusing path is used, and the refusal is tested.
 
-Offline throughout: `ASSAY_ENGINE` defaults to sqlite, so every query below runs the
+Offline throughout: `KATTFOT_ENGINE` defaults to sqlite, so every query below runs the
 skills' real canonical SQL against the committed fixtures.
 """
 
@@ -44,8 +44,8 @@ import stage_timing
 from _shared import adapters, dialect, spine
 
 ROOT = Path(__file__).resolve().parents[1]
-SPINE_CSV = ROOT / "data" / "assay" / "sample" / "cart_checkout_session_spine.csv"
-SPEC_PATH = ROOT / "plugins" / "assay" / "config" / "checkout-funnel-spec.yaml"
+SPINE_CSV = ROOT / "data" / "kattfot" / "sample" / "cart_checkout_session_spine.csv"
+SPEC_PATH = ROOT / "plugins" / "kattfot" / "config" / "checkout-funnel-spec.yaml"
 
 #: The fixtures' observation instant. Every window below is pinned to it, because
 #: reading a fixed fixture at the real today withholds more of the tail every week.
@@ -362,13 +362,13 @@ def test_pulse_refuses_when_a_stage_has_no_calibrated_lag(monkeypatch, uncalibra
     an uncalibrated stage; using it here would produce an ungated window and a monitor
     that reports the tail arriving as a change, silently. The refusing resolver is
     used instead, and this is the test that keeps it that way."""
-    monkeypatch.setenv("ASSAY_FUNNEL_SPEC", str(uncalibrated_spec))
+    monkeypatch.setenv("KATTFOT_FUNNEL_SPEC", str(uncalibrated_spec))
     exc = refuse(funnel_pulse, ["--by", "channel", "--today", TODAY], monkeypatch)
     assert exc.code == spine.REFUSAL_EXIT
 
 
 def test_the_refusal_names_the_stage_and_the_fix(monkeypatch, uncalibrated_spec, capsys):
-    monkeypatch.setenv("ASSAY_FUNNEL_SPEC", str(uncalibrated_spec))
+    monkeypatch.setenv("KATTFOT_FUNNEL_SPEC", str(uncalibrated_spec))
     refuse(funnel_pulse, ["--by", "channel", "--today", TODAY], monkeypatch)
     err = capsys.readouterr().err
     assert "shipped" in err
@@ -379,7 +379,7 @@ def test_the_refusal_fires_in_flag_mode_too(monkeypatch, uncalibrated_spec):
     """`--maturity flag` narrows a known-good cutoff set; it does not skip resolving
     one. If the refusal only fired in stage mode, `--maturity flag` would be a way to
     run an uncalibrated monitor without noticing."""
-    monkeypatch.setenv("ASSAY_FUNNEL_SPEC", str(uncalibrated_spec))
+    monkeypatch.setenv("KATTFOT_FUNNEL_SPEC", str(uncalibrated_spec))
     exc = refuse(
         funnel_pulse, ["--by", "channel", "--maturity", "flag", "--today", TODAY], monkeypatch
     )
@@ -454,7 +454,7 @@ def test_pulse_never_writes_anywhere(monkeypatch, capsys, tmp_path):
     """It is a monitor that emits a digest, not a publisher. Asserted by running it
     with the outputs directory pointed at an empty temp dir and checking nothing
     appeared."""
-    monkeypatch.setenv("ASSAY_OUTPUTS_DIR", str(tmp_path))
+    monkeypatch.setenv("KATTFOT_OUTPUTS_DIR", str(tmp_path))
     run(funnel_pulse, ["--by", "channel", "--today", TODAY], monkeypatch, capsys)
     assert list(tmp_path.iterdir()) == []
 
@@ -537,7 +537,7 @@ def test_stage_timing_gates_each_transition_on_its_arrival_stage(monkeypatch, ca
 
 def test_stage_timing_surfaces_the_named_kpis(monkeypatch, capsys, spec):
     """A KPI is a thin alias over a transition. Surfacing it on the transition it
-    measures is what stops `assay:catalog` and this skill describing different
+    measures is what stops `kattfot:catalog` and this skill describing different
     things."""
     out = run(stage_timing, WINDOW, monkeypatch, capsys)
     for kpi in spec["kpis"]:
@@ -727,7 +727,7 @@ def test_every_skill_stamps_fixture_backing_and_its_maturity_cutoff(
 
     `fixture_backed` is what every renderer turns into the MOCK DATA watermark, so a
     fixture number cannot pass itself off as measured. `maturity_cutoff` is what an
-    artifact's frontmatter records and what `assay:verify` reads — omitting it makes
+    artifact's frontmatter records and what `kattfot:verify` reads — omitting it makes
     verify report drift on every artifact.
     """
     out = run(module, extra + ["--today", TODAY], monkeypatch, capsys)

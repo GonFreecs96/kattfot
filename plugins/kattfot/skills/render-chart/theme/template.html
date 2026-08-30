@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en" data-theme-mode="{{THEME_MODE}}">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{{DOC_TITLE}}</title>
+<style>
+  :root {
+    /* Filled at runtime from theme tokens by the bootstrap below. */
+    color-scheme: light dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--page-bg);
+    color: var(--ink);
+    font-family: var(--font);
+    -webkit-font-smoothing: antialiased;
+    padding: var(--page-pad);
+    min-height: 100vh;
+  }
+  .card {
+    position: relative;
+    max-width: 980px;
+    margin: 0 auto;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+    padding: var(--card-pad);
+    overflow: hidden;
+  }
+  .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .title {
+    font-size: var(--title-size); font-weight: 700; letter-spacing: -0.01em;
+    margin: 0; line-height: 1.2;
+  }
+  .subtitle {
+    font-size: var(--subtitle-size); color: var(--ink-muted);
+    margin: 6px 0 0; font-variant-numeric: tabular-nums;
+  }
+  .pill {
+    flex: none; display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11.5px; font-weight: 600; line-height: 1;
+    padding: 7px 11px; border-radius: var(--pill-radius);
+    background: var(--tier-bg); color: var(--tier-ink); white-space: nowrap;
+  }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.85; }
+  .chart { width: 100%; height: 440px; margin-top: 18px; }
+  .caption {
+    font-size: 14px; line-height: 1.5; color: var(--ink);
+    margin: 16px 2px 0; font-weight: 500;
+  }
+  .footnote {
+    font-size: 11.5px; color: var(--ink-faint); line-height: 1.5;
+    margin: 14px 2px 0; padding-top: 14px; border-top: 1px solid var(--card-border);
+    display: flex; flex-wrap: wrap; gap: 6px 14px;
+  }
+  .footnote .mat { color: var(--mock-ink); font-weight: 600; }
+  .watermark {
+    position: absolute; inset: 0; pointer-events: none; z-index: 40;
+    display: flex; align-items: center; justify-content: center;
+  }
+  /* The [hidden] attribute alone loses to the .watermark display rule above
+     (author styles beat the UA sheet), so hide it explicitly when not mock. */
+  .watermark[hidden] { display: none; }
+  .watermark span {
+    font-size: clamp(48px, 11vw, 110px); font-weight: 800; letter-spacing: 0.08em;
+    color: var(--mock-ink); opacity: var(--mock-alpha); transform: rotate(-24deg);
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="watermark" id="watermark" hidden><span>MOCK DATA</span></div>
+    <header class="head">
+      <div>
+        <h1 class="title" id="title"></h1>
+        <p class="subtitle" id="subtitle"></p>
+      </div>
+      <span class="pill" id="pill" hidden><span class="dot"></span><span id="pill-label"></span></span>
+    </header>
+    <div class="chart" id="chart"></div>
+    <p class="caption" id="caption" hidden></p>
+    <div class="footnote" id="footnote"></div>
+  </main>
+
+  <!-- ECHARTS -->
+  {{ECHARTS}}
+  <!-- /ECHARTS -->
+
+  <!-- shared governed option builders (single source of truth) -->
+  <script>{{CHART_BUILDERS}}</script>
+
+  <script id="spec" type="application/json">{{SPEC_JSON}}</script>
+  <script id="tokens" type="application/json">{{TOKENS_JSON}}</script>
+  <script id="view" type="application/json">{{VIEW_JSON}}</script>
+  <script>
+  (function () {
+    "use strict";
+    var SPEC   = JSON.parse(document.getElementById("spec").textContent);
+    var TOKENS = JSON.parse(document.getElementById("tokens").textContent);
+    var VIEW   = JSON.parse(document.getElementById("view").textContent);
+
+    // ---- Resolve theme mode -------------------------------------------------
+    var modeAttr = document.documentElement.getAttribute("data-theme-mode") || "auto";
+    var dark = modeAttr === "dark" ||
+      (modeAttr === "auto" && window.matchMedia &&
+       window.matchMedia("(prefers-color-scheme: dark)").matches);
+    var T = dark ? TOKENS.dark : TOKENS.light;
+
+    // ---- Paint CSS variables from tokens -----------------------------------
+    var root = document.documentElement.style;
+    root.setProperty("--font", TOKENS.font.family);
+    root.setProperty("--page-bg", T.page_bg);
+    root.setProperty("--card-bg", T.card_bg);
+    root.setProperty("--card-border", T.card_border);
+    root.setProperty("--card-shadow", T.card_shadow);
+    root.setProperty("--ink", T.ink);
+    root.setProperty("--ink-muted", T.ink_muted);
+    root.setProperty("--ink-faint", T.ink_faint);
+    root.setProperty("--card-radius", TOKENS.radius.card + "px");
+    root.setProperty("--pill-radius", TOKENS.radius.pill + "px");
+    root.setProperty("--page-pad", TOKENS.spacing.page + "px");
+    root.setProperty("--card-pad", TOKENS.spacing.card + "px");
+    root.setProperty("--title-size", TOKENS.font.title_size + "px");
+    root.setProperty("--subtitle-size", TOKENS.font.subtitle_size + "px");
+    root.setProperty("--mock-ink", TOKENS.mock.ink);
+    root.setProperty("--mock-alpha", TOKENS.mock.watermark_alpha);
+
+    // ---- Governance chrome --------------------------------------------------
+    document.getElementById("title").textContent = SPEC.title || VIEW.doc_title || "Chart";
+    document.getElementById("subtitle").textContent = SPEC.subtitle || "";
+
+    var tier = SPEC.accuracy_tier;
+    if (tier && TOKENS.tier[tier]) {
+      var td = TOKENS.tier[tier];
+      var pill = document.getElementById("pill");
+      root.setProperty("--tier-bg", dark ? td.dark_bg : td.bg);
+      root.setProperty("--tier-ink", dark ? td.dark_ink : td.ink);
+      document.getElementById("pill-label").textContent = td.label;
+      pill.hidden = false;
+    }
+
+    if (SPEC.mock) document.getElementById("watermark").hidden = false;
+
+    if (VIEW.caption) {
+      var cap = document.getElementById("caption");
+      cap.textContent = VIEW.caption;
+      cap.hidden = false;
+    }
+
+    var notes = [];
+    if (SPEC.flag_last_n) notes.push('<span class="mat">○ hollow points = still maturing (see Caveats)</span>');
+    notes.push(VIEW.footer_note || "Faithful to the source artifact's Results table — see its Caveats.");
+    if (SPEC.generated_at) notes.push("generated " + SPEC.generated_at);
+    document.getElementById("footnote").innerHTML = notes.join('<span style="opacity:.4">·</span>');
+
+    // ---- Build the chart via the shared governed builders -------------------
+    // (single source of truth: theme/chart-builders.js → window.KattfotCharts)
+    var option = (window.KattfotCharts && window.KattfotCharts.buildOption)
+      ? window.KattfotCharts.buildOption(SPEC, T, TOKENS) : null;
+    if (!option) {
+      document.getElementById("chart").textContent = "Unknown chart_type: " + SPEC.chart_type;
+      return;
+    }
+    var chart = echarts.init(document.getElementById("chart"), null, { renderer: "svg" });
+    chart.setOption(option);
+    window.addEventListener("resize", function () { chart.resize(); });
+  })();
+  </script>
+</body>
+</html>

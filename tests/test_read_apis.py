@@ -30,7 +30,7 @@ import load_context
 from _shared import coverage as cov
 
 ROOT = Path(__file__).resolve().parents[1]
-PLUGIN = ROOT / "plugins" / "assay"
+PLUGIN = ROOT / "plugins" / "kattfot"
 
 
 def run(module, argv, capsys) -> str:
@@ -94,7 +94,7 @@ def test_catalog_picks_up_a_consumer_metric(tmp_path, monkeypatch):
         "accuracy_tier: T2\nmodule: checkout\nstatus: live\n---\n\n"
         "## Definition\nA locally authored rate, for the drift test.\n"
     )
-    monkeypatch.setenv("ASSAY_METRICS_DIR", str(tmp_path))
+    monkeypatch.setenv("KATTFOT_METRICS_DIR", str(tmp_path))
     cat = catalog_lib.build()
     hit = next((m for m in cat["metrics"] if m["name"] == "my_local_rate"), None)
     assert hit is not None, "a consumer-authored metric did not reach the catalog"
@@ -111,7 +111,7 @@ def test_a_consumer_metric_overrides_a_bundled_one_of_the_same_name(tmp_path, mo
         "accuracy_tier: T2\nmodule: checkout\nstatus: live\n---\n\n"
         "## Definition\nThe local override.\n"
     )
-    monkeypatch.setenv("ASSAY_METRICS_DIR", str(tmp_path))
+    monkeypatch.setenv("KATTFOT_METRICS_DIR", str(tmp_path))
     cat = catalog_lib.build()
     hits = [m for m in cat["metrics"] if m["name"] == "payment_approval_rate"]
     assert len(hits) == 1
@@ -246,7 +246,7 @@ def test_coverage_markdown_states_a_verdict_per_status(capsys):
 def test_coverage_honours_the_env_override(tmp_path, monkeypatch, capsys):
     p = tmp_path / "mine.yaml"
     p.write_text("coverage:\n  - {id: local_thing, asks: [local], status: live, serve: here}\n")
-    monkeypatch.setenv("ASSAY_COVERAGE_FILE", str(p))
+    monkeypatch.setenv("KATTFOT_COVERAGE_FILE", str(p))
     payload = json.loads(run(coverage_lookup, [], capsys))
     assert payload["register_size"] == 1
 
@@ -256,7 +256,7 @@ def test_an_empty_register_exits_nonzero_rather_than_reporting_full_coverage(
 ):
     """The degradation that matters. A missing register loads as `{}`, and an empty
     listing must not read as "nothing is blocked"."""
-    monkeypatch.setenv("ASSAY_COVERAGE_FILE", str(tmp_path / "absent.yaml"))
+    monkeypatch.setenv("KATTFOT_COVERAGE_FILE", str(tmp_path / "absent.yaml"))
     payload = json.loads(run_expecting(coverage_lookup, [], capsys, 1))
     assert payload["register_size"] == 0
 
@@ -392,7 +392,7 @@ def test_a_non_t2_metric_is_tier_refused(tmp_path, monkeypatch, capsys):
         "accuracy_tier: T3\nmodule: checkout\nstatus: live\n---\n\n"
         "## Definition\nAn unreviewed exploratory number.\n"
     )
-    monkeypatch.setenv("ASSAY_METRICS_DIR", str(tmp_path))
+    monkeypatch.setenv("KATTFOT_METRICS_DIR", str(tmp_path))
     out = run_expecting(load_context, ["metric/exploratory_thing"], capsys, 5)
     assert out.startswith("TIER_REFUSED -- ")
     assert "T3" in out
@@ -405,7 +405,7 @@ def test_both_ungoverned_tiers_are_refused(tier, tmp_path, monkeypatch, capsys):
         f"---\nname: ungoverned\ndisplay_name: U\naccuracy_tier: {tier}\n"
         f"module: checkout\nstatus: live\n---\n\n## Definition\nBody text.\n"
     )
-    monkeypatch.setenv("ASSAY_METRICS_DIR", str(tmp_path))
+    monkeypatch.setenv("KATTFOT_METRICS_DIR", str(tmp_path))
     out = run_expecting(load_context, ["metric/ungoverned"], capsys, 5)
     assert out.startswith("TIER_REFUSED -- ")
     assert "Body text" not in out
@@ -421,7 +421,7 @@ def test_a_module_read_withholds_a_non_t2_body_without_refusing_the_set(
         "---\nname: ungoverned\ndisplay_name: U\naccuracy_tier: T3\n"
         "module: checkout\nstatus: live\n---\n\n## Definition\nSecret body.\n"
     )
-    monkeypatch.setenv("ASSAY_METRICS_DIR", str(tmp_path))
+    monkeypatch.setenv("KATTFOT_METRICS_DIR", str(tmp_path))
     out = run(load_context, ["module/checkout", "--limit", "40"], capsys)
     assert "TIER_REFUSED -- ungoverned is tier T3" in out
     assert "Secret body" not in out
@@ -435,7 +435,7 @@ def test_the_catalog_scope_names_a_non_t2_metric_without_serving_it(
         "---\nname: ungoverned\ndisplay_name: U\naccuracy_tier: T3\n"
         "module: checkout\nstatus: live\n---\n\n## Definition\nSecret body.\n"
     )
-    monkeypatch.setenv("ASSAY_METRICS_DIR", str(tmp_path))
+    monkeypatch.setenv("KATTFOT_METRICS_DIR", str(tmp_path))
     out = run(load_context, ["catalog"], capsys)
     assert "ungoverned" in out
     assert "T3" in out

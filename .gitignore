@@ -11,7 +11,7 @@ venv/
 .claude/settings.local.json
 
 # --- Generated outputs ---
-# Every assay:* run writes here (artifacts, charts, dashboards, studies). These
+# Every kattfot:* run writes here (artifacts, charts, dashboards, studies). These
 # are reproducible from the governed metrics and must not be tracked.
 outputs/
 
@@ -26,8 +26,8 @@ outputs/
 # so nothing is lost.
 
 # --- Rendered examples: the committed spec stays, its rendered HTML does not ---
-plugins/assay/skills/render-chart/examples/out/
-plugins/assay/skills/render-dashboard/examples/out/
+plugins/kattfot/skills/render-chart/examples/out/
+plugins/kattfot/skills/render-dashboard/examples/out/
 
 # --- Local config / registry copies ---
 # The governed config that defines the module registry, funnel specs, coverage,
@@ -36,5 +36,5 @@ plugins/assay/skills/render-dashboard/examples/out/
 # wiki page ids, or a personal override. Those use the `.local.yaml` suffix, and
 # the tracked counterpart is a `.example.yaml` template.
 *.local.yaml
-plugins/assay/config/*-registry.yaml
-!plugins/assay/config/*-registry.example.yaml
+plugins/kattfot/config/*-registry.yaml
+!plugins/kattfot/config/*-registry.example.yaml

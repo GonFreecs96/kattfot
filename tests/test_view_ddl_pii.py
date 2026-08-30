@@ -19,7 +19,7 @@ import pytest
 from _shared import pii
 
 ROOT = Path(__file__).resolve().parents[1]
-VIEWS_DIR = ROOT / "plugins" / "assay" / "skills" / "query-metric" / "views"
+VIEWS_DIR = ROOT / "plugins" / "kattfot" / "skills" / "query-metric" / "views"
 
 DDL_FILES = sorted(VIEWS_DIR.glob("*.sql"))
 DDL_IDS = [p.name for p in DDL_FILES]

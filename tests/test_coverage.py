@@ -10,7 +10,7 @@ correct for advisory metadata but means a typo'd register produces **zero covera
 answers instead of an error**. Every matcher assertion below would still pass against
 the empty dict it degrades to, so the first tests here assert the shipped file parses
 and is non-empty. Without them this file would certify a register that had silently
-stopped existing — and `assay:coverage` would then answer "not in the register" to
+stopped existing — and `kattfot:coverage` would then answer "not in the register" to
 every question, which reads exactly like a legitimate no-match.
 
 Pure and in-process — never touches a warehouse.
@@ -23,7 +23,7 @@ import pytest
 from _shared import coverage as cov
 
 ROOT = Path(__file__).resolve().parents[1]
-BUNDLED = ROOT / "plugins" / "assay" / "config" / "coverage.yaml"
+BUNDLED = ROOT / "plugins" / "kattfot" / "config" / "coverage.yaml"
 
 
 @pytest.fixture(scope="module")
@@ -39,7 +39,7 @@ def test_the_bundled_register_is_present_and_non_empty(bundled):
     assert BUNDLED.exists(), f"{BUNDLED} is missing"
     assert bundled, (
         f"{BUNDLED} loaded as empty. load_coverage() swallows a YAML error by design, "
-        f"so a syntax mistake here would show up as `assay:coverage` no-matching every "
+        f"so a syntax mistake here would show up as `kattfot:coverage` no-matching every "
         f"question — indistinguishable from a genuine gap in the register."
     )
     entries = cov.entries(bundled)

@@ -24,7 +24,7 @@ import pytest
 from _shared import guardrails as gr
 
 ROOT = Path(__file__).resolve().parents[1]
-BUNDLED = ROOT / "plugins" / "assay" / "config" / "guardrails.yaml"
+BUNDLED = ROOT / "plugins" / "kattfot" / "config" / "guardrails.yaml"
 
 
 @pytest.fixture(scope="module")

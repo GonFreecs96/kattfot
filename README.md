@@ -1,6 +1,10 @@
-# assay
+# kattfot
 
-**assay** is a working template for **governed agentic analytics** — a Claude
+> *Kattfoten* — "the cat's paw" — is the three-crown hallmark Sweden's assay
+> office has stamped on verified silver since 1754. This repo stamps the
+> equivalent on warehouse numbers. (Formerly published as `assay`.)
+
+**kattfot** is a working template for **governed agentic analytics** — a Claude
 Code / Cursor plugin marketplace whose subject is not charts but *governance*:
 how an agent can be given real access to a data warehouse and still be unable
 to produce a number nobody can defend.
@@ -16,7 +20,7 @@ Anyone can write `SELECT COUNT(*) ... GROUP BY ...`. The hard part of
 "self-serve analytics" was never the SQL — it is making sure that when an
 agent runs that query on someone's behalf, the number it hands back carries
 enough of its own history that a stranger, six months later, can tell whether
-to trust it. `assay` answers that with mechanisms enforced in code, not in a
+to trust it. `kattfot` answers that with mechanisms enforced in code, not in a
 system prompt:
 
 - **Per-user identity.** Every warehouse query runs as the individual human via
@@ -46,7 +50,7 @@ system prompt:
   most conversion reporting gets wrong.
 - **Content-addressed provenance.** Every artifact carries a manifest —
   fingerprints of the metric definition, the exact query, and the result —
-  so `assay:verify` can later tell you, offline, whether a number still means
+  so `kattfot:verify` can later tell you, offline, whether a number still means
   what it claimed to.
 - **Two things a `SUM/SUM` metric structurally cannot express**, served from
   a session-grain spine instead: **terminal-branch attribution** (of all
@@ -63,7 +67,7 @@ The full reasoning behind each control — including what each one does
 > **nineteen skills** are accounted for. **Sixteen** run today, offline,
 > against committed fixtures — and that is checked rather than claimed:
 > `scripts/demo_skills.py` runs every one of them in an environment with
-> `HOME` scrubbed of credentials and `ASSAY_ENGINE` pinned to `sqlite`, and
+> `HOME` scrubbed of credentials and `KATTFOT_ENGINE` pinned to `sqlite`, and
 > fails if any cannot. The remaining **three** (`release-scorecard`,
 > `customer-journey`, `publish`) ship as documented outlines, not code; the
 > module registry records each one's exclusion with a specific reason rather
@@ -79,7 +83,7 @@ The full reasoning behind each control — including what each one does
 
 ## Quick start
 
-Nothing to configure. `ASSAY_ENGINE` defaults to `sqlite`, which runs each
+Nothing to configure. `KATTFOT_ENGINE` defaults to `sqlite`, which runs each
 metric's real SQL against the committed fixture CSVs — no cloud account, no
 credentials, no network.
 
@@ -90,7 +94,7 @@ chart-spec provenance JSON behind it — all fixture-backed and watermarked,
 browsable on GitHub with nothing installed.
 
 ```bash
-git clone https://github.com/markreid-lab/assay.git && cd assay
+git clone https://github.com/markreid-lab/kattfot.git && cd kattfot
 
 python3 -m venv .venv
 .venv/bin/pip install -r tests/requirements.txt
@@ -106,8 +110,8 @@ catches a leak.
 ### Run every skill, offline
 
 ```bash
-.venv/bin/pip install -r plugins/assay/skills/visualize-metric/scripts/requirements.txt
-.venv/bin/pip install -r plugins/assay/skills/export-report/scripts/requirements.txt
+.venv/bin/pip install -r plugins/kattfot/skills/visualize-metric/scripts/requirements.txt
+.venv/bin/pip install -r plugins/kattfot/skills/export-report/scripts/requirements.txt
 
 .venv/bin/python scripts/demo_skills.py
 ```
@@ -122,7 +126,7 @@ clones the repo.
 "Offline" is enforced rather than assumed: each step runs as a subprocess
 whose `HOME` points at an empty temporary directory (so ADC cannot be found),
 with `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`, and
-`ASSAY_BIGQUERY_PROJECT` removed from the environment.
+`KATTFOT_BIGQUERY_PROJECT` removed from the environment.
 
 The two optional dependencies above (`matplotlib`, `fpdf2`) are offline ones,
 not network ones. Without them the gate fails and names the install command;
@@ -134,7 +138,7 @@ not network ones. Without them the gate fails and names the install command;
 .venv/bin/python scripts/demo.py --all
 ```
 
-That produces, in `outputs/assay/`:
+That produces, in `outputs/kattfot/`:
 
 | Output | What it is |
 |---|---|
@@ -153,30 +157,30 @@ watermark is load-bearing, not decoration.
 Just the chart renderers, with no dependencies at all:
 
 ```bash
-python3 plugins/assay/skills/render-chart/scripts/render_html.py \
-  --spec plugins/assay/skills/render-chart/examples/trend.spec.json --out /tmp/chart.html
+python3 plugins/kattfot/skills/render-chart/scripts/render_html.py \
+  --spec plugins/kattfot/skills/render-chart/examples/trend.spec.json --out /tmp/chart.html
 
-python3 plugins/assay/skills/render-dashboard/scripts/render_dashboard.py \
-  --spec plugins/assay/skills/render-dashboard/examples/example.dashboard.json --out /tmp/dash.html
+python3 plugins/kattfot/skills/render-dashboard/scripts/render_dashboard.py \
+  --spec plugins/kattfot/skills/render-dashboard/examples/example.dashboard.json --out /tmp/dash.html
 ```
 
 ### Point it at a real warehouse
 
 ```bash
-export ASSAY_ENGINE=bigquery
-export ASSAY_BIGQUERY_PROJECT=<your-gcp-project>
+export KATTFOT_ENGINE=bigquery
+export KATTFOT_BIGQUERY_PROJECT=<your-gcp-project>
 gcloud auth application-default login
-python3 plugins/assay/skills/setup/scripts/doctor.py --probe
+python3 plugins/kattfot/skills/setup/scripts/doctor.py --probe
 ```
 
 You will also need the curated views:
-`plugins/assay/skills/query-metric/views/` ships the DDL for both (the
+`plugins/kattfot/skills/query-metric/views/` ships the DDL for both (the
 session-grain spine and the weekly aggregate built on it), with
 `${WAREHOUSE_PROJECT}` / `${SOURCE_DATASET}` placeholders to substitute.
 
 ## The skill surface
 
-Nineteen skills, invoked as `assay:<skill>`. Sixteen are complete and
+Nineteen skills, invoked as `kattfot:<skill>`. Sixteen are complete and
 runnable today; three ship as documented outlines because giving them honest
 numbers needs parameters calibrated against a real book, and fitting them to
 a synthetic fixture would produce a curve describing the generator rather
@@ -184,22 +188,22 @@ than any business.
 
 | Skill | What it does |
 |---|---|
-| `assay:setup` | Environment doctor: gcloud, service-account env, ADC, deps, live probe |
-| `assay:catalog` | The front door — every registered metric, latency KPI, and spine, read off disk |
-| `assay:coverage` | "Can I measure X yet?" from the instrumentation register, with the blocker and its owner |
-| `assay:load-context` | The consumer API: governed definitions by scope, with contract sentinels |
-| `assay:query-metric` | A governed number: allow-listed, tiered, caveated, with a provenance receipt |
-| `assay:visualize-metric` | Artifact → chart spec → SVG/PNG, with faithfulness rules |
-| `assay:render-chart` | Chart spec → one self-contained interactive HTML (stdlib only) |
-| `assay:render-dashboard` | Dashboard spec → one self-contained interactive HTML (stdlib only) |
-| `assay:export-report` | Governed artifact → a portable PDF |
-| `assay:verify` | Offline definition/query drift check against an artifact's manifest |
-| `assay:reconcile` | Why their number differs from ours, attributed to a named cause |
-| `assay:funnel-dropoff` | The stage funnel **plus** terminal-branch leak attribution |
-| `assay:stage-timing` | Percentile stage latency (p50/p90/p99, mean, n) per transition |
-| `assay:segment-compare` | A vs B, or before vs after, across funnel, leak mix, and timing |
-| `assay:funnel-pulse` | Stage-aware recent-vs-baseline regression monitor, ranked by impact |
-| `assay:funnel-nowcast` | Cohort-maturation now-cast (Mack chain ladder) for a not-yet-settled cohort: P10/P50/P90 capped at cohort size, with a self-scoring backtest |
+| `kattfot:setup` | Environment doctor: gcloud, service-account env, ADC, deps, live probe |
+| `kattfot:catalog` | The front door — every registered metric, latency KPI, and spine, read off disk |
+| `kattfot:coverage` | "Can I measure X yet?" from the instrumentation register, with the blocker and its owner |
+| `kattfot:load-context` | The consumer API: governed definitions by scope, with contract sentinels |
+| `kattfot:query-metric` | A governed number: allow-listed, tiered, caveated, with a provenance receipt |
+| `kattfot:visualize-metric` | Artifact → chart spec → SVG/PNG, with faithfulness rules |
+| `kattfot:render-chart` | Chart spec → one self-contained interactive HTML (stdlib only) |
+| `kattfot:render-dashboard` | Dashboard spec → one self-contained interactive HTML (stdlib only) |
+| `kattfot:export-report` | Governed artifact → a portable PDF |
+| `kattfot:verify` | Offline definition/query drift check against an artifact's manifest |
+| `kattfot:reconcile` | Why their number differs from ours, attributed to a named cause |
+| `kattfot:funnel-dropoff` | The stage funnel **plus** terminal-branch leak attribution |
+| `kattfot:stage-timing` | Percentile stage latency (p50/p90/p99, mean, n) per transition |
+| `kattfot:segment-compare` | A vs B, or before vs after, across funnel, leak mix, and timing |
+| `kattfot:funnel-pulse` | Stage-aware recent-vs-baseline regression monitor, ranked by impact |
+| `kattfot:funnel-nowcast` | Cohort-maturation now-cast (Mack chain ladder) for a not-yet-settled cohort: P10/P50/P90 capped at cohort size, with a self-scoring backtest |
 
 The last five read the **session-grain spine** rather than the weekly
 aggregate, because that is the only way to get what a `SUM/SUM` metric
@@ -211,16 +215,16 @@ in the module registry with a specific reason):
 
 | Skill | What it would do |
 |---|---|
-| `assay:release-scorecard` | A pre-registered release's causal verdict via BSTS counterfactual (and DiD when a control segment is specified) |
-| `assay:customer-journey` | Customer-grain journey analysis — the multi-order analog to the session-grain funnel |
-| `assay:publish` | Push a governed artifact to a wiki as a read-only page, gated on explicit human approval before any write |
+| `kattfot:release-scorecard` | A pre-registered release's causal verdict via BSTS counterfactual (and DiD when a control segment is specified) |
+| `kattfot:customer-journey` | Customer-grain journey analysis — the multi-order analog to the session-grain funnel |
+| `kattfot:publish` | Push a governed artifact to a wiki as a read-only page, gated on explicit human approval before any write |
 
 Full detail, every flag, and a worked example for each: see
 [`docs/skill-cheatsheet.md`](docs/skill-cheatsheet.md).
 
 ## Choosing an engine
 
-| `ASSAY_ENGINE` | Where the query runs | Identity asserted | Percentiles |
+| `KATTFOT_ENGINE` | Where the query runs | Identity asserted | Percentiles |
 |---|---|---|---|
 | `sqlite` (default) | Committed fixture CSVs, loaded into an in-memory database | No — see below | Computed client-side |
 | `bigquery` | The curated view, as the authenticated human | Yes, in code | Pushed down (`APPROX_QUANTILES`) |
@@ -247,27 +251,27 @@ allow-lists, PII refusal, the tier gate, maturity cutoffs, manifest receipts
 
 ## Environment variables
 
-All configuration is `ASSAY_`-prefixed. There are **no defaults pointing at
+All configuration is `KATTFOT_`-prefixed. There are **no defaults pointing at
 any real warehouse** — a template that shipped one would ship somebody
 else's billing account.
 
 | Variable | Used by | Meaning |
 |---|---|---|
-| `ASSAY_ENGINE` | `_shared/adapters` | `sqlite` (default) or `bigquery`. An unknown value refuses rather than falling back. |
-| `ASSAY_BIGQUERY_PROJECT` | `query-metric`, `setup` | The GCP project. Expands the `${ASSAY_BIGQUERY_PROJECT}` placeholder in metric definitions. No fallback — left unset, that placeholder appears literally (and intentionally) in artifact frontmatter and prose, since this public template has no real project id to substitute. |
-| `ASSAY_SAMPLE_DIR` | the sqlite adapter, the CSV-stub oracle | Fixture CSVs (default `data/assay/sample/`). |
-| `ASSAY_METRICS_DIR` | `query-metric` | Consumer-authored metric definitions, searched before the bundled catalog (default `context/assay/metrics/`). |
-| `ASSAY_OUTPUTS_DIR` | `query-metric`, `export-report` | Where artifacts land (default `outputs/assay/`). |
-| `ASSAY_AUDIT_LOG` | `query-metric` | Audit-log path. Disable with `ASSAY_AUDIT_DISABLE=1`. |
-| `ASSAY_FUNNEL_SPEC` | `_shared/spine.py` | Override the resolved funnel-spec path outright (test/override hook). |
-| `ASSAY_FUNNELS_CONFIG` | `visualize-metric` | Override the funnel-composition config path. |
-| `ASSAY_COVERAGE_FILE` | `_shared/coverage.py`, `coverage`, `load-context` | Instrumentation coverage register path. |
-| `ASSAY_GUARDRAILS_FILE` | `_shared/guardrails.py` | Warn-level guardrails config path. |
+| `KATTFOT_ENGINE` | `_shared/adapters` | `sqlite` (default) or `bigquery`. An unknown value refuses rather than falling back. |
+| `KATTFOT_BIGQUERY_PROJECT` | `query-metric`, `setup` | The GCP project. Expands the `${KATTFOT_BIGQUERY_PROJECT}` placeholder in metric definitions. No fallback — left unset, that placeholder appears literally (and intentionally) in artifact frontmatter and prose, since this public template has no real project id to substitute. |
+| `KATTFOT_SAMPLE_DIR` | the sqlite adapter, the CSV-stub oracle | Fixture CSVs (default `data/kattfot/sample/`). |
+| `KATTFOT_METRICS_DIR` | `query-metric` | Consumer-authored metric definitions, searched before the bundled catalog (default `context/kattfot/metrics/`). |
+| `KATTFOT_OUTPUTS_DIR` | `query-metric`, `export-report` | Where artifacts land (default `outputs/kattfot/`). |
+| `KATTFOT_AUDIT_LOG` | `query-metric` | Audit-log path. Disable with `KATTFOT_AUDIT_DISABLE=1`. |
+| `KATTFOT_FUNNEL_SPEC` | `_shared/spine.py` | Override the resolved funnel-spec path outright (test/override hook). |
+| `KATTFOT_FUNNELS_CONFIG` | `visualize-metric` | Override the funnel-composition config path. |
+| `KATTFOT_COVERAGE_FILE` | `_shared/coverage.py`, `coverage`, `load-context` | Instrumentation coverage register path. |
+| `KATTFOT_GUARDRAILS_FILE` | `_shared/guardrails.py` | Warn-level guardrails config path. |
 
-Every spine skill also takes `--engine` to override `ASSAY_ENGINE` for one
+Every spine skill also takes `--engine` to override `KATTFOT_ENGINE` for one
 run, and `--today YYYY-MM-DD` to pin the maturity window. Pass
 `--today 2026-08-17` when reading the committed fixtures: that is the instant
-they were generated for (recorded in `data/assay/sample/FIXTURES.md`), and
+they were generated for (recorded in `data/kattfot/sample/FIXTURES.md`), and
 reading a fixed fixture at the real today withholds more of the tail every
 week until the whole book looks immature.
 
@@ -278,7 +282,7 @@ account.
 ## Architecture in brief
 
 ```
-plugins/assay/
+plugins/kattfot/
   hooks/                     PreToolUse matcher (Claude Code); .cursor/hooks/ mirrors it for Cursor
   config/                    the module registry, two funnel specs, funnel compositions, coverage + guardrails
   skills/
@@ -294,7 +298,7 @@ scripts/                     repo tooling, NOT part of the shipped plugin
   demo.py                    the compose chain, end to end, offline
   demo_skills.py             all sixteen functional skills, offline, as a gate
   scrub_check.py             the deny-token gate
-data/assay/sample/           the two committed fixture CSVs + FIXTURES.md (seed, instant, trim)
+data/kattfot/sample/           the two committed fixture CSVs + FIXTURES.md (seed, instant, trim)
 tests/                       governance tests + catalog linter, run by pytest
 outputs/                     generated artifacts (git-ignored, reproducible)
 examples/                    committed copies of real output — see examples/README.md
@@ -371,7 +375,7 @@ Two honest caveats that the repo also states in machine-readable form:
 Swap the domain by replacing the funnel spec and the metric definitions — no
 engine change required. [`docs/adding-a-module.md`](docs/adding-a-module.md)
 is the walkthrough, and it points at the full checklist in
-`plugins/assay/skills/query-metric/templates/MODULE-ONBOARDING.md`.
+`plugins/kattfot/skills/query-metric/templates/MODULE-ONBOARDING.md`.
 
 ## Regenerating the fixtures
 
@@ -379,7 +383,7 @@ is the walkthrough, and it points at the full checklist in
 python3 scripts/generate_fixtures.py                    # both committed fixtures
 python3 scripts/generate_fixtures.py --emit weekly      # just the aggregate
 python3 scripts/generate_fixtures.py --spine-weeks 0 \
-    --out-dir /tmp/assay-full                           # the full ~22 MB spine
+    --out-dir /tmp/kattfot-full                           # the full ~22 MB spine
 python3 scripts/generate_fixtures.py --sessions 200000 --weeks 104
 ```
 
@@ -388,7 +392,7 @@ a committed CSV always means a parameter changed. The committed spine is
 trimmed to the most recent 19 cohort weeks — the widest window any spine
 skill reads at the funnel spec's own defaults — while the pre-aggregated
 weekly view keeps the full book, because it is small enough to. See
-`data/assay/sample/FIXTURES.md` for the seed, the observation instant, and
+`data/kattfot/sample/FIXTURES.md` for the seed, the observation instant, and
 the exact row counts.
 
 ## Honest limitations
@@ -439,7 +443,7 @@ Worth stating plainly rather than discovering:
 
 | Doc | What it covers |
 |---|---|
-| [`docs/what-is-assay.md`](docs/what-is-assay.md) | The narrative case: the problem governed analytics solves, and why |
+| [`docs/what-is-kattfot.md`](docs/what-is-kattfot.md) | The narrative case: the problem governed analytics solves, and why |
 | [`docs/governance-model.md`](docs/governance-model.md) | Every control, what it guarantees, and what it honestly does not |
 | [`docs/glossary.md`](docs/glossary.md) | Spine, grain, accuracy tier, maturity cutoff, terminal branch, allow-list, and the rest of the vocabulary |
 | [`docs/runbook.md`](docs/runbook.md) | Install, first run, the compose chain, the decision guide for which skill to use |

@@ -11,7 +11,7 @@ exactly as the skill runtime does:
   - `_shared.spine`      (module registry, maturity, WHERE builder)
   - `_shared.dialect`    (the BigQuery -> sqlite translator)
   - `_shared.adapters`   (the warehouse adapter seam)
-  - `assay_query`        (the governed query helper)
+  - `kattfot_query`        (the governed query helper)
   - `chart_spec`         (visualize-metric's spec builder)
   - `doctor`             (the setup skill's environment doctor)
   - `scrub_check`        (the repo's deny-token gate)
@@ -41,7 +41,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILLS = ROOT / "plugins" / "assay" / "skills"
+SKILLS = ROOT / "plugins" / "kattfot" / "skills"
 SETUP_SCRIPTS = SKILLS / "setup" / "scripts"
 QUERY_SCRIPTS = SKILLS / "query-metric" / "scripts"
 VISUALIZE_SCRIPTS = SKILLS / "visualize-metric" / "scripts"

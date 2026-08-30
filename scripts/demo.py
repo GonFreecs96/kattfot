@@ -5,7 +5,7 @@
                                                       ->  render_html.py (interactive HTML)
                                                       ->  report_pdf.py  (PDF)
 
-No network, no cloud account, no credentials: `ASSAY_ENGINE` defaults to `sqlite`,
+No network, no cloud account, no credentials: `KATTFOT_ENGINE` defaults to `sqlite`,
 so every metric's real SQL runs against the committed fixture CSVs. This is the
 fastest way to see what the plugin actually produces.
 
@@ -29,7 +29,7 @@ Usage
     python3 scripts/demo.py --all                # metric run, then funnel run
     python3 scripts/demo.py --skip-pdf           # when fpdf2 isn't installed
 
-Outputs land in `outputs/assay/` (override with `ASSAY_OUTPUTS_DIR`), which is
+Outputs land in `outputs/kattfot/` (override with `KATTFOT_OUTPUTS_DIR`), which is
 git-ignored — generated artifacts are reproducible, so committing them would only
 create diff noise.
 """
@@ -46,16 +46,16 @@ import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SKILLS = REPO_ROOT / "plugins" / "assay" / "skills"
-QUERY_HELPER = SKILLS / "query-metric" / "scripts" / "assay_query.py"
+SKILLS = REPO_ROOT / "plugins" / "kattfot" / "skills"
+QUERY_HELPER = SKILLS / "query-metric" / "scripts" / "kattfot_query.py"
 CHART_SPEC = SKILLS / "visualize-metric" / "scripts" / "chart_spec.py"
 RENDER_MPL = SKILLS / "visualize-metric" / "scripts" / "render.py"
 RENDER_HTML = SKILLS / "render-chart" / "scripts" / "render_html.py"
 REPORT_PDF = SKILLS / "export-report" / "scripts" / "report_pdf.py"
-FUNNELS_CONFIG = REPO_ROOT / "plugins" / "assay" / "config" / "funnels.yaml"
+FUNNELS_CONFIG = REPO_ROOT / "plugins" / "kattfot" / "config" / "funnels.yaml"
 
 #: The fixtures were generated for a fixed observation instant (recorded in
-#: data/assay/sample/FIXTURES.md). Reading them at the real "today" would keep
+#: data/kattfot/sample/FIXTURES.md). Reading them at the real "today" would keep
 #: withholding more of the tail every week until the whole book looked immature, so
 #: the demo pins it. A real deployment does not pass --today.
 FIXTURE_AS_OF = "2026-08-17"
@@ -64,13 +64,13 @@ DEFAULT_METRIC = "cart_to_checkout_start_conversion"
 
 
 def outputs_dir() -> Path:
-    return Path(os.environ.get("ASSAY_OUTPUTS_DIR") or REPO_ROOT / "outputs" / "assay")
+    return Path(os.environ.get("KATTFOT_OUTPUTS_DIR") or REPO_ROOT / "outputs" / "kattfot")
 
 
 def rel(path) -> str:
     """Repo-relative when possible, absolute otherwise.
 
-    `ASSAY_OUTPUTS_DIR` can legitimately point outside the repo — a scratch directory,
+    `KATTFOT_OUTPUTS_DIR` can legitimately point outside the repo — a scratch directory,
     a shared drive, a pytest tmp_path — and `Path.relative_to` raises rather than
     falling back, so printing a friendly path has to tolerate that.
     """
@@ -184,7 +184,7 @@ def compose_artifact(result: dict, out_path: Path) -> Path:
         if mat else "no per-metric maturity gate"
     )
     # The cutoff goes in the frontmatter, not only in the prose: it is an INPUT to the
-    # query, so `assay:verify` needs it to rebuild the same SQL. Omitted entirely when
+    # query, so `kattfot:verify` needs it to rebuild the same SQL. Omitted entirely when
     # there is no gate, which is how verify tells the two cases apart.
     mat_fm = f"\nmaturity_cutoff: {mat['cutoff_week']}" if mat.get("cutoff_week") else ""
 
@@ -255,7 +255,7 @@ fixture-backed and describe a seeded random process, not a business.
 ```
 
 - **Parameters:** `{json.dumps(fm['query_params'])}`
-- **Manifest (receipt):** plugin `{fm['manifest']['plugin_version']}` · metric-def `{fm['manifest']['metric_def_sha']}` · query `{fm['manifest']['query_sha']}` · result `{fm['manifest']['result_sha']}` — a faithful re-run reproduces these; check with `assay:verify`.
+- **Manifest (receipt):** plugin `{fm['manifest']['plugin_version']}` · metric-def `{fm['manifest']['metric_def_sha']}` · query `{fm['manifest']['query_sha']}` · result `{fm['manifest']['result_sha']}` — a faithful re-run reproduces these; check with `kattfot:verify`.
 """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(text)
@@ -346,7 +346,7 @@ def build_pdf(artifact: Path, slug: str) -> str:
     pdf_path = outputs_dir() / f"{slug}.pdf"
     result = json.loads(
         run([sys.executable, str(REPORT_PDF), "--artifact", str(artifact),
-             "--out", str(pdf_path), "--published-by", "assay demo"])
+             "--out", str(pdf_path), "--published-by", "kattfot demo"])
     )
     return result.get("pdf_path", str(pdf_path))
 
@@ -412,7 +412,7 @@ def funnel_run(args) -> dict:
     print(f"[1/3] query-metric x {len(stages)} stages for funnel '{key}'")
 
     stage_files = []
-    tmpdir = Path(tempfile.mkdtemp(prefix="assay-funnel-"))
+    tmpdir = Path(tempfile.mkdtemp(prefix="kattfot-funnel-"))
     for i, metric in enumerate(stages, start=1):
         res = query_metric(metric, "", args.time_range, args.filter)
         p = tmpdir / f"stage{i}.json"
@@ -468,8 +468,8 @@ def main() -> int:
     args = p.parse_args()
 
     # Belt and braces: the whole point of the demo is that it works with no cloud
-    # account, so pin the engine rather than inheriting a stray ASSAY_ENGINE.
-    os.environ.setdefault("ASSAY_ENGINE", "sqlite")
+    # account, so pin the engine rather than inheriting a stray KATTFOT_ENGINE.
+    os.environ.setdefault("KATTFOT_ENGINE", "sqlite")
 
     all_outputs: dict = {}
     if args.funnel and not args.all:

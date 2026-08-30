@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cursor beforeShellExecution adapter — deny shell commands outside vetted assay scripts.
+"""Cursor beforeShellExecution adapter — deny shell commands outside vetted kattfot scripts.
 
 Contract (Cursor beforeShellExecution "command" hook):
   stdin:  JSON {"command": "...", ...}
@@ -17,7 +17,7 @@ from pathlib import Path
 _MATCHER_DIR = (
     Path(__file__).resolve().parents[2]
     / "plugins"
-    / "assay"
+    / "kattfot"
     / "hooks"
     / "scripts"
 )

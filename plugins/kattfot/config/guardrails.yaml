@@ -1,0 +1,198 @@
+# guardrails.yaml
+# ---------------------------------------------------------------------------
+# Warn-level guardrails: the data-quality caveat layer.
+#
+# The complement to R6 (the only *refuse*-severity rule — see
+# query-metric/doctrine/accuracy-tiers.md and `_shared/pii.py`). Everything here
+# is *warn* severity: it attaches a caveat to the artifact and lets the query
+# proceed. The purpose is to promote "this number is wrong unless you know X"
+# out of the prose an analyst remembers and into a layer the query path consults
+# automatically — because the analyst who knows it is not always the person
+# reading the number.
+#
+# Two kinds, matched by `_shared/guardrails.py`:
+#
+#   feed_cutovers — dated pipeline / product discontinuities. A query whose time
+#     window straddles one of these dates sees a step change that is an
+#     artifact of the change, not of customer behaviour. Auto-flagged when
+#     start <= date <= end.
+#
+#   notes — column, unit, join, and view-shape caveats. Auto-flagged when the
+#     query's source view matches `applies_to_views` OR a referenced column
+#     (a group-by dimension or a filter) matches `applies_to_columns`. A note
+#     with NEITHER key is reference-only: captured here so it is written down,
+#     but never auto-injected, so it cannot add noise to an unrelated query.
+#
+# Each rule also carries an `entity:` anchor naming the entity it constrains (a
+# slug in skills/query-metric/entities/), so a caveat travels with its entity
+# rather than floating as a bare column note. The matchers ignore `entity:`; it
+# is metadata for the entity registry and the `load-context entity/{name}`
+# scope.
+#
+# THE CONTENT BELOW DESCRIBES THIS TEMPLATE'S FICTIONAL D2C BOOK. The dates and
+# effects are authored to be coherent with `scripts/generate_fixtures.py` — the
+# checkout-version cutover in particular is the generator's real one, so a query
+# window crossing it genuinely does span a step change in conversion. Replace
+# this file wholesale when you point the plugin at your own warehouse; the
+# schema is the part worth keeping.
+#
+# Consumed by: the query-metric helper (auto-caveats every artifact), the
+# spine-backed skills via `spine.guardrail_warnings()`, and
+# tests/test_guardrails.py (which lints this file as well as the matchers).
+# ---------------------------------------------------------------------------
+
+feed_cutovers:
+  - id: uk_market_launch
+    entity: market
+    date: 2025-08-04
+    label: uk market opened
+    effect: >-
+      `market='uk'` has no carts before this date, so any market-split trend
+      whose window starts earlier shows uk appearing from nothing. That is a
+      launch, not growth. Cut the window at the launch or read uk on its own.
+
+  - id: checkout_v2_rollout
+    entity: checkout_session
+    date: 2025-05-12
+    label: v2 checkout replaced v1-legacy
+    effect: >-
+      The single largest discontinuity in this book. Cart-to-checkout-start
+      conversion steps up roughly 3.5pp at this date because the checkout itself
+      changed, and every cohort before it carries `checkout_version='v1-legacy'`.
+      Default reads exclude that cohort (the spec's `legacy_exclude_column` /
+      `legacy_exclude_value` pair), so a window crossing this date is normally a
+      window whose early weeks are simply empty — which is correct, and reads as
+      a volume cliff unless you know why.
+
+  - id: return_window_extended_to_30d
+    entity: order
+    date: 2025-11-03
+    label: return window extended 14d -> 30d
+    effect: >-
+      Return-window-complete settles ~16 days later after this date, so the
+      `return_window_complete` maturity lag is only correct for cohorts on the
+      near side of it. Cross-date comparisons of anything anchored on the window
+      closing are comparing two different windows.
+
+  - id: wallet_callback_latency_fix
+    entity: payment
+    date: 2026-03-16
+    label: wallet provider callback latency fix
+    effect: >-
+      Submit-to-decision timing for `payment_method='wallet'` drops sharply here
+      — a provider-side fix, not a change in approval behaviour. Percentiles for
+      that method are not comparable across the date; approval RATES are.
+
+  - id: carrier_scan_feed_switch
+    entity: shipment
+    date: 2026-06-01
+    label: delivery scan feed switched providers
+    effect: >-
+      Ship-to-deliver timestamps come from a different carrier feed after this
+      date, with finer scan granularity. Delivered COUNTS are unaffected;
+      ship-to-deliver percentiles shift by roughly half a day for feed reasons
+      alone. Read a timing trend that crosses this date as two segments.
+
+notes:
+  # --- auto-injected on a matching column -------------------------------
+  - id: payment_method_drives_maturity_not_only_rate
+    entity: payment
+    applies_to_columns: [payment_method]
+    message: >-
+      `payment_method` moves settle TIME as well as conversion: instant card
+      authorization decides in seconds, a bank transfer routed through a clearing
+      cycle and a review queue takes days. The funnel spec therefore carries a
+      per-method maturity override on `payment_decisioned`. A blended
+      submit-to-decision number is dominated by the ~82% card-instant volume and
+      is badly wrong for the slow methods — split by method or say you did not.
+
+  - id: order_id_is_null_before_confirmation
+    entity: order
+    applies_to_columns: [order_id]
+    message: >-
+      `order_id` is NULL on every session that never confirmed, so an
+      order-grain denominator is structurally blind to the abandoned cart — the
+      largest exit in this ladder. Share-of-carts is the honest denominator; see
+      the `confirmation_creates_the_order` rule in the checkout LINEAGE note.
+
+  - id: is_first_order_is_spine_only
+    entity: customer
+    applies_to_columns: [is_first_order]
+    message: >-
+      `is_first_order` exists on the session spine but is NOT carried into the
+      weekly aggregate — including it there would double the cell count and halve
+      the volume behind every rate. A metric that needs this split needs the
+      column added to the aggregate, not added to its own allow-list.
+
+  - id: category_is_assigned_at_confirmation
+    entity: order
+    applies_to_columns: [category]
+    message: >-
+      `category` is the dominant category of the cart's contents as recorded at
+      checkout. A cart whose contents changed before submission keeps its final
+      value, so an early-funnel rate split by category attributes the whole cart
+      to a category the shopper may not have started in. The effect is small and
+      it is not zero.
+
+  - id: terminal_branch_is_a_curated_heuristic
+    entity: checkout_session
+    applies_to_columns: [terminal_branch]
+    message: >-
+      `terminal_branch` is a curated deepest-stage-first classification, not a
+      field the source systems emit. It is mutually exclusive and exhaustive by
+      construction (every cart lands in exactly one branch, which is why the
+      branch counts sum to carts created), but the boundary cases — a stale cart
+      versus an abandoned one, a cancellation versus an out-of-stock hold — are
+      the view's judgement. See views/cart_checkout_session_spine.sql for the
+      CASE.
+
+  # --- auto-injected on a matching view ---------------------------------
+  - id: weekly_aggregate_is_a_narrower_interface
+    entity: checkout_session
+    applies_to_views: [cart_checkout_funnel_weekly]
+    message: >-
+      This view is pre-summed at cohort_week x channel x payment_method x market
+      x category x checkout_version. It cannot express a percentile, a
+      terminal-branch decomposition, or "did ANY of this customer's carts reach
+      X" — those need the session spine. That narrowness is deliberate: R5 (no
+      individual-level data) is easier to honour on a surface with no
+      individuals on it.
+
+  - id: spine_timestamps_are_utc_and_cohorts_are_iso_monday
+    entity: checkout_session
+    applies_to_views: [cart_checkout_session_spine]
+    message: >-
+      Stage timestamps are UTC and `cohort_week` is the ISO-Monday week the cart
+      was CREATED — a cart keeps that cohort forever, even if it confirms three
+      weeks later. A same-day comparison against a local-timezone dashboard will
+      differ by up to a day at the boundary; that is the single most common
+      reconciliation cause (see `kattfot:reconcile`, cause `TIMEZONE`).
+
+  # --- reference-only: no applies_to_*, so never auto-injected ----------
+  # Written down because they are true and someone will need them, but scoped to
+  # nothing, so they do not attach themselves to unrelated queries.
+  - id: marketplace_channel_is_a_reseller_rollup
+    entity: channel
+    message: >-
+      `channel='marketplace'` rolls up several third-party storefronts whose mix
+      shifts month to month. Its blended conversion is a mix average, and a move
+      in it is as likely to be a mix shift between storefronts as a change in any
+      one of them.
+
+  - id: returns_are_only_knowable_after_the_window
+    entity: order
+    message: >-
+      A delivered order is not a settled order: "kept" is unknowable until the
+      30-day window closes, and because the window starts at DELIVERY, a slow
+      market's orders settle later than a fast market's for reasons unrelated to
+      conversion. Any return rate read without a maturity cutoff trends toward
+      zero at the recent end, correctly, and is misread as improving quality.
+
+  - id: customer_token_is_opaque_not_a_person
+    entity: customer
+    message: >-
+      `customer_token` is a surrogate key with no personal content, which is why
+      `_shared/pii.py` allow-lists it explicitly: customer-level linkage stays
+      possible without a name, an email, or an address ever entering a query. It
+      is not stable across a re-registration, so a customer rollup over a long
+      window undercounts repeat behaviour.
