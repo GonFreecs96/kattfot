@@ -42,6 +42,23 @@ Format: `{SENTINEL} -- {human-readable detail}`. `TIER_REFUSED` is the load-bear
 guarantees a consumer can never silently embed a non-governed (financial/regulatory or
 exploratory) metric as if it were decision-grade.
 
+**The `EXPLORABLE` referral (optional second line).** A refusal whose underlying question
+the exploratory lane might serve — an R1 miss, an R2/R3 off-allow-list request, or a
+`TIER_REFUSED` for a **T3** definition — is followed by one additional line:
+
+```
+EXPLORABLE -- this question may be servable in the exploratory lane (T3, not decision-grade). With the user's explicit confirmation, run kattfot:explore.
+```
+
+Prefix-match on `EXPLORABLE -- `. The line is a *referral, not permission*: a consumer
+acting on it must obtain the user's explicit confirmation before switching lanes, and must
+carry the T3 framing on anything the lane returns. It is deliberately **absent** from R6
+refusals (PII is refused in both lanes), from `TIER_REFUSED` for T1 (the system of record is
+not an exploration target), and from `R1-AMBIGUOUS` (the fix there is choosing between
+governed readings, not leaving the lane). Exit codes are unchanged — the referral rides on
+the refusal it follows. Adding this optional line is non-breaking under the versioning rules
+below.
+
 A sentinel is printed to **stdout**, because it is the response rather than a log line: a
 consumer prefix-matches it the same way it would parse content. The **exit code** is the
 machine-readable duplicate, so a shell caller does not have to parse anything:

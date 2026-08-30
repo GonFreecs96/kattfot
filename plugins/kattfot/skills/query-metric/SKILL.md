@@ -132,8 +132,12 @@ typo, so pass the question through rather than guessing.
 
 If the question is genuinely **exploratory** — a one-off cross-tab, a multi-step
 dive with no governed metric intended — do not list T2 metrics at it. Say that it
-belongs in an ad-hoc SQL lane, and that if it becomes a recurring need it should be
-promoted to a registered T2 metric.
+belongs in the exploratory lane (`kattfot:explore`, T3, not decision-grade), and
+that if it becomes a recurring need it should be promoted to a registered T2
+metric (`kattfot:promote` scaffolds the draft). **Refer, then confirm:** name the
+trade and wait for the user's explicit yes before switching lanes — the helper's
+refusals print an `EXPLORABLE` line for exactly this handoff, and it is a
+referral, never permission.
 
 ### Step 2 — Read the matching metric
 
@@ -147,8 +151,9 @@ Also read the body — the `## Caveats` section goes into the output **verbatim*
 ### Step 3 — Tier check
 
 `T2` → proceed. `T1` → refuse per R4 (it belongs to the system of record).
-`T3` → refuse per R4 and point at an ad-hoc lane. The helper enforces this too, so a
-direct invocation cannot route around it.
+`T3` → refuse per R4 and refer to the exploratory lane (`kattfot:explore`), with
+the user's confirmation. The helper enforces this too, so a direct invocation
+cannot route around it.
 
 ### Step 4 — Parse the question
 
@@ -160,7 +165,9 @@ Extract dimensions ("split by channel" → `channel`), filters ("for bank transf
 
 - Dimension not in `allowed_dimensions` → **refuse per R2**, listing what is allowed.
 - Filter column not in `allowed_filters` → **refuse per R3**, likewise.
-- Individual-level request ("show me each order", "by session id") → **refuse per R5**.
+- Individual-level request ("show me each order", "by session id") → **refuse per
+  R5** on this path; rows are available in the exploratory lane
+  (`kattfot:explore`), stamped T3, with the user's explicit confirmation.
 - A PII column — personal name, email/phone, government ID, financial account or card
   number, health record, date of birth, street address → **refuse per R6, hard, no
   override.** Also enforced in `_shared/pii.py`, which checks *before* the
@@ -365,6 +372,7 @@ query.
   | Skill | Script |
   |---|---|
   | `query-metric` | `$AQM_ROOT/scripts/kattfot_query.py` |
+  | `explore` (ad-hoc T3, register-bounded) | `$AQM_ROOT/../explore/scripts/kattfot_explore.py` |
   | `setup` (probe only) | `$AQM_ROOT/../setup/scripts/doctor.py --probe` (a trivial `SELECT 1`) |
 
   Spine-backed skills will share `_shared/spine.py`, which applies the same checks

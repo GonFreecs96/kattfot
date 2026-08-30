@@ -55,6 +55,7 @@ sys.path.insert(0, str(SKILLS / "query-metric" / "scripts"))
 sys.path.insert(0, str(SKILLS / "catalog" / "scripts"))
 from _shared import coverage as cov  # noqa: E402
 from _shared import spine  # noqa: E402
+from _shared.exploration import EXPLORABLE_HINT  # noqa: E402
 
 try:
     import yaml
@@ -323,11 +324,14 @@ def render_metric(slug: str, args) -> str:
     check_boundary(path)
     tier = fm.get("accuracy_tier")
     if tier != SERVED_TIER:
+        # T3 gets the machine-readable referral (there IS a lane for it);
+        # T1 does not — the system of record is not an exploration target.
+        hint = EXPLORABLE_HINT if tier == "T3" else ""
         raise tier_refused(
             f"{slug} is tier {tier}; the governed context API serves {SERVED_TIER} "
             f"only. T1 comes from the system of record, T3 belongs in the "
-            f"exploratory lane — handing either back here would let a consumer "
-            f"present it as decision-grade."
+            f"exploratory lane (kattfot:explore) — handing either back here would "
+            f"let a consumer present it as decision-grade.{hint}"
         )
     text = path.read_text()
     if args.compact:

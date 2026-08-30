@@ -398,6 +398,64 @@ pins the entire prefix behind it.
   does not ship a central log store; that is deployment infrastructure a fork
   would add.
 
+## 12. The exploratory lane (T3)
+
+**Mechanism.** `kattfot:explore` serves the questions the governed runtime
+structurally cannot: free-form single-SELECT SQL over the surfaces declared
+in `config/exploration.yaml`, every result stamped **T3** and warned
+`EXPLORATORY ... Not decision-grade` as loudly as the fixture watermark. The
+lane relaxes the *allow-lists*, never the *account*: identity, R6, the audit
+chain, and manifest receipts all run unchanged. Four controls are specific
+to it, all in code (`_shared/sqlguard.py`, `_shared/exploration.py`,
+`skills/explore/scripts/kattfot_explore.py`):
+
+- **The register fails closed.** Unlike the two advisory registers
+  (coverage, guardrails), which degrade to empty on a parse error, an
+  unreadable exploration register is a hard exit — it is a permission
+  boundary, and a permission boundary that silently vanishes is worse than
+  a broken one. Adding a surface is reviewed as governance.
+- **Read-only, one statement.** DML, DDL, scripting keywords, and
+  multi-statement SQL are refused before anything executes.
+- **R6 over every identifier.** The whole statement is scanned — projection,
+  WHERE, ON — not just dimensions and filters. `SELECT *` is refused unless
+  every referenced surface's register entry attests `select_star: true`
+  (checked for the shipped views by `tests/test_view_ddl_pii.py`).
+- **A scan cap on BigQuery.** `defaults.max_bytes_billed` bounds what one
+  ad-hoc query may bill; exploration is where runaway scans happen.
+
+Row-level output is available in this lane **by explicit design decision**:
+an analyst inspecting outliers needs rows, and a row cannot carry a tier —
+which is precisely why everything here is stamped T3 rather than pretending
+otherwise. Routing is **refer-then-confirm**: governed refusals that the lane
+might serve carry an `EXPLORABLE` line (see `contracts/consumer-api.md`),
+and the agent proceeds only on the user's explicit yes. The loop closes with
+`kattfot:promote`, which scaffolds a tamper-checked draft metric from an
+explore artifact — inert (`accuracy_tier: T3`, `status: draft`) until a
+human review edits the tier, so **the R4 gate is the review gate**.
+
+**What this guarantees.** An exploratory number can exist without
+masquerading as a governed one: it is tier-stamped, register-bounded,
+PII-refused, audit-chained, and receipt-carrying, and the path from it to a
+governed metric is a reviewed promotion rather than a copy-paste.
+
+**What this does not guarantee.**
+
+- **The SQL guard is lexical**, with the same class of gaps as the
+  access-path hook: it recognizes the shapes it enumerates, and deliberate
+  obfuscation could hide a table reference from the extraction. The
+  backstops are that the query still runs as the individual human — it can
+  read nothing the human cannot — and warehouse-side ACLs.
+- **No row cap, no aggregation floor.** What bounds row egress is the
+  register, R6, and the caller's own warehouse permissions — not a LIMIT.
+  A deployment wanting k-anonymity-style floors adds them in the warehouse.
+- **Maturity is not applied.** An ad-hoc window lives inside the SQL where
+  the lane cannot see it, so an exploratory number can include immature
+  cohorts without a per-stage cutoff. The T3 stamp is the caveat; a settled
+  number needs the governed lane.
+- **The `select_star` attestation is only as good as its review.** For the
+  shipped views a test scans the DDL; a fork that sets it on an unscanned
+  surface has attested, not verified.
+
 ## The one thing to remember
 
 Every layer above states its own limit honestly, and that is the point of

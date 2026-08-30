@@ -72,7 +72,19 @@ class Adapter:
 
     # -- execution ---------------------------------------------------------
 
-    def run_query(self, project: str, sql: str, params: dict) -> list[dict]:
+    def run_query(
+        self,
+        project: str,
+        sql: str,
+        params: dict,
+        *,
+        max_bytes_billed: int | None = None,
+    ) -> list[dict]:
+        """`max_bytes_billed` caps what one query may scan, where the engine
+        can enforce that (BigQuery). Passed only by the exploratory lane —
+        governed metrics have a fixed SQL shape and need no cap. Engines with
+        no cost dimension (sqlite fixtures) accept and ignore it, keeping the
+        adapters drop-in interchangeable."""
         raise NotImplementedError
 
     # -- view naming -------------------------------------------------------

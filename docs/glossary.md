@@ -42,7 +42,7 @@ lives in `plugins/kattfot/skills/query-metric/doctrine/accuracy-tiers.md`.
 |---|---|---|
 | **T1** | Regulator-grade — reconciles to the system of record. | **No.** No T1 metric is registered; this runtime has not implemented the machinery T1 needs. |
 | **T2** | Operational — decision-grade for product/process work, not regulator-facing. | **Yes.** The entire bundled catalog is T2, enforced by the catalog linter. |
-| **T3** | Exploratory — directional only, no stable definition. | **No.** This template has no exploratory lane; a genuinely exploratory question should be named as one rather than forced through a T2 metric. |
+| **T3** | Exploratory — directional only, no stable definition. | **Exploratory lane only** (`kattfot:explore`): served ad hoc, stamped T3 on every result, never as a governed metric. `kattfot:promote` scaffolds the path back to T2. |
 
 ### Refusal rules (R1–R6)
 
@@ -55,7 +55,7 @@ apology, no workaround that violates the same rule, no artifact written.
 | **R2** | Dimension not in the metric's / spec's `allowed_dimensions`. |
 | **R3** | Filter on a column not in `allowed_filters`. |
 | **R4** | Matched metric's tier is not served (T1 or T3). |
-| **R5** | Individual-level reveal — a specific cart, order, or session id. Views aggregate to a grain; row-level reads are not available. |
+| **R5** | Individual-level reveal — a specific cart, order, or session id. Views aggregate to a grain; row-level reads are not available **on the governed path** (the exploratory lane serves rows, stamped T3, with explicit user confirmation). |
 | **R6** | **PII column reach — hard refuse, no override, enforced in code** (`_shared/pii.py`), checked *before* the allow-lists. Refused: personal names, contact details, government IDs, financial account/card numbers, health records, dates of birth, street addresses. **Not** PII: tokenized join keys (`customer_token`, `order_id`, `payment_token`, `checkout_session_id`) and aggregate geography (`market`, `region`, `city`, `postal_code`, `country`). |
 
 > **R6 is the only *refuse*-severity rule.** Everything in `guardrails.yaml`
@@ -147,9 +147,9 @@ Order Confirmed → Shipped → Delivered → Return Window Complete
 
 ---
 
-## Skills (19)
+## Skills (21)
 
-Invoke as `kattfot:<skill>`. Sixteen are functional; three are documented
+Invoke as `kattfot:<skill>`. Eighteen are functional; three are documented
 outlines. See [`skill-cheatsheet.md`](skill-cheatsheet.md) for every flag and
 a worked example.
 
@@ -171,6 +171,14 @@ a worked example.
 | **`stage-timing`** | Percentile stage latency (`p50`/`p90`/`p99`/mean, with `n`) per transition. |
 | **`segment-compare`** | A/B **and** pre/post comparison across funnel + terminal-branch mix + timing. |
 | **`funnel-pulse`** | Stage-aware recent-vs-baseline regression monitor, ranked by impact. |
+| **`funnel-nowcast`** | Cohort-maturation now-cast (Mack chain ladder, factors estimated at run time) for an immature cohort, with P10/P50/P90 intervals and a self-scoring backtest. |
+
+### The exploratory lane
+
+| Skill | What it does |
+|---|---|
+| **`explore`** | Free-form SELECT SQL over the fail-closed exploration register, stamped **T3 — not decision-grade**, PII-scanned across every identifier, audit-chained, receipt-carrying. Reached by referral (`EXPLORABLE`) + explicit user confirmation, or by name. |
+| **`promote`** | Exploration → governed draft: tamper-checks an explore artifact against its manifest, scaffolds a draft metric (T3 + `status: draft`) that `query-metric` refuses until human review edits the tier — the R4 gate is the review gate. |
 
 ### Difference attribution & integrity
 
@@ -192,7 +200,6 @@ a worked example.
 
 | Skill | What it would do |
 |---|---|
-| **`funnel-nowcast`** | Cohort-maturation now-cast (chain-ladder / development-factor) for an immature cohort, with P10/P50/P90 intervals. |
 | **`release-scorecard`** | A pre-registered release's causal verdict via BSTS counterfactual (+ DiD when a control segment is specified). |
 | **`customer-journey`** | Customer-grain journey analysis — multi-order, the person-grain analog to the session-grain funnel. |
 | **`publish`** | Push a governed artifact to a wiki as a read-only page, gated on explicit human approval. |
@@ -235,6 +242,7 @@ sliced/filtered by `channel`, `payment_method`, `market`, `category`,
 | `funnels.yaml` | Named compositions of ordered stage metrics for `visualize-metric`'s funnel mode, plus an `end_to_end` reference metric each. |
 | `coverage.yaml` | The "can I measure X yet?" register behind `coverage`. |
 | `guardrails.yaml` | *Warn*-severity data-quality traps: `feed_cutovers` and `notes`. |
+| `exploration.yaml` | The exploration register: which surfaces `kattfot:explore` may read, per-surface `select_star` PII attestations, and the BigQuery scan cap. **Fail-closed** — a missing or unparseable register closes the lane, unlike the two advisory registers above. |
 
 ---
 
@@ -244,7 +252,7 @@ sliced/filtered by `channel`, `payment_method`, `market`, `category`,
 |---|---|
 | `generate_fixtures.py` | The deterministic fixture generator — seeded, so the same arguments produce byte-identical CSVs. |
 | `demo.py` | The compose chain, end to end, offline: query → artifact → chart → PDF. |
-| `demo_skills.py` | All sixteen functional skills, offline, as a gate — fails if any cannot run with no credentials. |
+| `demo_skills.py` | All eighteen functional skills, offline, as a gate — fails if any cannot run with no credentials. |
 | `scrub_check.py` | The deny-token gate. |
 
 ---

@@ -380,3 +380,48 @@ def test_build_sql_is_canonical_bigquery_on_every_engine(monkeypatch):
     assert sqlite_sql == bq_sql
     assert "SAFE_DIVIDE" in sqlite_sql  # canonical BigQuery, not sqlite
     assert "`proj.ds.v`" in sqlite_sql
+
+
+# --- the EXPLORABLE referral: on the refusals the lane can serve, and only ---
+# those. The referral is a routing signal for the agent layer (refer, then
+# confirm), so which refusals carry it is contract, not prose — see
+# contracts/consumer-api.md.
+
+
+def test_r1_r2_r3_and_r4_t3_carry_the_explorable_referral():
+    metric = {"name": "m", "allowed_dimensions": ["market"], "allowed_filters": ["market"]}
+    with pytest.raises(SystemExit) as r1:
+        aq.find_metric_file("definitely_not_a_real_metric_zzz")
+    with pytest.raises(SystemExit) as r2:
+        aq.validate_request(metric, ["unlisted"], {})
+    with pytest.raises(SystemExit) as r3:
+        aq.validate_request(metric, [], {"unlisted": "x"})
+    with pytest.raises(SystemExit) as r4:
+        aq.validate_tier({"name": "m", "accuracy_tier": "T3"})
+    for exc in (r1, r2, r3, r4):
+        assert "\nEXPLORABLE -- " in str(exc.value)
+        assert "kattfot:explore" in str(exc.value)
+
+
+def test_r6_and_r4_t1_do_not_carry_the_referral():
+    """PII is refused in both lanes, and T1 belongs to the system of record —
+    a referral on either would promise the exploratory lane something it must
+    refuse too."""
+    with pytest.raises(SystemExit) as r6:
+        aq.validate_request({"name": "m", "allowed_dimensions": ["email"],
+                             "allowed_filters": []}, ["email"], {})
+    with pytest.raises(SystemExit) as r4:
+        aq.validate_tier({"name": "m", "accuracy_tier": "T1"})
+    assert "EXPLORABLE" not in str(r6.value)
+    assert "EXPLORABLE" not in str(r4.value)
+
+
+def test_an_ambiguous_miss_does_not_carry_the_referral():
+    """R1-AMBIGUOUS means the question matches several GOVERNED readings; the
+    fix is choosing between them, not leaving the lane."""
+    available = aq.available_metric_names(aq.bundled_metrics_dir())
+    assert aq.ambiguous_candidates("payment", available), "fixture assumption"
+    with pytest.raises(SystemExit) as exc:
+        aq.find_metric_file("payment")
+    assert "R1-AMBIGUOUS" in str(exc.value)
+    assert "EXPLORABLE" not in str(exc.value)

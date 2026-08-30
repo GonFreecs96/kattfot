@@ -180,12 +180,21 @@ class SqliteAdapter(Adapter):
 
     # -- execution ---------------------------------------------------------
 
-    def run_query(self, project: str, sql: str, params: dict) -> list[dict]:
+    def run_query(
+        self,
+        project: str,
+        sql: str,
+        params: dict,
+        *,
+        max_bytes_billed: int | None = None,
+    ) -> list[dict]:
         """Translate the canonical SQL, run it, return plain dicts.
 
         `project` is accepted and ignored: it is part of the canonical SQL's
         table reference (which the translator flattens) and is kept in the
         signature so the two adapters stay drop-in interchangeable.
+        `max_bytes_billed` is likewise ignored — a fixture read has no cost
+        dimension to cap.
         """
         # No assert_user_identity() here — see the module docstring for why this
         # is an explicit branch and what it costs.

@@ -1,0 +1,56 @@
+# exploration.yaml
+# ---------------------------------------------------------------------------
+# The exploration register: the single place that declares which warehouse
+# surfaces (tables / views) the exploratory lane (`kattfot:explore`) may read
+# with free-form SELECT SQL.
+#
+# This file is a PERMISSION BOUNDARY, not advisory metadata — which is why its
+# loader (`_shared/exploration.py`) FAILS CLOSED, unlike `coverage.yaml` and
+# `guardrails.yaml` (which degrade to empty on a parse error, because advisory
+# metadata that can break a query is worse than none). A register that cannot
+# be read means NO exploration, never "explore anything": a parse error here
+# is a hard error, not an empty allow-list and not an open door.
+#
+# Rules:
+#   1. A surface key is the `dataset.table` form as written in SQL. The explore
+#      helper qualifies it with the resolved project at run time, so the SAME
+#      register works on both engines (on sqlite, the last dot-segment is the
+#      fixture CSV's stem — see _shared/dialect.py).
+#   2. `status: live | declared`. `live` means the surface is queryable on the
+#      default engine (a committed fixture here, a real view in a deployment).
+#      `declared` documents intent; the explore helper refuses it with the
+#      reason, mirroring the module registry's honesty rule.
+#   3. `select_star: true` is an attestation that the surface exposes no direct
+#      PII, so `SELECT *` cannot smuggle a personal column past the identifier
+#      scan. For the two shipped views that attestation is CHECKED —
+#      tests/test_view_ddl_pii.py scans their DDL against the R6 denylist. A
+#      fork adding a surface it has not scanned should leave this false (the
+#      default): explicit projections still work, and every named identifier
+#      runs through the PII denylist.
+#   4. `defaults.max_bytes_billed` caps what one ad-hoc BigQuery query may
+#      scan. Exploration is where runaway scans happen; a governed metric never
+#      needs this cap because its SQL shape is fixed. Ignored on sqlite.
+#
+# Adding a surface here is reviewed as governance, not as config: it widens
+# what an agent may read on a human's behalf.
+# ---------------------------------------------------------------------------
+
+version: 1
+
+defaults:
+  # 10 GiB. BigQuery refuses the query outright when it would scan more —
+  # a hard cap, not a warning. Raise it deliberately, per deployment.
+  max_bytes_billed: 10737418240
+
+surfaces:
+  analytics.cart_checkout_funnel_weekly:
+    module: checkout
+    status: live
+    select_star: true   # DDL scanned by tests/test_view_ddl_pii.py
+    notes: "The weekly aggregate the T2 metrics read — one row per cohort week x dimension combination."
+
+  analytics.cart_checkout_session_spine:
+    module: checkout
+    status: live
+    select_star: true   # DDL scanned by tests/test_view_ddl_pii.py
+    notes: "The session-grain spine — one row per checkout session, with stage flags, stage timestamps, and terminal-branch classification."

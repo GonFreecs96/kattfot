@@ -547,6 +547,97 @@ replaces it. Fixture runs now-cast the generator, watermarked as such.
 
 ---
 
+# The exploratory lane
+
+## `explore` — ad-hoc SQL for the questions no metric can serve (T3)
+
+**Purpose:** free-form SELECT SQL over the surfaces declared in
+`config/exploration.yaml`, for a grouping no metric allow-lists, a shape
+that is not a SUM/SUM ratio, a row-level look, an arbitrary join. Every
+result is stamped **T3 — not decision-grade** and carries the full
+provenance machinery: manifest receipt, hash-chained audit trace, PII
+refusal, fixture watermark.
+
+```
+kattfot:explore <the question, in plain English>
+```
+
+The agent reaches this lane in one of two ways: you invoke it by name, or a
+governed refusal prints an `EXPLORABLE` referral and the agent proposes the
+switch — **and waits for your explicit yes**. It never auto-routes.
+
+**Helper**
+```bash
+python3 plugins/kattfot/skills/explore/scripts/kattfot_explore.py \
+  --question "Of confirmed orders, what share is ultimately returned, by channel?" \
+  --sql "SELECT cohort_week, channel,
+           SAFE_DIVIDE(SUM(orders_returned), SUM(orders_confirmed)) AS r,
+           SUM(orders_returned) AS numerator, SUM(orders_confirmed) AS denominator
+         FROM analytics.cart_checkout_funnel_weekly
+         WHERE market = @m
+         GROUP BY cohort_week, channel ORDER BY cohort_week" \
+  --param m=US            # bound as a parameter, never interpolated
+# --sql-file query.sql    # or read the statement from a file
+# --engine bigquery       # live warehouse, as you, capped by max_bytes_billed
+```
+
+**Comes back:** the rows (uncapped — by design), the qualified canonical
+SQL, bound params, surfaces read, `accuracy_tier: "T3"`, an unconditional
+`EXPLORATORY (T3)` warning, applicable guardrail caveats, and a manifest
+(`register_sha` · `query_sha` · `result_sha`).
+
+**Refusals (exit 5, in code):** `EXPLORE-STATEMENT` (not exactly one
+SELECT/WITH, or any DML/DDL/scripting keyword), `EXPLORE-SURFACE` (a table
+not in the register, or registered but not `live`), `EXPLORE-STAR`
+(`SELECT *` over a surface without the `select_star: true` PII attestation),
+`R6` (any identifier in the statement matches the PII denylist — same
+hardness as the governed lane, no override), `EXPLORE-DIALECT` (a construct
+the sqlite translator refuses — rewrite it or use `--engine bigquery`).
+
+**Gotchas:** reference surfaces as `dataset.table` exactly as registered —
+the helper qualifies the project itself. The register **fails closed**: a
+missing or unparseable `exploration.yaml` is a hard error, not open
+exploration. Maturity gating is off (an ad-hoc window lives inside your
+SQL); the T3 stamp is the caveat. Explore artifacts are not chartable via
+`visualize-metric` yet. Write your window into the SQL and bind values with
+`--param`.
+
+---
+
+## `promote` — exploration → governed draft metric
+
+**Purpose:** the doctrine's "asked twice? promote it" made mechanical: takes
+a `kattfot:explore` artifact, verifies its Provenance still hashes to its
+manifest (`PROMOTE-TAMPER` otherwise), and scaffolds a **draft** metric
+definition into the consumer metrics dir — never the bundled catalog.
+
+```
+kattfot:promote <path to explore artifact> as <metric_name>
+```
+
+**Helper**
+```bash
+python3 plugins/kattfot/skills/promote/scripts/promote_metric.py \
+  --artifact outputs/kattfot/2026-08-17-explore-confirmed-to-returned.md \
+  --name confirmed_to_returned_rate \
+  [--out-dir context/kattfot/metrics] [--force]
+```
+
+**Comes back:** the draft path, whether the shape pre-filled (a
+single-surface `SAFE_DIVIDE(SUM(x), SUM(y))` fills view, numerator/
+denominator, time column, and allow-lists), the `needs_decision` list
+(owner, entity, maturity_stage, tier — always human calls), and any
+`shape_note` (a percentile or join promotes to a spine skill or a new
+curated view, not a metric definition).
+
+**Gotchas:** the draft ships `accuracy_tier: T3` + `status: draft`, so
+`query-metric` **refuses it (R4) until a human completes the Promotion
+checklist and edits the tier to T2 — that refusal is the review gate
+working.** A tampered artifact is refused, not repaired. Register drift
+since the exploration warns but does not refuse. No warehouse access.
+
+---
+
 # Difference attribution & integrity
 
 ## `reconcile` — why does our number ≠ theirs?

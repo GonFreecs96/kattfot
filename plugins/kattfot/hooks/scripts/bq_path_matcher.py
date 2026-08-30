@@ -183,7 +183,8 @@ _MF_CLI_LOOSE = re.compile(
 _USE_SANCTIONED = (
     "Use a vetted kattfot skill script instead — see query-metric/SKILL.md's "
     '"Hard rules" for the sanctioned-path table (e.g. kattfot_query.py, '
-    "funnel_dropoff.py, doctor.py --probe)."
+    "funnel_dropoff.py, kattfot_explore.py for ad-hoc T3 exploration, "
+    "doctor.py --probe)."
 )
 
 

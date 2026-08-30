@@ -58,6 +58,8 @@ HELPER_SKILLS = (
     "load-context",
     "coverage",
     "reconcile",
+    "explore",
+    "promote",
 )
 
 for _p in (

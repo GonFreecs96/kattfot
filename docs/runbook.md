@@ -101,6 +101,8 @@ A recurring question that has no registered metric belongs in
 | Check an old artifact is still valid | `kattfot:verify` | Offline definition/query drift check via the manifest. |
 | Pull a governed **definition** into another tool | `kattfot:load-context metric/{slug}` | No warehouse access; the cross-plugin API. |
 | Project where an immature cohort is heading | `kattfot:funnel-nowcast` | Mack chain ladder over the spine; FORECAST-lane P10/P50/P90, capped at cohort size, with a self-scoring backtest. |
+| Ask something no governed metric can serve | `kattfot:explore` | The exploratory lane: free-form SELECT over registered surfaces, stamped **T3 — not decision-grade**. Requires your explicit confirmation before the lane switch; PII refused exactly as on the governed path. |
+| Turn an exploration into a real metric | `kattfot:promote` | Scaffolds a tamper-checked draft (T3 + `status: draft`) that `query-metric` refuses until you review it and edit the tier to T2. |
 | Measure a shipped release causally | *(not implemented — see below)* | Outlined as `kattfot:release-scorecard`. |
 | Answer a question about **people**, not sessions | *(not implemented — see below)* | Outlined as `kattfot:customer-journey`. |
 | Publish a governed artifact to a wiki | *(not implemented — see below)* | Outlined as `kattfot:publish`. |

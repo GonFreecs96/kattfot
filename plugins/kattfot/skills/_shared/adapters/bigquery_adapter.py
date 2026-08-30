@@ -75,12 +75,24 @@ class BigQueryAdapter(Adapter):
             return bigquery.ScalarQueryParameter(name, "FLOAT64", value)
         return bigquery.ScalarQueryParameter(name, "STRING", value)
 
-    def run_query(self, project: str, sql: str, params: dict) -> list[dict]:
+    def run_query(
+        self,
+        project: str,
+        sql: str,
+        params: dict,
+        *,
+        max_bytes_billed: int | None = None,
+    ) -> list[dict]:
         bigquery, client = self._client_and_module(project)
         job_config = bigquery.QueryJobConfig(
             query_parameters=[self._scalar(bigquery, n, v) for n, v in params.items()],
             labels={"source": JOB_LABEL},
         )
+        if max_bytes_billed is not None:
+            # A hard scan cap, enforced by BigQuery itself: a query that would
+            # bill more is refused before it runs. Set only by the exploratory
+            # lane (config/exploration.yaml `defaults.max_bytes_billed`).
+            job_config.maximum_bytes_billed = int(max_bytes_billed)
         rows = client.query(sql, job_config=job_config).result()
         return [dict(r) for r in rows]
 

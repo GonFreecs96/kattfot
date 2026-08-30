@@ -411,6 +411,24 @@ def test_both_ungoverned_tiers_are_refused(tier, tmp_path, monkeypatch, capsys):
     assert "Body text" not in out
 
 
+@pytest.mark.parametrize("tier, referred", [("T3", True), ("T1", False)])
+def test_the_explorable_referral_follows_t3_refusals_only(
+    tier, referred, tmp_path, monkeypatch, capsys
+):
+    """The optional `EXPLORABLE -- ` second line from the consumer contract:
+    a T3 definition has a lane to be referred to; T1 belongs to the system of
+    record and gets no referral."""
+    (tmp_path / "m.md").write_text(
+        f"---\nname: ungoverned\ndisplay_name: U\naccuracy_tier: {tier}\n"
+        f"module: checkout\nstatus: live\n---\n\n## Definition\nBody text.\n"
+    )
+    monkeypatch.setenv("KATTFOT_METRICS_DIR", str(tmp_path))
+    out = run_expecting(load_context, ["metric/ungoverned"], capsys, 5)
+    assert ("\nEXPLORABLE -- " in out) is referred
+    if referred:
+        assert "kattfot:explore" in out
+
+
 def test_a_module_read_withholds_a_non_t2_body_without_refusing_the_set(
     tmp_path, monkeypatch, capsys
 ):

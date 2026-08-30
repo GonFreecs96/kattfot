@@ -1,12 +1,12 @@
-"""The offline gate itself: does `scripts/demo_skills.py` still cover all fifteen?
+"""The offline gate itself: does `scripts/demo_skills.py` still cover every skill?
 
 `demo_skills.py` is the mechanical form of this template's central claim — every
 functional skill runs with no network and no cloud credentials. That claim degrades
-in a way nobody notices: a sixteenth skill lands and the gate silently checks
-fifteen; a step's assertion gets softened; the environment scrubbing loses a
+in a way nobody notices: a new skill lands and the gate silently checks one fewer
+than exists; a step's assertion gets softened; the environment scrubbing loses a
 variable and the "no credentials" line stops being true.
 
-So the gate gets its own tests. Running all fifteen subprocesses here would roughly
+So the gate gets its own tests. Running every subprocess here would roughly
 double the suite's runtime, so this file checks the gate's *structure* — that it
 knows about every skill on disk, that its environment really is scrubbed, and that a
 failing step is reported as a failure — and runs a representative slice end to end.
@@ -59,21 +59,21 @@ def test_the_gate_covers_every_skill_that_exists_on_disk():
     )
 
 
-def test_there_are_exactly_sixteen_functional_skills():
+def test_there_are_exactly_eighteen_functional_skills():
     """The number this repo commits to. If it changes, the README, the plugin
     description, and this gate all need to change together — so make that a decision
-    rather than a drift. (It last changed deliberately: the 2026-08 research pass
-    promoted funnel-nowcast from outline to functional, 15 -> 16, once a
-    run-time-estimated chain ladder dissolved the fit-the-generator objection.)
+    rather than a drift. (It last changed deliberately: the exploratory-lane pass
+    added `explore` and `promote`, 16 -> 18; before that the 2026-08 research pass
+    promoted funnel-nowcast from outline to functional, 15 -> 16.)
 
-    Sixteen is the count of *functional* skills specifically — the ones with a real
+    Eighteen is the count of *functional* skills specifically — the ones with a real
     helper the gate runs end to end. It is not the count of skill directories on
     disk: three more ship as honest outlines (see `OUTLINE_ONLY_SKILLS`), so
-    `plugins/kattfot/skills/*/SKILL.md` currently totals nineteen. Both numbers are
-    correct at once; they are counting different things.
+    `plugins/kattfot/skills/*/SKILL.md` currently totals twenty-one. Both numbers
+    are correct at once; they are counting different things.
     """
-    assert len(demo_skills.SKILL_ORDER) == 16
-    assert len(demo_skills.STEPS) == 16
+    assert len(demo_skills.SKILL_ORDER) == 18
+    assert len(demo_skills.STEPS) == 18
     assert set(demo_skills.STEPS) == set(demo_skills.SKILL_ORDER)
     assert len(demo_skills.OUTLINE_ONLY_SKILLS) == 3
 
@@ -95,6 +95,7 @@ def test_the_compose_chain_is_ordered_before_its_consumers():
         ("query-metric", "verify"),
         ("query-metric", "export-report"),
         ("visualize-metric", "render-chart"),
+        ("explore", "promote"),
     ):
         assert order.index(producer) < order.index(consumer)
 

@@ -71,6 +71,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from _shared import adapters as adapters_lib  # noqa: E402
 from _shared import audit_chain as audit_chain_lib  # noqa: E402
+from _shared.exploration import EXPLORABLE_HINT  # noqa: E402
 from _shared import guardrails as guardrails_lib  # noqa: E402
 from _shared import manifest as manifest_lib  # noqa: E402
 from _shared import numfmt as numfmt_lib  # noqa: E402
@@ -275,7 +276,7 @@ def find_metric_file(metric_name: str) -> Path:
     raise SystemExit(
         f"ERROR (R1): no metric definition found with name '{metric_name}' "
         f"in consumer dir ({consumer_root}) or plugin-bundled catalog "
-        f"({bundled_root}).{did_you_mean}{registered}"
+        f"({bundled_root}).{did_you_mean}{registered}{EXPLORABLE_HINT}"
     )
 
 
@@ -319,14 +320,14 @@ def validate_request(metric: dict, dimensions: list, filters: dict) -> None:
         if d not in allowed_dims:
             raise SystemExit(
                 f"ERROR (R2): dimension '{d}' is not in allowed_dimensions for "
-                f"{metric['name']}. Allowed: {sorted(allowed_dims)}"
+                f"{metric['name']}. Allowed: {sorted(allowed_dims)}{EXPLORABLE_HINT}"
             )
     allowed_filters = set(metric.get("allowed_filters") or [])
     for col in filters:
         if col not in allowed_filters:
             raise SystemExit(
                 f"ERROR (R3): filter column '{col}' is not in allowed_filters for "
-                f"{metric['name']}. Allowed: {sorted(allowed_filters)}"
+                f"{metric['name']}. Allowed: {sorted(allowed_filters)}{EXPLORABLE_HINT}"
             )
 
 
@@ -347,8 +348,9 @@ def validate_tier(metric: dict) -> None:
     if tier == "T3":
         raise SystemExit(
             f"ERROR (R4): '{metric['name']}' is T3 (exploratory). T3 belongs in "
-            f"an ad-hoc SQL lane, not in the governed metric runtime — promote it "
-            f"to T2 with a reviewed definition first."
+            f"the exploratory lane (kattfot:explore), not in the governed metric "
+            f"runtime — promote it to T2 with a reviewed definition first "
+            f"(kattfot:promote scaffolds the draft).{EXPLORABLE_HINT}"
         )
     if tier != "T2":
         raise SystemExit(

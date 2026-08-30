@@ -47,7 +47,7 @@ and you inherit the governance engine unmodified.
 
 **2. Someone evaluating whether "governed analytics" is real or a slide.**
 Every mechanism described here is checked by a test, not merely documented.
-`scripts/demo_skills.py` runs all sixteen functional skills in an environment
+`scripts/demo_skills.py` runs all eighteen functional skills in an environment
 scrubbed of credentials and fails if any of them cannot; `tests/test_pii_refusal.py`
 asserts a personal column is refused even when a metric's own frontmatter
 allow-lists it by mistake. Read the code, not just this doc — or, to see the
@@ -107,7 +107,8 @@ number you are holding.
 
 ## Where it is today
 
-`kattfot` is Phase 4 complete (plus a 2026-08 research pass): all sixteen functional skills run, offline,
+`kattfot` is Phase 4 complete (plus a 2026-08 research pass and the
+exploratory lane): all eighteen functional skills run, offline,
 against committed synthetic fixtures, and that claim is checked by a script
 rather than asserted in this paragraph. The research pass promoted
 `funnel-nowcast` from outline to functional — a cohort-maturation now-cast
@@ -115,7 +116,14 @@ built on Mack's distribution-free chain ladder, which *estimates* every
 development factor from the spine at run time rather than baking in a fitted
 curve, so it can exist honestly in a template whose fixtures are synthetic
 (the numbers describe the generator and are watermarked; the mechanism is what
-a real deployment runs). Three more skills — a release scorecard with a
+a real deployment runs). The exploratory-lane pass then answered the tier
+doctrine's own open question — where does a genuinely exploratory (T3)
+question go? — with `kattfot:explore` (free-form SELECT over a fail-closed
+surface register, every result stamped not-decision-grade, with identity,
+PII refusal, audit chain, and manifest receipts unchanged) and
+`kattfot:promote` (an exploration that earns recurring use is scaffolded
+into a draft metric the governed runtime refuses until a human review edits
+its tier). Three more skills — a release scorecard with a
 causal verdict, a customer-grain journey analysis, and a wiki-publishing path
 — remain documented outlines, because giving them honest numbers needs
 parameters (causal priors, control-series selection) that are judgment calls

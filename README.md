@@ -41,10 +41,22 @@ system prompt:
   metric's own allow-list would have permitted it*. This runs before the
   allow-list check, not after, precisely so a mistake in one metric's
   frontmatter cannot authorize a personal column.
-- **Accuracy tiers.** T2 (operational, decision-grade) is served and stamped
-  on every artifact. T1 (financial/regulatory) and T3 (exploratory) are
-  refused by this runtime — not because they are unimportant, but because
-  serving them honestly needs machinery this template does not implement.
+- **Accuracy tiers.** T2 (operational, decision-grade) is served by the
+  governed metric runtime and stamped on every artifact. T1
+  (financial/regulatory) is refused outright — serving it honestly needs
+  machinery this template does not implement. T3 (exploratory) is served,
+  but only through its own lane (below), never as a governed metric.
+- **An exploratory lane that relaxes the allow-lists, never the account.**
+  `kattfot:explore` runs free-form SELECT SQL for the questions no governed
+  metric can serve — over a **fail-closed register** of declared surfaces,
+  read-only and single-statement in code, PII-scanned across every
+  identifier, audit-chained, receipt-carrying, and stamped **T3 — not
+  decision-grade** as loudly as the fixture watermark. Governed refusals
+  carry a machine-readable `EXPLORABLE` referral, and the lane switch always
+  requires the user's explicit confirmation. `kattfot:promote` closes the
+  loop: it scaffolds a tamper-checked draft metric from an exploration,
+  inert until a human review edits the tier — the R4 gate *is* the review
+  gate.
 - **Per-stage maturity.** A funnel stage is withheld only until *that stage*
   settles, rather than gating the whole funnel on the slowest one — the part
   most conversion reporting gets wrong.
@@ -63,23 +75,27 @@ system prompt:
 The full reasoning behind each control — including what each one does
 **not** guarantee — is in [`docs/governance-model.md`](docs/governance-model.md).
 
-> **Status: Phase 4 complete, plus a research pass (2026-08).** All
-> **nineteen skills** are accounted for. **Sixteen** run today, offline,
-> against committed fixtures — and that is checked rather than claimed:
-> `scripts/demo_skills.py` runs every one of them in an environment with
-> `HOME` scrubbed of credentials and `KATTFOT_ENGINE` pinned to `sqlite`, and
-> fails if any cannot. The remaining **three** (`release-scorecard`,
-> `customer-journey`, `publish`) ship as documented outlines, not code; the
-> module registry records each one's exclusion with a specific reason rather
-> than a TODO — that gap is real and stated. The research pass promoted
-> `funnel-nowcast` from outline to functional (a run-time-estimated Mack
-> chain ladder dissolved the fit-the-generator objection), hash-chained the
-> audit log into tamper-evidence, added a measured maturity-calibration
-> script, an ambiguity refusal, and an indirect-injection adversarial suite —
-> each grounded in the literature reviewed in
+> **Status: Phase 4 complete, plus a research pass (2026-08) and the
+> exploratory lane.** All **twenty-one skills** are accounted for.
+> **Eighteen** run today, offline, against committed fixtures — and that is
+> checked rather than claimed: `scripts/demo_skills.py` runs every one of
+> them in an environment with `HOME` scrubbed of credentials and
+> `KATTFOT_ENGINE` pinned to `sqlite`, and fails if any cannot. The remaining
+> **three** (`release-scorecard`, `customer-journey`, `publish`) ship as
+> documented outlines, not code; the module registry records each one's
+> exclusion with a specific reason rather than a TODO — that gap is real and
+> stated. The research pass promoted `funnel-nowcast` from outline to
+> functional (a run-time-estimated Mack chain ladder dissolved the
+> fit-the-generator objection), hash-chained the audit log into
+> tamper-evidence, added a measured maturity-calibration script, an ambiguity
+> refusal, and an indirect-injection adversarial suite — each grounded in the
+> literature reviewed in
 > [`docs/reference/research-review.md`](docs/reference/research-review.md).
-> Alongside the code sit the documentation suite under [`docs/`](docs/) and
-> real committed output under [`examples/`](examples/).
+> The exploratory-lane pass added `kattfot:explore` (governed T3 ad-hoc SQL
+> over a fail-closed surface register) and `kattfot:promote` (exploration →
+> reviewed draft metric), 16 → 18. Alongside the code sit the documentation
+> suite under [`docs/`](docs/) and real committed output under
+> [`examples/`](examples/).
 
 ## Quick start
 
@@ -116,7 +132,7 @@ catches a leak.
 .venv/bin/python scripts/demo_skills.py
 ```
 
-That runs all sixteen functional skills and prints one line each. It is the
+That runs all eighteen functional skills and prints one line each. It is the
 third gate, alongside `pytest` and the scrub check, and it exists because
 "everything works offline" is the claim a reader cannot verify by inspection
 and the one most likely to quietly stop being true — a skill gains a
@@ -180,7 +196,7 @@ session-grain spine and the weekly aggregate built on it), with
 
 ## The skill surface
 
-Nineteen skills, invoked as `kattfot:<skill>`. Sixteen are complete and
+Twenty-one skills, invoked as `kattfot:<skill>`. Eighteen are complete and
 runnable today; three ship as documented outlines because giving them honest
 numbers needs parameters calibrated against a real book, and fitting them to
 a synthetic fixture would produce a curve describing the generator rather
@@ -204,8 +220,10 @@ than any business.
 | `kattfot:segment-compare` | A vs B, or before vs after, across funnel, leak mix, and timing |
 | `kattfot:funnel-pulse` | Stage-aware recent-vs-baseline regression monitor, ranked by impact |
 | `kattfot:funnel-nowcast` | Cohort-maturation now-cast (Mack chain ladder) for a not-yet-settled cohort: P10/P50/P90 capped at cohort size, with a self-scoring backtest |
+| `kattfot:explore` | The exploratory lane: free-form SELECT SQL over a fail-closed surface register, T3-stamped, PII-scanned, audit-chained — for the questions no governed metric can serve |
+| `kattfot:promote` | Exploration → governed draft: a tamper-checked metric scaffold, inert (T3 + draft) until human review edits the tier |
 
-The last five read the **session-grain spine** rather than the weekly
+The five spine skills read the **session-grain spine** rather than the weekly
 aggregate, because that is the only way to get what a `SUM/SUM` metric
 structurally cannot express: where each session actually ended up, a median,
 and an immature cohort's projected ultimate.
@@ -267,6 +285,7 @@ else's billing account.
 | `KATTFOT_FUNNELS_CONFIG` | `visualize-metric` | Override the funnel-composition config path. |
 | `KATTFOT_COVERAGE_FILE` | `_shared/coverage.py`, `coverage`, `load-context` | Instrumentation coverage register path. |
 | `KATTFOT_GUARDRAILS_FILE` | `_shared/guardrails.py` | Warn-level guardrails config path. |
+| `KATTFOT_EXPLORATION_FILE` | `_shared/exploration.py`, `explore` | Exploration-register path. **Fail-closed**: unlike coverage/guardrails, a missing or unparseable register is a hard error, because it is a permission boundary, not advisory metadata. |
 
 Every spine skill also takes `--engine` to override `KATTFOT_ENGINE` for one
 run, and `--today YYYY-MM-DD` to pin the maturity window. Pass
@@ -284,19 +303,20 @@ account.
 ```
 plugins/kattfot/
   hooks/                     PreToolUse matcher (Claude Code); .cursor/hooks/ mirrors it for Cursor
-  config/                    the module registry, two funnel specs, funnel compositions, coverage + guardrails
+  config/                    the module registry, two funnel specs, funnel compositions, coverage + guardrails,
+                              and the exploration register (the fail-closed T3 surface allow-list)
   skills/
     _shared/                 the governance engine: identity, PII, manifest, verify, reconcile,
                               numfmt, spine, coverage, guardrails, dialect, and the adapter seam
     _shared/adapters/        one BigQuery adapter, one sqlite adapter, capability advertisement
     query-metric/            the governed metric runtime: 15 T2 metrics, 8 entities, doctrine,
                               templates, view DDL, AUTHORING.md
-    <16 skill dirs>/         one SKILL.md + scripts/ each — see docs/skill-cheatsheet.md
+    <18 skill dirs>/         one SKILL.md + scripts/ each — see docs/skill-cheatsheet.md
   contracts/consumer-api.md  the cross-plugin response contract (sentinels, formats)
 scripts/                     repo tooling, NOT part of the shipped plugin
   generate_fixtures.py       the deterministic fixture generator
   demo.py                    the compose chain, end to end, offline
-  demo_skills.py             all sixteen functional skills, offline, as a gate
+  demo_skills.py             all eighteen functional skills, offline, as a gate
   scrub_check.py             the deny-token gate
 data/kattfot/sample/           the two committed fixture CSVs + FIXTURES.md (seed, instant, trim)
 tests/                       governance tests + catalog linter, run by pytest
@@ -416,7 +436,7 @@ Worth stating plainly rather than discovering:
   reports that the intervals undercover on this synthetic book (the documented
   failure mode of model-based nowcasts — see
   [`docs/reference/research-review.md`](docs/reference/research-review.md)).
-- **Three of nineteen skills are outlines, not code.** `release-scorecard`
+- **Three of twenty-one skills are outlines, not code.** `release-scorecard`
   needs causal parameters — BSTS priors, control-series selection, pre/post
   windows — that are judgment calls against a real book and, unlike
   `funnel-nowcast`'s development factors, cannot be estimated from the spine at

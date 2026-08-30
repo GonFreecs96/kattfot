@@ -24,13 +24,39 @@ interval. It travels with the number into every artifact, chart, and PDF.
 |---|---|---|---|---|
 | **T1** | Regulator-grade | Reconciles to the system of record to the cent. Reproducible on demand, with a documented control. | Finance / compliance, on a named cadence | **No** |
 | **T2** | Operational | Decision-grade for product and process discussions. Definition is reviewed and version-pinned; source view is curated; known caveats are enumerated. | The metric's named owner | **Yes** |
-| **T3** | Exploratory | Ad-hoc. Answers a question once. No stable definition, no review, no promise it means the same thing next week. | Nobody | **No** |
+| **T3** | Exploratory | Ad-hoc. Answers a question once. No stable definition, no review, no promise it means the same thing next week. | Nobody | **Exploratory lane only** (`kattfot:explore`) — never as a governed metric |
 
-**This runtime serves T2 only.** That is the whole design: T1 must come from the
-system of record, because a governed convenience layer cannot inherit a control
-it does not implement; T3 belongs in an ad-hoc SQL lane where its
-provisionality is obvious. A metric that matters enough to be asked twice should
-be promoted to T2 with a reviewed definition — and then it is served here.
+**The governed metric runtime serves T2 only.** That is the whole design: T1
+must come from the system of record, because a governed convenience layer
+cannot inherit a control it does not implement; T3 is served — but only through
+the exploratory lane, where its provisionality is stamped on every result. A
+metric that matters enough to be asked twice should be promoted to T2 with a
+reviewed definition (`kattfot:promote` scaffolds the draft) — and then it is
+served here.
+
+## The exploratory lane
+
+`kattfot:explore` is where a genuinely exploratory question goes instead of
+being forced through a T2 metric it does not fit. The lane relaxes the
+*allow-lists*, never the *account*:
+
+- **Kept, unchanged:** per-user identity on the warehouse path, the R6 PII
+  refusal (hardened, even — every identifier in the statement is scanned, not
+  just dimensions and filters), the hash-chained audit log, a manifest receipt
+  on every result, and the fixture watermark.
+- **Relaxed, by design:** metric/dimension/filter allow-lists (replaced by a
+  fail-closed register of explorable surfaces, `config/exploration.yaml`),
+  the aggregate-only rule R5 (row-level output is available here — an
+  individual row still cannot carry a tier, which is exactly why everything
+  in this lane is stamped T3), and maturity cutoffs (an ad-hoc window lives
+  inside the SQL; the T3 stamp is the caveat).
+- **Added:** read-only single-SELECT enforcement and, on BigQuery, a
+  per-query scan cap (`defaults.max_bytes_billed`).
+
+The lane switch is **refer-then-confirm**: a governed refusal that the lane
+might serve carries a machine-readable `EXPLORABLE` line, and the agent may
+proceed only after telling the user the result will be T3 and getting an
+explicit yes. Never as a silent fallback.
 
 `tests/test_metric_catalog.py` enforces that every bundled metric is T2, so the
 catalog cannot drift into serving something it has not earned.
@@ -77,8 +103,13 @@ Two honest limits on that guard, worth knowing before treating it as complete:
 Aggregate-only is not a privacy flourish, it is what keeps the tier meaningful.
 An individual row cannot carry a caveat, cannot be reconciled, and cannot be
 re-derived from a definition — so it cannot be T2 by construction. Requests for
-row-level output are refused and pointed at whatever process your organisation
-uses for individual data access.
+row-level output are refused **on the governed path** and referred to the
+exploratory lane (`kattfot:explore`), which serves rows precisely because
+everything it serves is stamped T3 — the row does not pretend to a tier it
+cannot carry. The referral needs the user's explicit confirmation, PII columns
+stay refused (R6 holds in both lanes), and truly individual data access —
+"show me this customer" — still belongs to whatever process your organisation
+uses for it, not to an analytics lane in either tier.
 
 ## What a T2 metric owes its reader
 

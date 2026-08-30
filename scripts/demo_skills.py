@@ -65,8 +65,9 @@ SPINE_WINDOW = ["--time-range", "last_16_weeks", "--today", AS_OF]
 
 DEMO_METRIC = "cart_to_checkout_start_conversion"
 
-#: The sixteen functional skills, in dependency order — the compose chain first,
-#: because `verify` needs an artifact to check.
+#: The eighteen functional skills, in dependency order — the compose chain first,
+#: because `verify` needs an artifact to check, and `explore` before `promote`,
+#: because promotion consumes the exploratory artifact.
 SKILL_ORDER = (
     "setup",
     "catalog",
@@ -84,6 +85,8 @@ SKILL_ORDER = (
     "segment-compare",
     "funnel-pulse",
     "funnel-nowcast",
+    "explore",
+    "promote",
 )
 
 #: Skills that ship as a documented outline only — a `SKILL.md` exists on disk, but
@@ -128,10 +131,11 @@ class Runner:
         })
         (home / "mpl").mkdir(parents=True, exist_ok=True)
 
-    def run(self, args, *, allow_exit=(0,)) -> subprocess.CompletedProcess:
+    def run(self, args, *, allow_exit=(0,), extra_env=None) -> subprocess.CompletedProcess:
+        env = {**self.env, **(extra_env or {})} if extra_env else self.env
         proc = subprocess.run(
             [sys.executable] + [str(a) for a in args],
-            capture_output=True, text=True, cwd=REPO_ROOT, env=self.env,
+            capture_output=True, text=True, cwd=REPO_ROOT, env=env,
         )
         if proc.returncode not in allow_exit:
             raise StepFailed(
@@ -585,6 +589,133 @@ def step_funnel_nowcast(r: Runner, state: dict):
     )
 
 
+def compose_explore_artifact(result: dict, path: Path) -> Path:
+    """The explore artifact, in the shape `explore/SKILL.md` specifies — the
+    Provenance fences are load-bearing, because `kattfot:promote` re-parses the
+    SQL and parameters from exactly those blocks for its tamper check."""
+    fm = [
+        "---",
+        "skill: explore",
+        f"accuracy_tier: {result['accuracy_tier']}",
+        f"question: {json.dumps(result['question'])}",
+        f"surfaces: {json.dumps(result['surfaces'])}",
+        f"source_mode: {result['source_mode']}",
+        f"source_project: {result['source_project']}",
+        f"engine: {result['engine']}",
+        f"fixture_backed: {str(result['fixture_backed']).lower()}",
+        f"generated_at: {result['generated_at']}",
+        "manifest:",
+        f"  plugin_version: {result['manifest']['plugin_version']}",
+        f"  register_sha: {result['manifest']['register_sha']}",
+        f"  query_sha: {result['manifest']['query_sha']}",
+        f"  result_sha: {result['manifest']['result_sha']}",
+        "---",
+        "",
+        f"# Exploration — {result['question']}",
+        "",
+        "> **EXPLORATORY (T3) — NOT DECISION-GRADE.** Ad-hoc result: no reviewed",
+        "> definition, no named owner, no promise it means the same thing next week.",
+        "",
+        "> ⚠️ **FIXTURE DATA** — these numbers come from committed synthetic",
+        "> fixtures, not from a warehouse. They describe a seeded random process.",
+        "",
+        f"**Surfaces:** {', '.join(result['surfaces'])}   **Rows:** {result['row_count']}",
+        "",
+        "## Caveats",
+        "",
+    ]
+    fm += [f"- {w}" for w in result.get("warnings", [])]
+    fm += [
+        "",
+        "## Provenance",
+        "",
+        "Executed SQL (canonical BigQuery dialect):",
+        "",
+        "```sql",
+        result["query"],
+        "```",
+        "",
+        "Bound parameters:",
+        "",
+        "```json",
+        json.dumps(result["query_params"]),
+        "```",
+        "",
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(fm))
+    return path
+
+
+def step_explore(r: Runner, state: dict):
+    """The exploratory lane: a real analyst question no registered metric serves
+    (confirmed-to-returned is not in the catalog), answered ad hoc, stamped T3."""
+    sql = (
+        "SELECT cohort_week, channel, "
+        "SAFE_DIVIDE(SUM(orders_returned), SUM(orders_confirmed)) AS confirmed_to_returned_rate, "
+        "SUM(orders_returned) AS numerator, SUM(orders_confirmed) AS denominator "
+        "FROM analytics.cart_checkout_funnel_weekly "
+        "WHERE cohort_week >= @start_week "
+        "GROUP BY cohort_week, channel ORDER BY cohort_week, channel"
+    )
+    out = r.json([
+        helper("explore", "kattfot_explore.py"),
+        "--question", "Of confirmed orders, what share is ultimately returned, by channel?",
+        "--sql", sql,
+        "--param", "start_week=2026-04-06",
+    ])
+    assert out["accuracy_tier"] == "T3"
+    assert out["fixture_backed"] is True
+    assert any(w.startswith("EXPLORATORY (T3)") for w in out["warnings"]), (
+        "the T3 warning must be unconditional"
+    )
+    assert out["manifest"]["register_sha"] and out["manifest"]["query_sha"]
+    artifact = state["outputs"] / f"{AS_OF}-explore-confirmed-to-returned.md"
+    compose_explore_artifact(out, artifact)
+    state["explore_artifact"] = artifact
+    return (
+        f"{out['row_count']} rows · {out['source_mode']} · T3-stamped · "
+        f"surfaces {','.join(out['surfaces'])}",
+        {"artifact": artifact},
+    )
+
+
+def step_promote(r: Runner, state: dict):
+    """Exploration -> reviewed draft: tamper-checked scaffold, inert until a
+    human edits the tier (the R4 gate is the review gate)."""
+    drafts = state["outputs"] / "drafts"
+    out = r.json([
+        helper("promote", "promote_metric.py"),
+        "--artifact", state["explore_artifact"],
+        "--name", "confirmed_to_returned_rate",
+        "--out-dir", drafts,
+        # every other step overwrites its own prior output on a re-run of the
+        # gate; the draft is no different
+        "--force",
+    ])
+    assert out["prefilled"] is True, "a SUM/SUM single-surface shape must prefill"
+    draft = Path(out["draft_path"])
+    text = draft.read_text()
+    assert "accuracy_tier: T3" in text and "status: draft" in text, (
+        "the draft must be inert until human review"
+    )
+    # The review gate, demonstrated: query-metric refuses the T3 draft.
+    gate = r.run(
+        [
+            helper("query-metric", "kattfot_query.py"),
+            "--metric", "confirmed_to_returned_rate",
+        ],
+        allow_exit=(1,),
+        extra_env={"KATTFOT_METRICS_DIR": str(drafts)},
+    )
+    assert "ERROR (R4)" in gate.stderr, "the T3 draft must be refused until reviewed"
+    return (
+        f"draft at {draft.name} · prefilled · R4-refused until reviewed "
+        f"(needs: {', '.join(out['needs_decision'])})",
+        {"draft": draft},
+    )
+
+
 STEPS = {
     "setup": step_setup,
     "catalog": step_catalog,
@@ -602,6 +733,8 @@ STEPS = {
     "segment-compare": step_segment_compare,
     "funnel-pulse": step_funnel_pulse,
     "funnel-nowcast": step_funnel_nowcast,
+    "explore": step_explore,
+    "promote": step_promote,
 }
 
 
