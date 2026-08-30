@@ -24,6 +24,16 @@
     font-size: clamp(60px, 14vw, 150px); font-weight: 800; letter-spacing: 0.08em;
     color: var(--mock-ink); opacity: var(--mock-alpha); transform: rotate(-24deg); user-select: none;
   }
+  /* The exploratory (T3) stamp: a loud page banner rather than a second
+     diagonal, so it stays legible alongside the MOCK DATA watermark (a
+     fixture-backed exploration carries both). Amber is hard-coded to the T3
+     tier colors — the page tier pill may show a different (lowest) tier. */
+  .explore-banner {
+    background: #FBF1DD; color: #8A5A00; border: 1px solid #8A5A00;
+    border-radius: 8px; font-size: 12.5px; font-weight: 700;
+    letter-spacing: 0.02em; padding: 9px 14px; margin-bottom: 18px;
+  }
+  .explore-banner[hidden] { display: none; }
   header.hero {
     display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start;
     justify-content: space-between; border-bottom: 1px solid var(--card-border);
@@ -84,6 +94,7 @@
 <body>
   <div class="watermark" id="watermark" hidden><span>MOCK DATA</span></div>
   <div class="wrap">
+    <div class="explore-banner" id="explore-banner" hidden>EXPLORATORY (T3) — NOT DECISION-GRADE · this surface includes ad-hoc exploratory results with no reviewed definition</div>
     <header class="hero">
       <div>
         <h1 class="title" id="title"></h1>
@@ -174,11 +185,17 @@
     document.getElementById("stamp").innerHTML = stampLines.join("<br/>");
 
     // ---- Mock watermark (page-level if the dashboard or any chart is mock) ---
+    // ---- Exploratory banner (page-level if the dashboard or any chart is T3) ---
     var anyMock = !!D.mock;
+    var anyExploratory = !!D.exploratory;
     (D.sections || []).forEach(function (s) {
-      if (s.type === "charts") (s.blocks || []).forEach(function (b) { if (b.spec && b.spec.mock) anyMock = true; });
+      if (s.type === "charts") (s.blocks || []).forEach(function (b) {
+        if (b.spec && b.spec.mock) anyMock = true;
+        if (b.spec && b.spec.exploratory) anyExploratory = true;
+      });
     });
     if (anyMock) document.getElementById("watermark").hidden = false;
+    if (anyExploratory) document.getElementById("explore-banner").hidden = false;
 
     // ---- Value formatting for KPIs/tables (chart values format inside builders) ---
     function fmtCell(v, kind) {

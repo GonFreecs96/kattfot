@@ -85,7 +85,16 @@ Resolve `EXPLORE_ROOT`, first match wins:
 5. **Render the artifact** from the helper's JSON using the Output format
    below, into `${KATTFOT_OUTPUTS_DIR:-outputs/kattfot}/<date>-explore-<slug>.md`
    (slug: a few words from the question, kebab-case).
-6. **Present the result** with the T3 framing intact: lead with the caveat
+6. **Chart it if the user wants a picture.** The artifact goes through the
+   same governed pipeline as a metric: `kattfot:visualize-metric` builds the
+   spec (name the column mapping with `--x` / `--value-column` / `--series`
+   when the inference rule would guess wrong), and `kattfot:render-chart` /
+   `kattfot:render-dashboard` / `kattfot:export-report` all render an
+   **EXPLORATORY (T3) — NOT DECISION-GRADE** banner from the spec's
+   `exploratory` flag — alongside the MOCK watermark when fixture-backed.
+   The stamp survives into every rendered form; that is the condition under
+   which a T3 number may become a chart at all.
+7. **Present the result** with the T3 framing intact: lead with the caveat
    that this is exploratory, then the numbers. If the question sounds like it
    will recur, offer `kattfot:promote` to scaffold a governed draft.
 
@@ -186,11 +195,11 @@ Manifest: `register_sha {register_sha}` · `query_sha {query_sha}` · `result_sh
 
 ## Out of scope
 
-- **Charting.** `kattfot:visualize-metric` accepts governed metric artifacts
-  only; an explore artifact is refused there today. (Follow-up: a T3
-  watermark lane through the chart spec.)
 - **Anything T1.** Regulator-grade questions go to the system of record.
 - **Editing the register.** Adding a surface is reviewed as governance.
+- **Stripping the stamp.** A chart, dashboard, or PDF built from an explore
+  artifact carries the EXPLORATORY banner by construction; producing an
+  unstamped rendering of a T3 number is not a supported path.
 
 ## Status in this template
 

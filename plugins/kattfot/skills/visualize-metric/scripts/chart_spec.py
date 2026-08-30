@@ -14,13 +14,21 @@ artifact already contains, which is the same posture as the governed
 a visualization that could reach past its artifact to "fill in" a point would break
 the one property that makes the artifact worth keeping.
 
-Two modes:
+Three modes:
 
   Single metric (default):
     chart_spec.py --artifact outputs/kattfot/2026-08-17-foo.md \
                   [--intent trend|compare|breakdown|share] \
                   [--chart-type single_line|multi_series_line|ranked_bar] \
                   [--baseline 0.35] [--flag-last-n 1]
+
+  Exploratory (a kattfot:explore artifact — detected by `skill: explore`):
+    chart_spec.py --artifact outputs/kattfot/2026-08-17-explore-foo.md \
+                  [--x cohort_week] [--value-column rate] [--series channel]
+    The column mapping is caller-named or inferred by a stated rule (see the
+    spec's `rationale`), the spec carries `exploratory: true`, and every
+    renderer turns that into an EXPLORATORY (T3) watermark — the tier stamp
+    must survive into the chart.
 
   Funnel (compose ordered stage metrics into one chart):
     chart_spec.py --funnel checkout \
@@ -79,6 +87,15 @@ def is_fixture_backed(fm: dict) -> bool:
     return fm.get("source_mode") in FIXTURE_SOURCE_MODES
 
 
+def is_exploratory(fm: dict) -> bool:
+    """Whether this is a `kattfot:explore` (T3) artifact. Exploratory specs get
+    their own chart lane: caller-named (or explicitly inferred) columns instead
+    of the metric template's fixed order, and an EXPLORATORY watermark that
+    every renderer must draw — the T3 stamp has to survive into the one form a
+    number travels in most easily."""
+    return fm.get("skill") == "explore"
+
+
 # ---------------------------------------------------------------------------
 # Artifact parsing
 # ---------------------------------------------------------------------------
@@ -100,14 +117,32 @@ def parse_artifact(path: Path) -> tuple[dict, list[dict]]:
     fm = yaml.safe_load(m.group(1)) or {}
     body = m.group(2)
 
-    # Confirm governed provenance before visualizing anything. An artifact without
-    # a tier and a source has no business becoming a chart somebody screenshots.
-    for required in ("metric", "accuracy_tier", "source_view", "generated_at"):
-        if required not in fm:
+    # Confirm governed provenance before visualizing anything. An artifact
+    # without a tier and a source has no business becoming a chart somebody
+    # screenshots. Two shapes are accepted: a query-metric artifact (keyed by
+    # `metric`) and a kattfot:explore artifact (keyed by `skill: explore`,
+    # sourced from `surfaces`, and ALWAYS T3 — an explore artifact claiming any
+    # other tier is malformed, not a different kind of exploration).
+    if is_exploratory(fm):
+        for required in ("question", "accuracy_tier", "surfaces", "generated_at"):
+            if required not in fm:
+                raise SystemExit(
+                    f"ERROR: explore artifact frontmatter missing '{required}'. "
+                    f"Only governed artifacts can be visualized."
+                )
+        if fm.get("accuracy_tier") != "T3":
             raise SystemExit(
-                f"ERROR: artifact frontmatter missing '{required}'. "
-                f"Only governed query-metric artifacts can be visualized."
+                f"ERROR: explore artifact declares accuracy_tier "
+                f"{fm.get('accuracy_tier')!r}; the exploratory lane is T3 by "
+                f"definition. Refusing to chart a malformed artifact."
             )
+    else:
+        for required in ("metric", "accuracy_tier", "source_view", "generated_at"):
+            if required not in fm:
+                raise SystemExit(
+                    f"ERROR: artifact frontmatter missing '{required}'. "
+                    f"Only governed query-metric artifacts can be visualized."
+                )
 
     return fm, _parse_results_table(body, path)
 
@@ -416,6 +451,243 @@ def _subtitle(fm: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Exploratory (T3) spec
+# ---------------------------------------------------------------------------
+#
+# An explore artifact's Results table has whatever columns the ad-hoc SQL
+# projected — there is no metric template fixing the order. So the mapping to
+# a chart is either **named by the caller** (--x / --value-column / --series)
+# or **inferred with a stated rule** that the rationale spells out: x is the
+# first column, the value is the first numeric column that is not x (and not
+# the numerator/denominator convention columns), the series are the remaining
+# non-numeric columns. Inference that cannot explain itself is
+# indistinguishable from a guess; a refusal names the flag that resolves it.
+
+_DATEISH_RE = re.compile(r"^\d{4}-\d{2}(-\d{2})?")
+
+
+def _numeric_columns(rows: list[dict]) -> list[str]:
+    """Columns whose every non-null rendered cell parses as a number (and at
+    least one does). Column order preserved."""
+    numeric = []
+    for col in rows[0].keys():
+        seen = False
+        ok = True
+        for r in rows:
+            cell = r[col].strip()
+            if cell.lower() in _NULL_CELLS:
+                continue
+            if parse_number(cell) is None:
+                ok = False
+                break
+            seen = True
+        if ok and seen:
+            numeric.append(col)
+    return numeric
+
+
+def _x_is_temporal(rows: list[dict], x: str) -> bool:
+    """Whether every x cell looks like a date (YYYY-MM or YYYY-MM-DD prefix).
+    A line chart over a categorical x fabricates a trend out of sort order, so
+    non-temporal x always renders as bars."""
+    vals = [r[x].strip() for r in rows if r[x].strip()]
+    return bool(vals) and all(_DATEISH_RE.match(v) for v in vals)
+
+
+def _build_category_bars(rows, x, value, num_col, den_col, series_cols):
+    """One bar per row: categorical x (plus any series columns) as the label.
+    Unlike the metric path's latest-period bars, a categorical table has no
+    'latest' — every row is a category, and all of them are drawn."""
+    bars = []
+    for r in rows:
+        label = " · ".join([r[x]] + [r[s] for s in series_cols])
+        bars.append(
+            {
+                "label": label,
+                "y": parse_number(r[value]),
+                "num": parse_number(r[num_col]) if num_col else None,
+                "den": parse_number(r[den_col]) if den_col else None,
+            }
+        )
+    bars.sort(key=lambda b: (b["y"] is not None, b["y"]), reverse=True)
+    return bars
+
+
+def build_explore_spec(
+    fm: dict,
+    rows: list[dict],
+    intent: str | None,
+    override: str | None,
+    baseline: float | None,
+    flag_last_n: int,
+    x_col: str | None = None,
+    value_col: str | None = None,
+    series_arg: str | None = None,
+) -> dict:
+    header = list(rows[0].keys())
+    numeric = _numeric_columns(rows)
+    mapping = []
+
+    x = x_col or header[0]
+    if x not in header:
+        raise SystemExit(
+            f"ERROR: --x '{x}' is not a Results column. Columns: {header}."
+        )
+    mapping.append(f"x='{x}' ({'--x' if x_col else 'first column'})")
+
+    if value_col:
+        if value_col not in header:
+            raise SystemExit(
+                f"ERROR: --value-column '{value_col}' is not a Results column. "
+                f"Columns: {header}."
+            )
+        if value_col not in numeric:
+            raise SystemExit(
+                f"ERROR: --value-column '{value_col}' is not numeric in the "
+                f"Results table. Numeric columns: {numeric or '(none)'}."
+            )
+        value = value_col
+        mapping.append(f"value='{value}' (--value-column)")
+    else:
+        candidates = [
+            c for c in numeric if c != x and c not in ("numerator", "denominator")
+        ]
+        if not candidates:
+            raise SystemExit(
+                f"ERROR: no numeric value column could be inferred from the "
+                f"Results table (numeric columns: {numeric or '(none)'}). Name "
+                f"one with --value-column."
+            )
+        value = candidates[0]
+        mapping.append(f"value='{value}' (first numeric column)")
+    if value == x:
+        raise SystemExit(
+            "ERROR: the x and value columns are the same — a chart needs a "
+            "distinct axis and value. Name them with --x and --value-column."
+        )
+
+    if series_arg is not None:
+        series_cols = [s.strip() for s in series_arg.split(",") if s.strip()]
+        for s in series_cols:
+            if s not in header or s in (x, value):
+                raise SystemExit(
+                    f"ERROR: --series column '{s}' must be a Results column "
+                    f"other than x and the value. Columns: {header}."
+                )
+        mapping.append(f"series={series_cols} (--series)")
+    else:
+        series_cols = [c for c in header if c not in numeric and c != x]
+        mapping.append(f"series={series_cols} (non-numeric columns)")
+
+    def _aux(name):
+        return name if name in numeric and name != value else None
+
+    num_col = _aux("numerator")
+    den_col = _aux("denominator")
+
+    first_cell = next(
+        (r[value] for r in rows if r[value].strip().lower() not in _NULL_CELLS), ""
+    )
+    value_format = detect_value_format(first_cell)
+    # Ad-hoc SQL often returns raw fractional values (a SAFE_DIVIDE ratio the
+    # query never formatted). Rendered as 'count' those round to 0 on every
+    # axis label — so a fractional column gets the 'number' format, which both
+    # renderers print with significant digits instead of rounding away.
+    parsed_vals = [
+        v for v in (parse_number(r[value]) for r in rows) if v is not None
+    ]
+    if value_format == "count" and any(
+        isinstance(v, float) and not v.is_integer() for v in parsed_vals
+    ):
+        value_format = "number"
+
+    time_values = []
+    for r in rows:
+        if r[x] not in time_values:
+            time_values.append(r[x])
+
+    def series_key(r):
+        return " · ".join(r[s] for s in series_cols) if series_cols else "all"
+
+    series_names = []
+    for r in rows:
+        k = series_key(r)
+        if k not in series_names:
+            series_names.append(k)
+
+    temporal = _x_is_temporal(rows, x)
+    if temporal:
+        chart_type, rationale = resolve_chart_type(
+            len(time_values), len(series_cols), len(series_names), intent, override
+        )
+    else:
+        if override in ("single_line", "multi_series_line"):
+            raise SystemExit(
+                f"ERROR: --chart-type {override} refused — x column '{x}' is "
+                f"not temporal, and a line over categories fabricates a trend "
+                f"out of sort order. Use ranked_bar, or name a date column "
+                f"with --x."
+            )
+        chart_type = "ranked_bar"
+        rationale = f"x '{x}' is categorical (non-date values) → ranked bar."
+
+    question = fm.get("question", "")
+    surfaces = fm.get("surfaces") or []
+    spec = {
+        "chart_type": chart_type,
+        "metric": None,
+        "question": question,
+        "surfaces": surfaces,
+        "title": question or "Exploration",
+        "subtitle": " · ".join(
+            p
+            for p in (
+                "T3 · exploratory",
+                ", ".join(surfaces),
+                f"generated {fm.get('generated_at', '')}",
+            )
+            if p
+        ),
+        "x_label": x,
+        "y_label": value,
+        "value_format": value_format,
+        # Anchor at 0 for percents (the governed rule) and for non-negative raw
+        # numbers — with an ad-hoc column we cannot know it is NOT a rate, and
+        # erring toward the anchored axis is erring away from the cliff effect.
+        "y_axis_min": (
+            0
+            if value_format == "percent"
+            or (value_format == "number" and parsed_vals and min(parsed_vals) >= 0)
+            else None
+        ),
+        "baseline": baseline,
+        "mock": is_fixture_backed(fm),
+        # The lane's stamp, and the field every renderer keys the EXPLORATORY
+        # watermark on — parallel to `mock`, and just as non-optional.
+        "exploratory": True,
+        "accuracy_tier": "T3",
+        "rationale": "explore columns: " + ", ".join(mapping) + "; " + rationale,
+        "flag_last_n": max(0, int(flag_last_n)),
+        "source_rows": len(rows),
+        "generated_at": fm.get("generated_at"),
+    }
+
+    if chart_type in ("single_line", "multi_series_line"):
+        spec["series"] = _build_series(
+            rows, x, value, num_col, den_col, series_cols, series_key
+        )
+    elif temporal:
+        spec["bars"] = _build_bars(
+            rows, x, value, num_col, den_col, series_cols, series_key, time_values
+        )
+        spec["as_of"] = time_values[-1]
+    else:
+        spec["bars"] = _build_category_bars(rows, x, value, num_col, den_col, series_cols)
+
+    return spec
+
+
+# ---------------------------------------------------------------------------
 # Funnel spec
 # ---------------------------------------------------------------------------
 
@@ -570,6 +842,22 @@ def main():
         default=0,
         help="flag the trailing N time points as still-maturing (hollow markers)",
     )
+    p.add_argument(
+        "--x",
+        default=None,
+        help="explore artifacts only: the x-axis column (default: first column)",
+    )
+    p.add_argument(
+        "--value-column",
+        default=None,
+        help="explore artifacts only: the value column (default: first numeric column)",
+    )
+    p.add_argument(
+        "--series",
+        default=None,
+        help="explore artifacts only: comma-separated series columns "
+        "(default: the non-numeric columns)",
+    )
     p.add_argument("--funnel", default=None, help="funnel key from funnels.yaml")
     p.add_argument(
         "--stage-json",
@@ -591,9 +879,24 @@ def main():
         if not args.artifact:
             raise SystemExit("ERROR: provide --artifact or --funnel.")
         fm, rows = parse_artifact(Path(args.artifact))
-        spec = build_single_spec(
-            fm, rows, args.intent, args.chart_type, args.baseline, args.flag_last_n
-        )
+        if is_exploratory(fm):
+            spec = build_explore_spec(
+                fm, rows, args.intent, args.chart_type, args.baseline,
+                args.flag_last_n, args.x, args.value_column, args.series,
+            )
+        else:
+            # A metric artifact's columns come from the template, not from
+            # flags; a silently ignored flag would look honored.
+            if args.x or args.value_column or args.series is not None:
+                raise SystemExit(
+                    "ERROR: --x/--value-column/--series apply to explore "
+                    "artifacts only. A metric artifact's column mapping comes "
+                    "from its template order."
+                )
+            spec = build_single_spec(
+                fm, rows, args.intent, args.chart_type, args.baseline,
+                args.flag_last_n,
+            )
 
     text = json.dumps(spec, indent=2, default=str)
     if args.out:

@@ -621,6 +621,21 @@ def compose_explore_artifact(result: dict, path: Path) -> Path:
         "",
         f"**Surfaces:** {', '.join(result['surfaces'])}   **Rows:** {result['row_count']}",
         "",
+        "## Results",
+        "",
+    ]
+    cols = list(result["rows"][0].keys()) if result["rows"] else []
+    if cols:
+        fm.append("| " + " | ".join(cols) + " |")
+        fm.append("| " + " | ".join("---" for _ in cols) + " |")
+        for row in result["rows"]:
+            fm.append(
+                "| " + " | ".join(
+                    "—" if row[c] is None else str(row[c]) for c in cols
+                ) + " |"
+            )
+    fm += [
+        "",
         "## Caveats",
         "",
     ]
@@ -673,10 +688,31 @@ def step_explore(r: Runner, state: dict):
     artifact = state["outputs"] / f"{AS_OF}-explore-confirmed-to-returned.md"
     compose_explore_artifact(out, artifact)
     state["explore_artifact"] = artifact
+
+    # The T3 chart lane: the same spec/render pipeline as a governed metric,
+    # with the EXPLORATORY stamp carried into the spec and the rendered HTML.
+    charts = state["outputs"] / "charts"
+    spec_path = charts / f"{AS_OF}-explore-confirmed-to-returned.spec.json"
+    spec = r.json([
+        helper("visualize-metric", "chart_spec.py"),
+        "--artifact", artifact, "--out", spec_path,
+    ])
+    assert spec["exploratory"] is True, "the exploratory stamp must be in the spec"
+    assert spec["accuracy_tier"] == "T3"
+    assert spec["mock"] is True
+    html = r.json([
+        helper("render-chart", "render_html.py"),
+        "--spec", spec_path,
+        "--out", charts / f"{AS_OF}-explore-confirmed-to-returned.html",
+    ])
+    assert "EXPLORATORY (T3)" in Path(html["html"]).read_text(), (
+        "the exploratory banner must reach the rendered chart"
+    )
     return (
         f"{out['row_count']} rows · {out['source_mode']} · T3-stamped · "
-        f"surfaces {','.join(out['surfaces'])}",
-        {"artifact": artifact},
+        f"surfaces {','.join(out['surfaces'])} · charted as {spec['chart_type']} "
+        f"with the EXPLORATORY banner",
+        {"artifact": artifact, "chart": Path(html["html"])},
     )
 
 

@@ -286,3 +286,101 @@ def test_build_pdf_titles_a_spine_artifact_by_its_skill_name(tmp_path):
     fm, sections = rp.parse_artifact(artifact)
     title = fm.get("display_name") or fm.get("metric") or fm.get("skill")
     assert title == "funnel-dropoff"
+
+
+# --- the T3 chart lane: explore artifacts export too -------------------------
+
+EXPLORE_ARTIFACT = textwrap.dedent(
+    """\
+    ---
+    skill: explore
+    accuracy_tier: T3
+    question: "Of confirmed orders, what share is ultimately returned?"
+    surfaces: ["analytics.cart_checkout_funnel_weekly"]
+    source_mode: fixture_sql
+    fixture_backed: true
+    generated_at: 2026-08-17T12:00:00
+    ---
+
+    # Exploration
+
+    ## Results
+
+    | cohort_week | confirmed_to_returned_rate |
+    | --- | --- |
+    | 2026-06-01 | 0.048 |
+    | 2026-06-08 | 0.052 |
+
+    ## Caveats
+
+    - an exploratory caveat
+    """
+)
+
+
+def test_parse_artifact_accepts_an_explore_artifact_sourced_by_surfaces(tmp_path):
+    """An explore artifact has no `source_view`; its `surfaces` list is the
+    named source, and that satisfies the no-source-no-PDF rule."""
+    fm, sections = rp.parse_artifact(_write(tmp_path, EXPLORE_ARTIFACT))
+    assert fm["skill"] == "explore"
+    assert "source_view" not in fm
+    assert rp.bullets(sections["caveats"]) == ["an exploratory caveat"]
+
+
+def test_an_explore_artifact_with_no_surfaces_is_still_refused(tmp_path):
+    text = "\n".join(
+        ln for ln in EXPLORE_ARTIFACT.splitlines() if not ln.startswith("surfaces:")
+    )
+    with pytest.raises(SystemExit) as exc:
+        rp.parse_artifact(_write(tmp_path, text))
+    assert "surfaces" in str(exc.value)
+
+
+def _pdf_text(path):
+    """Decompress every content stream (fpdf deflates them) so the rendered
+    text is assertable — the banner has to be IN the PDF, not merely intended."""
+    import re as _re
+    import zlib
+
+    raw = path.read_bytes()
+    out = b""
+    for s in _re.findall(rb"stream\r?\n(.*?)endstream", raw, _re.S):
+        try:
+            out += zlib.decompress(s.strip(b"\r\n"))
+        except Exception:
+            out += s
+    return out.decode("latin-1", "ignore")
+
+
+def test_build_pdf_renders_an_explore_artifact_with_the_exploratory_banner(tmp_path):
+    """The PDF is the form a number reaches a stakeholder in; the T3 banner
+    must be in it, alongside (not instead of) the FIXTURE banner."""
+    artifact = _write(tmp_path, EXPLORE_ARTIFACT, "explore.md")
+    fm, sections = rp.parse_artifact(artifact)
+    out = tmp_path / "explore.pdf"
+    rp.build_pdf(fm, sections, artifact.parent, out, "")
+    assert out.exists() and out.stat().st_size > 500
+    text = _pdf_text(out)
+    assert "EXPLORATORY" in text
+    assert "NOT DECISION-GRADE" in text
+    assert "FIXTURE DATA" in text  # fixture-backed exploration carries both
+    assert "analytics.cart_checkout_funnel_weekly" in text  # surfaces as source
+
+
+def test_a_governed_pdf_carries_no_exploratory_banner(tmp_path):
+    artifact = _write(tmp_path, METRIC_ARTIFACT, "metric.md")
+    fm, sections = rp.parse_artifact(artifact)
+    out = tmp_path / "metric.pdf"
+    rp.build_pdf(fm, sections, artifact.parent, out, "")
+    assert "EXPLORATORY" not in _pdf_text(out)
+
+
+def test_the_explore_title_falls_back_to_the_question(tmp_path):
+    fm, _sections = rp.parse_artifact(_write(tmp_path, EXPLORE_ARTIFACT))
+    title = (
+        fm.get("display_name")
+        or fm.get("metric")
+        or (fm.get("question") if fm.get("skill") == "explore" else None)
+        or fm.get("skill")
+    )
+    assert title.startswith("Of confirmed orders")

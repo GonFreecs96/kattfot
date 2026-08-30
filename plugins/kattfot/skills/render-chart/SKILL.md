@@ -93,6 +93,7 @@ match wins:**
 | `baseline` | optional steady-state reference line |
 | `accuracy_tier` | `T1`/`T2`/`T3` — rendered as a themed pill |
 | `mock` | `true` → diagonal MOCK DATA watermark |
+| `exploratory` | `true` → EXPLORATORY (T3) — NOT DECISION-GRADE banner (an explore-artifact spec; may coexist with `mock`) |
 | `flag_last_n` | trailing N points drawn as hollow "still maturing" markers |
 | `generated_at` | stamped in the footnote |
 

@@ -63,6 +63,10 @@ MUTED = (90, 90, 90)
 RULE = (210, 210, 210)
 WARN_BG = (255, 244, 229)
 WARN_INK = (140, 60, 0)
+#: The T3 amber from the shared HTML theme (render-chart/theme/tokens.json),
+#: so the exploratory banner matches every other surface's tier chrome.
+EXPLORE_BG = (251, 241, 221)
+EXPLORE_INK = (138, 90, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -120,9 +124,17 @@ def parse_artifact(path: Path) -> tuple[dict, dict]:
         raise SystemExit(
             "ERROR: artifact missing 'metric' or 'skill' — only governed artifacts."
         )
-    for req in ("accuracy_tier", "source_view", "generated_at"):
+    for req in ("accuracy_tier", "generated_at"):
         if req not in fm:
             raise SystemExit(f"ERROR: artifact missing '{req}' — only governed artifacts.")
+    # The source: metric and spine artifacts carry `source_view`; an explore
+    # (T3) artifact carries a `surfaces` list instead. One of them must exist —
+    # a number with no named source has no business in a stakeholder PDF.
+    if "source_view" not in fm and not fm.get("surfaces"):
+        raise SystemExit(
+            "ERROR: artifact missing 'source_view' (or 'surfaces' for an "
+            "explore artifact) — only governed artifacts."
+        )
     return fm, split_sections(m.group(2))
 
 
@@ -290,9 +302,18 @@ def _quantized(img_path: Path) -> str:
 
 
 def build_pdf(fm: dict, sections: dict, artifact_dir: Path, out: Path, published_by: str) -> None:
-    title = fm.get("display_name") or fm.get("metric") or fm.get("skill")
+    exploratory = fm.get("skill") == "explore"
+    title = (
+        fm.get("display_name")
+        or fm.get("metric")
+        or (fm.get("question") if exploratory else None)
+        or fm.get("skill")
+    )
     tier = fm.get("accuracy_tier", "")
-    src = f"{fm.get('source_project','')}.{fm.get('source_view','')}".strip(".")
+    if fm.get("source_view"):
+        src = f"{fm.get('source_project','')}.{fm.get('source_view','')}".strip(".")
+    else:
+        src = ", ".join(fm.get("surfaces") or [])
     generated = str(fm.get("generated_at", ""))
     # Fixture-backed numbers get the banner. The explicit boolean wins; the source
     # mode is the fallback so an artifact written before that field existed still
@@ -322,6 +343,22 @@ def build_pdf(fm: dict, sections: dict, artifact_dir: Path, out: Path, published
         stamp += f"   ·   shared by {published_by}"
     pdf.multi_cell(width, 5, clean(stamp))
     pdf.ln(2)
+
+    # The exploratory banner comes FIRST: what the number claims about itself
+    # (an unreviewed T3 ad-hoc result) outranks where it ran.
+    if exploratory:
+        pdf.set_fill_color(*EXPLORE_BG)
+        pdf.set_text_color(*EXPLORE_INK)
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.multi_cell(
+            width, 7,
+            clean("(!) EXPLORATORY (T3) — NOT DECISION-GRADE. Ad-hoc result: no "
+                  "reviewed definition, no named owner, no promise it means the "
+                  "same thing next week. Promote to a governed T2 metric before "
+                  "recurring use."),
+            fill=True, border=1,
+        )
+        pdf.ln(2)
 
     if mock:
         pdf.set_fill_color(*WARN_BG)

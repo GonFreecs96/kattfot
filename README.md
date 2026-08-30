@@ -51,7 +51,8 @@ system prompt:
   metric can serve — over a **fail-closed register** of declared surfaces,
   read-only and single-statement in code, PII-scanned across every
   identifier, audit-chained, receipt-carrying, and stamped **T3 — not
-  decision-grade** as loudly as the fixture watermark. Governed refusals
+  decision-grade** as loudly as the fixture watermark — a stamp that survives
+  into every chart, dashboard, and PDF built from it. Governed refusals
   carry a machine-readable `EXPLORABLE` referral, and the lane switch always
   requires the user's explicit confirmation. `kattfot:promote` closes the
   loop: it scaffolds a tamper-checked draft metric from an exploration,

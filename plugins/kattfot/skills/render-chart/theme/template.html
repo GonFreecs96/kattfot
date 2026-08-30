@@ -69,11 +69,23 @@
     color: var(--mock-ink); opacity: var(--mock-alpha); transform: rotate(-24deg);
     user-select: none;
   }
+  /* The exploratory (T3) stamp: a loud banner rather than a second diagonal,
+     so it stays legible when it coexists with the MOCK DATA watermark (a
+     fixture-backed exploration carries both). Uses the tier colors, which are
+     the T3 amber whenever this banner is shown. */
+  .explore-banner {
+    background: var(--tier-bg); color: var(--tier-ink);
+    border: 1px solid var(--tier-ink); border-radius: 8px;
+    font-size: 12.5px; font-weight: 700; letter-spacing: 0.02em;
+    padding: 8px 12px; margin-bottom: 16px;
+  }
+  .explore-banner[hidden] { display: none; }
 </style>
 </head>
 <body>
   <main class="card">
     <div class="watermark" id="watermark" hidden><span>MOCK DATA</span></div>
+    <div class="explore-banner" id="explore-banner" hidden>EXPLORATORY (T3) — NOT DECISION-GRADE · ad-hoc result, no reviewed definition</div>
     <header class="head">
       <div>
         <h1 class="title" id="title"></h1>
@@ -144,6 +156,7 @@
     }
 
     if (SPEC.mock) document.getElementById("watermark").hidden = false;
+    if (SPEC.exploratory) document.getElementById("explore-banner").hidden = false;
 
     if (VIEW.caption) {
       var cap = document.getElementById("caption");

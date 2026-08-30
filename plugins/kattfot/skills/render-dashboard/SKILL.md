@@ -98,6 +98,7 @@ A dashboard spec is a JSON object. Top-level fields:
 | `published_by` | free-text identity/run line (e.g. "Live warehouse via ADC") |
 | `generated_at` | date, shown in the stamp |
 | `mock` | `true` → page-wide MOCK DATA watermark (also tripped if any chart block is mock) |
+| `exploratory` | `true` → page-wide EXPLORATORY (T3) banner (also tripped if any chart block is exploratory) |
 | `theme` | optional default `auto`/`light`/`dark` (CLI `--theme` wins) |
 | `kpis` | array of `{label, value, detail, emphasis}` cards |
 | `sections` | ordered array of `charts` and `table` sections |

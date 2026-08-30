@@ -106,7 +106,10 @@ uniformly with no per-skill heading map to maintain (see `table_sections()`) —
 Narrative and Caveats — and writes a PDF next to the artifact
 (`outputs/kattfot/{date}-{slug}.pdf` by default). It reproduces numbers and caveats
 **verbatim**, stamps the accuracy tier + source + generated-at, renders a **MOCK DATA**
-banner when `fixture_backed` or `source_mode` is `mock_csv`/`fixture_sql`, and quantizes
+banner when `fixture_backed` or `source_mode` is `mock_csv`/`fixture_sql`, renders an
+**EXPLORATORY (T3) — NOT DECISION-GRADE** banner first when the artifact is a
+`kattfot:explore` output (sourced by its `surfaces` list; both banners coexist on a
+fixture-backed exploration), and quantizes
 the chart so the file stays small. It prints `{"pdf_path", "title"}`.
 
 ### Step 4 — Report

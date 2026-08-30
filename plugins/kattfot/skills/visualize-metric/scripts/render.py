@@ -49,8 +49,14 @@ PALETTE = [
 ]
 GRID = "#DDDDDD"
 BASELINE_C = "#888888"
+#: The T3 ink from the shared theme tokens (render-chart/theme/tokens.json) —
+#: the same amber every HTML surface uses for the exploratory tier.
+EXPLORE_INK = "#8A5A00"
 MATURING_NOTE = "hollow markers = still maturing (see Caveats)"
 FAITHFUL_NOTE = "Faithful to the source artifact's Results table — see its Caveats."
+EXPLORE_NOTE = (
+    "EXPLORATORY (T3): ad-hoc result, no reviewed definition — not decision-grade"
+)
 
 
 def fmt_value(y, value_format: str) -> str:
@@ -60,6 +66,10 @@ def fmt_value(y, value_format: str) -> str:
         return f"{y * 100:.1f}%"
     if value_format == "currency":
         return f"${y:,.0f}"
+    if value_format == "number":
+        # Raw fractional values (an unformatted ad-hoc ratio): significant
+        # digits, never rounded to an integer.
+        return f"{y:.4g}"
     return f"{y:,.0f}"
 
 
@@ -97,6 +107,8 @@ def _stamp(fig, ax, spec: dict):
     notes = []
     if spec.get("flag_last_n"):
         notes.append(MATURING_NOTE)
+    if spec.get("exploratory"):
+        notes.append(EXPLORE_NOTE)
     notes.append(FAITHFUL_NOTE)
     fig.text(0.01, 0.01, "  ·  ".join(notes), fontsize=7, color="#777777", ha="left")
 
@@ -104,6 +116,18 @@ def _stamp(fig, ax, spec: dict):
         fig.text(
             0.5, 0.5, "MOCK DATA", fontsize=64, color="red", alpha=0.12,
             rotation=28, ha="center", va="center", zorder=1000, fontweight="bold",
+        )
+
+    # The exploratory stamp is a loud header line, not a second diagonal — it
+    # must stay legible when it coexists with the MOCK watermark (a
+    # fixture-backed exploration carries both). Right-aligned on the subtitle
+    # row rather than the title row: an explore title is the question, which
+    # can run the full figure width.
+    if spec.get("exploratory"):
+        fig.text(
+            _STAMP_R, 0.930, "EXPLORATORY (T3) — NOT DECISION-GRADE",
+            fontsize=10, color=EXPLORE_INK, fontweight="bold",
+            ha="right", va="top",
         )
 
 

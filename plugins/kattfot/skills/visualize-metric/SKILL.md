@@ -70,10 +70,30 @@ Resolve `$VM_ROOT` once per session, first match wins:
 Explicit path if given. Otherwise the newest `*.md` in `<KATTFOT_OUTPUTS_DIR>` (default
 `outputs/kattfot/`).
 
-The artifact **must** have frontmatter carrying `metric`, `accuracy_tier`,
-`source_view`, and `generated_at`. Missing any of them, refuse: only governed
-artifacts get visualized. A chart is the form a number travels in most easily and is
-questioned least, so an ungoverned one becoming a chart is exactly backwards.
+The artifact **must** have governed frontmatter. Two shapes qualify:
+
+- a **metric artifact**: `metric`, `accuracy_tier`, `source_view`,
+  `generated_at`;
+- an **explore (T3) artifact** (`skill: explore`): `question`,
+  `accuracy_tier` (always `T3` — anything else is malformed), `surfaces`,
+  `generated_at`.
+
+Missing any of them, refuse: only governed artifacts get visualized. A chart is
+the form a number travels in most easily and is questioned least, so an
+ungoverned one becoming a chart is exactly backwards.
+
+**Explore artifacts get their own column mapping.** A metric artifact's columns
+come from the template order; an ad-hoc Results table has whatever the SQL
+projected. Name the mapping with `--x`, `--value-column`, and `--series`
+(comma-separated), or let the helper infer it by a stated rule — x is the first
+column, the value is the first numeric column (skipping the
+`numerator`/`denominator` convention columns, which feed tooltips), the series
+are the non-numeric columns — and the spec's `rationale` records exactly what
+was inferred. A non-date x renders as a ranked bar, never a line: a line over
+categories fabricates a trend out of sort order. The spec carries
+`exploratory: true`, and every renderer turns that into an **EXPLORATORY (T3)
+— NOT DECISION-GRADE** banner, exactly as `mock` becomes the MOCK DATA
+watermark; a fixture-backed exploration carries both.
 
 ### Step 2 — Extract the analytical intent
 

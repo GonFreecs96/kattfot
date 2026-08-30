@@ -21,6 +21,9 @@
       if (v === null || v === undefined || (typeof v === "number" && isNaN(v))) return "—";
       if (vf === "percent") return (v * 100).toFixed(1) + "%";
       if (vf === "currency") return "$" + Math.round(v).toLocaleString();
+      // "number": raw fractional values (an unformatted ad-hoc ratio) —
+      // significant digits, never rounded to an integer.
+      if (vf === "number") return Number(v.toPrecision(4)).toString();
       return Math.round(v).toLocaleString();
     }
     var PALETTE = TOKENS.series_palette;

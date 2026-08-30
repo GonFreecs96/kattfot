@@ -440,3 +440,183 @@ def test_the_committed_example_spec_still_parses():
     example = root / "plugins" / "kattfot" / "skills" / "render-chart" / "examples" / "trend.spec.json"
     spec = json.loads(example.read_text())
     assert spec["chart_type"] in cs.ALLOWED_CHART_TYPES
+
+
+# --- the T3 chart lane: explore artifacts ------------------------------------
+# An explore artifact's Results table has whatever columns the ad-hoc SQL
+# projected, so the mapping to a chart is caller-named or inferred by a stated
+# rule — and the EXPLORATORY stamp must land in the spec, because the spec is
+# what constrains every renderer.
+
+EXPLORE_ARTIFACT = textwrap.dedent(
+    """\
+    ---
+    skill: explore
+    accuracy_tier: T3
+    question: "Of confirmed orders, what share is ultimately returned, by channel?"
+    surfaces: ["analytics.cart_checkout_funnel_weekly"]
+    source_mode: fixture_sql
+    fixture_backed: true
+    generated_at: 2026-08-17T12:00:00
+    manifest:
+      register_sha: aaaaaaaaaaaaaaaa
+      query_sha: bbbbbbbbbbbbbbbb
+      result_sha: cccccccccccccccc
+    ---
+
+    # Exploration
+
+    ## Results
+
+    | cohort_week | channel | confirmed_to_returned_rate | numerator | denominator |
+    | --- | --- | --- | --- | --- |
+    | 2026-06-01 | web | 0.048 | 12 | 250 |
+    | 2026-06-01 | mobile_app | 0.061 | 9 | 148 |
+    | 2026-06-08 | web | 0.052 | 13 | 249 |
+    | 2026-06-08 | mobile_app | 0.055 | 8 | 145 |
+    """
+)
+
+CATEGORICAL_EXPLORE = textwrap.dedent(
+    """\
+    ---
+    skill: explore
+    accuracy_tier: T3
+    question: "How many sessions per market?"
+    surfaces: ["analytics.cart_checkout_session_spine"]
+    fixture_backed: true
+    generated_at: 2026-08-17T12:00:00
+    ---
+
+    ## Results
+
+    | market | n |
+    | --- | --- |
+    | US | 9,214 |
+    | DE | 4,102 |
+    | GB | 3,377 |
+    """
+)
+
+
+def _explore(tmp_path, text=EXPLORE_ARTIFACT, **kwargs):
+    p = tmp_path / "explore.md"
+    p.write_text(text)
+    fm, rows = cs.parse_artifact(p)
+    defaults = dict(intent=None, override=None, baseline=None, flag_last_n=0)
+    defaults.update(kwargs)
+    return cs.build_explore_spec(fm, rows, **defaults)
+
+
+def test_parse_artifact_accepts_an_explore_artifact(tmp_path):
+    p = tmp_path / "e.md"
+    p.write_text(EXPLORE_ARTIFACT)
+    fm, rows = cs.parse_artifact(p)
+    assert cs.is_exploratory(fm)
+    assert len(rows) == 4
+
+
+@pytest.mark.parametrize("missing", ["question", "surfaces", "generated_at"])
+def test_an_explore_artifact_missing_provenance_is_refused(tmp_path, missing):
+    text = "\n".join(
+        ln for ln in EXPLORE_ARTIFACT.splitlines() if not ln.startswith(f"{missing}:")
+    )
+    p = tmp_path / "e.md"
+    p.write_text(text)
+    with pytest.raises(SystemExit) as exc:
+        cs.parse_artifact(p)
+    assert missing in str(exc.value)
+
+
+def test_an_explore_artifact_claiming_another_tier_is_refused(tmp_path):
+    """The exploratory lane is T3 by definition; an explore artifact claiming
+    T2 is malformed, not a different kind of exploration."""
+    p = tmp_path / "e.md"
+    p.write_text(EXPLORE_ARTIFACT.replace("accuracy_tier: T3", "accuracy_tier: T2"))
+    with pytest.raises(SystemExit) as exc:
+        cs.parse_artifact(p)
+    assert "T3" in str(exc.value)
+
+
+def test_explore_column_inference_is_stated_in_the_rationale(tmp_path):
+    spec = _explore(tmp_path)
+    assert spec["x_label"] == "cohort_week"
+    assert spec["y_label"] == "confirmed_to_returned_rate"
+    assert spec["chart_type"] == "multi_series_line"  # 2 weeks x 2 channels
+    assert {s["name"] for s in spec["series"]} == {"web", "mobile_app"}
+    assert "x='cohort_week' (first column)" in spec["rationale"]
+    assert "value='confirmed_to_returned_rate' (first numeric column)" in spec["rationale"]
+    assert "series=['channel']" in spec["rationale"]
+
+
+def test_the_exploratory_stamp_is_in_the_spec(tmp_path):
+    spec = _explore(tmp_path)
+    assert spec["exploratory"] is True
+    assert spec["accuracy_tier"] == "T3"
+    assert spec["mock"] is True  # fixture-backed exploration carries both stamps
+    assert spec["question"].startswith("Of confirmed orders")
+    assert "T3 · exploratory" in spec["subtitle"]
+
+
+def test_numerator_denominator_convention_columns_feed_tooltips_not_the_value(tmp_path):
+    spec = _explore(tmp_path)
+    first = spec["series"][0]["points"][0]
+    assert first["num"] is not None and first["den"] is not None
+    # and the inferred value skipped them:
+    assert spec["y_label"] == "confirmed_to_returned_rate"
+
+
+def test_a_raw_fractional_column_gets_the_number_format_and_a_zero_anchor(tmp_path):
+    """An unformatted ad-hoc ratio must not render as 'count' — every axis
+    label would round to 0."""
+    spec = _explore(tmp_path)
+    assert spec["value_format"] == "number"
+    assert spec["y_axis_min"] == 0
+
+
+def test_a_categorical_x_becomes_a_ranked_bar_of_every_row(tmp_path):
+    spec = _explore(tmp_path, text=CATEGORICAL_EXPLORE)
+    assert spec["chart_type"] == "ranked_bar"
+    assert "categorical" in spec["rationale"]
+    assert [b["label"] for b in spec["bars"]] == ["US", "DE", "GB"]
+    assert spec["value_format"] == "count"
+
+
+def test_a_line_over_a_categorical_x_is_refused(tmp_path):
+    with pytest.raises(SystemExit) as exc:
+        _explore(tmp_path, text=CATEGORICAL_EXPLORE, override="single_line")
+    assert "not temporal" in str(exc.value)
+
+
+def test_explicit_column_flags_win_and_are_validated(tmp_path):
+    spec = _explore(tmp_path, value_col="numerator", series_arg="channel")
+    assert spec["y_label"] == "numerator"
+    with pytest.raises(SystemExit) as exc:
+        _explore(tmp_path, value_col="channel")
+    assert "not numeric" in str(exc.value)
+    with pytest.raises(SystemExit) as exc:
+        _explore(tmp_path, x_col="nope")
+    assert "not a Results column" in str(exc.value)
+
+
+def test_no_numeric_column_refuses_and_names_the_flag(tmp_path):
+    text = CATEGORICAL_EXPLORE.replace("| market | n |", "| market | label |").replace(
+        "| US | 9,214 |", "| US | alpha |"
+    ).replace("| DE | 4,102 |", "| DE | beta |").replace("| GB | 3,377 |", "| GB | gamma |")
+    with pytest.raises(SystemExit) as exc:
+        _explore(tmp_path, text=text)
+    assert "--value-column" in str(exc.value)
+
+
+def test_explore_flags_are_refused_on_a_metric_artifact(tmp_path, monkeypatch, capsys):
+    """A silently ignored flag would look honored; the metric template owns its
+    column mapping."""
+    p = tmp_path / "m.md"
+    p.write_text(ARTIFACT)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["chart_spec", "--artifact", str(p), "--value-column", "numerator"],
+    )
+    with pytest.raises(SystemExit) as exc:
+        cs.main()
+    assert "explore artifacts only" in str(exc.value)

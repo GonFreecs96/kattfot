@@ -436,7 +436,15 @@ human review edits the tier, so **the R4 gate is the review gate**.
 **What this guarantees.** An exploratory number can exist without
 masquerading as a governed one: it is tier-stamped, register-bounded,
 PII-refused, audit-chained, and receipt-carrying, and the path from it to a
-governed metric is a reviewed promotion rather than a copy-paste.
+governed metric is a reviewed promotion rather than a copy-paste. The stamp
+also survives into every rendered form — an explore artifact charted through
+`visualize-metric` / `render-chart` / `render-dashboard`, or exported by
+`export-report`, carries an **EXPLORATORY (T3) — NOT DECISION-GRADE** banner
+from the spec's `exploratory` flag, exactly the way `fixture_backed` becomes
+the MOCK DATA watermark (a fixture-backed exploration shows both). A chart is
+the form a number travels in most easily and is questioned least, which is
+why the lane refused to produce charts at all until the stamp could ride
+along.
 
 **What this does not guarantee.**
 

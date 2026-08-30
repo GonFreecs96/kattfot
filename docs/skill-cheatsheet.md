@@ -598,9 +598,16 @@ the sqlite translator refuses — rewrite it or use `--engine bigquery`).
 the helper qualifies the project itself. The register **fails closed**: a
 missing or unparseable `exploration.yaml` is a hard error, not open
 exploration. Maturity gating is off (an ad-hoc window lives inside your
-SQL); the T3 stamp is the caveat. Explore artifacts are not chartable via
-`visualize-metric` yet. Write your window into the SQL and bind values with
-`--param`.
+SQL); the T3 stamp is the caveat. Write your window into the SQL and bind
+values with `--param`.
+
+**Charting:** explore artifacts go through the same pipeline as a metric —
+`visualize-metric` (name the mapping with `--x` / `--value-column` /
+`--series` if the stated inference rule would guess wrong), then
+`render-chart` / `render-dashboard` / `export-report`. Every rendered form
+carries an **EXPLORATORY (T3) — NOT DECISION-GRADE** banner from the spec's
+`exploratory` flag, next to the MOCK watermark when fixture-backed; a
+non-date x renders as a ranked bar, never a line.
 
 ---
 
@@ -718,7 +725,11 @@ live re-run via `kattfot:query-metric`. Only verifies `query-metric` artifacts
 
 **Purpose:** infer the chart type from the result shape and inject a
 `## Visualization` section into the artifact. Draws **only** from the
-Results table; for funnel mode, runs `query-metric` once per stage.
+Results table; for funnel mode, runs `query-metric` once per stage. Also
+accepts `kattfot:explore` (T3) artifacts — the column mapping is caller-named
+(`--x` / `--value-column` / `--series`) or inferred by a stated rule, and the
+spec carries `exploratory: true`, which every renderer turns into an
+EXPLORATORY (T3) banner.
 
 ```
 kattfot:visualize-metric [artifact path] [intent]
