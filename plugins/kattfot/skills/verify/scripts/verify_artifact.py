@@ -1,9 +1,20 @@
 #!/usr/bin/env python3
 """verify_artifact.py — CLI for the kattfot:verify skill.
 
-Reads a governed query-metric artifact, parses its manifest from the YAML
-frontmatter, and recomputes the definition + query fingerprints from the
-current repo state to detect drift. Offline only — never touches BigQuery.
+Reads a query artifact — governed (`query-metric`) or exploratory
+(`kattfot:explore`, `skill: explore` in its frontmatter) — and recomputes its
+fingerprints from the current repo state to detect drift. Offline only —
+never touches BigQuery. Routing is automatic from the frontmatter; there is no
+flag to pick a lane.
+
+  - Governed artifact: parses the manifest, reloads the metric definition by
+    name, rebuilds the SQL from the recorded dimensions/filters/window, and
+    compares `metric_def_sha` / `query_sha` (`_shared/verify.verify_frontmatter`).
+  - Exploratory artifact: re-parses the ```sql/```json Provenance fences (the
+    same parser `kattfot:promote` uses for its tamper check —
+    `_shared/explore_artifact.py`) and compares the recomputed `query_sha`
+    against the manifest, plus the CURRENT exploration register's
+    `register_sha` against the one recorded (`_shared/verify.verify_explore`).
 
 `--audit-log [PATH]` additionally (or, with no artifact argument, solely)
 replays the audit log's hash chain and compares it against the committed head
@@ -13,9 +24,10 @@ skill uses (`KATTFOT_AUDIT_LOG`, else `<outputs>/audit-log.jsonl`).
 
 Exit codes (worst finding wins when both checks run):
   0  VERIFY_OK / CHAIN_OK
-  1  DEFINITION_DRIFT / QUERY_DRIFT / CHAIN_HEAD_MISMATCH (provenance shifted)
-  2  MANIFEST_ABSENT / DEFINITION_MISSING / CHAIN_HEAD_ABSENT / CHAIN_ABSENT
-     (cannot verify)
+  1  DEFINITION_DRIFT / QUERY_DRIFT / PROVENANCE_TAMPERED / REGISTER_DRIFT /
+     CHAIN_HEAD_MISMATCH (provenance shifted — DETECTED)
+  2  MANIFEST_ABSENT / DEFINITION_MISSING / PROVENANCE_ABSENT /
+     REGISTER_MISSING / CHAIN_HEAD_ABSENT / CHAIN_ABSENT (cannot verify)
   3  usage / IO error
 """
 
@@ -30,6 +42,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from _shared import audit_chain as audit_chain_lib  # noqa: E402
+from _shared import explore_artifact as explore_artifact_lib  # noqa: E402
 from _shared import verify as verify_lib  # noqa: E402
 
 try:
@@ -48,6 +61,10 @@ _EXIT = {
     verify_lib.QUERY_DRIFT: 1,
     verify_lib.MANIFEST_ABSENT: 2,
     verify_lib.DEFINITION_MISSING: 2,
+    verify_lib.PROVENANCE_TAMPERED: 1,
+    verify_lib.REGISTER_DRIFT: 1,
+    verify_lib.PROVENANCE_ABSENT: 2,
+    verify_lib.REGISTER_MISSING: 2,
     audit_chain_lib.CHAIN_OK: 0,
     audit_chain_lib.CHAIN_HEAD_MISMATCH: 1,
     audit_chain_lib.CHAIN_HEAD_BEHIND: 2,
@@ -90,7 +107,9 @@ def parse_frontmatter(text: str) -> dict:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Offline drift check for a query-metric artifact.")
+    p = argparse.ArgumentParser(
+        description="Offline drift check for a query-metric or kattfot:explore artifact."
+    )
     p.add_argument("artifact", nargs="?", help="path to the artifact .md file")
     p.add_argument(
         "--audit-log",
@@ -116,7 +135,15 @@ def main() -> int:
             return 3
 
         fm = parse_frontmatter(path.read_text())
-        result = verify_lib.verify_frontmatter(fm)
+        if fm.get("skill") == "explore":
+            # Same fences, same parser `kattfot:promote` uses for its tamper
+            # check — re-reading the file here (rather than threading a body
+            # string through `parse_frontmatter`) keeps the governed path's
+            # parsing untouched and the routing decision a one-line check.
+            _, sql, params = explore_artifact_lib.parse_artifact(path)
+            result = verify_lib.verify_explore(fm, sql, params)
+        else:
+            result = verify_lib.verify_frontmatter(fm)
 
         status = result["status"]
         print(f"{status} -- {result['detail']}")

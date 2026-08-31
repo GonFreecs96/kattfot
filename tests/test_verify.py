@@ -24,11 +24,17 @@ stubbed, and it is stubbed to the same contract the real helper implements — s
 when `query-metric` lands, these tests keep describing its behavior.
 """
 
+import json
+import sys
 import textwrap
+from pathlib import Path
 
 import pytest
 import yaml
 
+import demo_skills
+import kattfot_explore
+import verify_artifact
 from _shared import manifest as mf
 from _shared import verify as vf
 
@@ -360,3 +366,173 @@ def test_verify_matches_an_artifact_the_demo_actually_wrote(tmp_path):
     assert result["status"] == vf.VERIFY_OK, result["detail"]
 
     _ = dt, real_aq  # referenced above; keeps linters quiet about the imports
+
+
+# --- kattfot:explore artifacts ------------------------------------------------
+#
+# `verify_artifact.py` auto-detects `skill: explore` in the frontmatter and
+# switches to `verify_explore` — a different receipt shape (no reviewed metric
+# definition; `register_sha` stands in for it) with its own sentinels. These
+# tests drive the real CLI end to end (`verify_artifact.main()`, the way
+# test_promote.py drives `promote_metric.main()`), because the EXIT CODE is
+# the contract a caller depends on, and `_shared/verify.py` alone cannot tell
+# you what a status maps to.
+#
+# Mirrors test_promote.py's fixture style: a tmp KATTFOT_EXPLORATION_FILE puts
+# register_sha under the test's control, so "the allow-list moved" or
+# "the allow-list is gone" can be simulated without touching the repo's real
+# config/exploration.yaml.
+
+EXPLORE_SPINE = "analytics.cart_checkout_session_spine"
+EXPLORE_SQL = f"SELECT market, COUNT(*) AS n FROM {EXPLORE_SPINE} GROUP BY market"
+
+
+@pytest.fixture()
+def explore_register(tmp_path, monkeypatch) -> Path:
+    reg = tmp_path / "exploration.yaml"
+    reg.write_text(f"surfaces:\n  {EXPLORE_SPINE}:\n    status: live\n")
+    monkeypatch.setenv("KATTFOT_EXPLORATION_FILE", str(reg))
+    return reg
+
+
+def _explore_result(monkeypatch, capsys) -> dict:
+    monkeypatch.setenv("KATTFOT_AUDIT_DISABLE", "1")
+    monkeypatch.setattr(
+        sys, "argv",
+        ["kattfot_explore", "--question", "How many sessions per market?",
+         "--sql", EXPLORE_SQL],
+    )
+    assert kattfot_explore.main() in (0, None)
+    return json.loads(capsys.readouterr().out)
+
+
+def _explore_artifact(tmp_path, monkeypatch, capsys) -> Path:
+    out = _explore_result(monkeypatch, capsys)
+    art = tmp_path / "explore-artifact.md"
+    demo_skills.compose_explore_artifact(out, art)
+    return art
+
+
+def _run_verify(artifact, monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["verify_artifact", str(artifact)])
+    code = verify_artifact.main()
+    return code, capsys.readouterr().out
+
+
+def test_explore_verify_ok_when_nothing_changed(tmp_path, explore_register, monkeypatch, capsys):
+    art = _explore_artifact(tmp_path, monkeypatch, capsys)
+    code, out = _run_verify(art, monkeypatch, capsys)
+    assert code == 0
+    assert vf.VERIFY_OK in out
+
+
+def test_explore_tamper_is_detected(tmp_path, explore_register, monkeypatch, capsys):
+    """Editing the executed SQL after the fact — the exact edit PROMOTE-TAMPER
+    catches at promotion time — is PROVENANCE_TAMPERED here, at exit 1."""
+    art = _explore_artifact(tmp_path, monkeypatch, capsys)
+    art.write_text(art.read_text().replace("GROUP BY market", "GROUP BY market, region"))
+    code, out = _run_verify(art, monkeypatch, capsys)
+    assert code == 1
+    assert vf.PROVENANCE_TAMPERED in out
+
+
+def test_explore_register_drift_is_detected(tmp_path, explore_register, monkeypatch, capsys):
+    art = _explore_artifact(tmp_path, monkeypatch, capsys)
+    # simulate the register having changed since the exploration ran
+    explore_register.write_text(
+        explore_register.read_text() + "# register content changed since the exploration ran\n"
+    )
+    code, out = _run_verify(art, monkeypatch, capsys)
+    assert code == 1
+    assert vf.REGISTER_DRIFT in out
+
+
+def test_explore_register_missing_cannot_verify(tmp_path, explore_register, monkeypatch, capsys):
+    art = _explore_artifact(tmp_path, monkeypatch, capsys)
+    explore_register.unlink()
+    code, out = _run_verify(art, monkeypatch, capsys)
+    assert code == 2
+    assert vf.REGISTER_MISSING in out
+
+
+def test_explore_missing_fence_cannot_verify(tmp_path, monkeypatch, capsys):
+    """A manifest with nothing to recompute `query_sha` from — an artifact
+    whose Provenance section was stripped rather than edited — is
+    cannot-verify (PROVENANCE_ABSENT), not a silent pass."""
+    art = tmp_path / "no-fence.md"
+    art.write_text(
+        "---\nskill: explore\naccuracy_tier: T3\nmanifest:\n"
+        "  register_sha: abc123\n  query_sha: def456\n  result_sha: ghi789\n"
+        "---\n\n## Provenance\n\n(no SQL fence here)\n"
+    )
+    code, out = _run_verify(art, monkeypatch, capsys)
+    assert code == 2
+    assert vf.PROVENANCE_ABSENT in out
+
+
+def test_explore_manifest_absent_cannot_verify(tmp_path, monkeypatch, capsys):
+    art = tmp_path / "no-manifest.md"
+    art.write_text(
+        "---\nskill: explore\naccuracy_tier: T3\n---\n\n"
+        "## Provenance\n\n```sql\nSELECT 1\n```\n"
+    )
+    code, out = _run_verify(art, monkeypatch, capsys)
+    assert code == 2
+    assert vf.MANIFEST_ABSENT in out
+
+
+def test_explore_tamper_and_register_drift_both_report_detected_wins(
+    tmp_path, explore_register, monkeypatch, capsys
+):
+    """Both findings are reported, and the top-level status/exit is the
+    DETECTED one — the explore-lane counterpart to the governed suite's
+    combined-findings case (test_query_drift_when_column_changes)."""
+    art = _explore_artifact(tmp_path, monkeypatch, capsys)
+    art.write_text(art.read_text().replace("GROUP BY market", "GROUP BY market, region"))
+    explore_register.write_text(
+        explore_register.read_text() + "# register content changed since the exploration ran\n"
+    )
+    code, out = _run_verify(art, monkeypatch, capsys)
+    assert code == 1
+    assert vf.PROVENANCE_TAMPERED in out
+    assert vf.REGISTER_DRIFT in out
+
+
+def test_governed_artifact_routing_is_unchanged(tmp_path, monkeypatch, capsys):
+    """A governed artifact carries no `skill:` frontmatter key at all (only
+    `kattfot:explore` writes one) — confirm the CLI's new routing check still
+    sends it through `verify_frontmatter`, end to end through a real demo
+    artifact, exactly as before this change."""
+    import os
+    import subprocess
+
+    root = Path(__file__).resolve().parents[1]
+    proc = subprocess.run(
+        [
+            sys.executable, str(root / "scripts" / "demo.py"),
+            "--metric", "payment_approval_rate",
+            "--dimensions", "",
+            "--time-range", "last_8_weeks", "--skip-pdf", "--skip-html",
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "KATTFOT_OUTPUTS_DIR": str(tmp_path),
+             "MPLCONFIGDIR": str(tmp_path / "mpl")},
+    )
+    if proc.returncode != 0:
+        if "matplotlib" in (proc.stderr + proc.stdout):
+            pytest.skip("matplotlib is not installed; the render step cannot run")
+        raise AssertionError(f"demo failed:\n{proc.stdout}\n{proc.stderr}")
+
+    artifacts = list(tmp_path.glob("*.md"))
+    assert len(artifacts) == 1, f"expected one artifact, got {artifacts}"
+    parsed = yaml.safe_load(artifacts[0].read_text().split("---")[1])
+    assert "skill" not in parsed, (
+        "a governed artifact must not carry a `skill:` key — its absence is "
+        "what routes verify_artifact.py away from the explore path"
+    )
+
+    code, out = _run_verify(artifacts[0], monkeypatch, capsys)
+    assert code == 0
+    assert vf.VERIFY_OK in out

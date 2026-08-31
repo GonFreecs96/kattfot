@@ -41,6 +41,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from _shared import explore_artifact as explore_artifact_lib  # noqa: E402
 from _shared import exploration as exploration_lib  # noqa: E402
 from _shared import manifest as manifest_lib  # noqa: E402
 from _shared import sqlguard  # noqa: E402
@@ -58,10 +59,6 @@ except ImportError:
     sys.exit(3)
 
 REFUSAL_EXIT = 5
-
-FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n(.*)", re.DOTALL)
-SQL_FENCE_RE = re.compile(r"```sql\s*\n(.*?)```", re.DOTALL)
-JSON_FENCE_RE = re.compile(r"```json\s*\n(.*?)```", re.DOTALL)
 
 #: The SUM/SUM ratio shape the governed metric runtime serves. Lexical, like
 #: everything in the exploratory lane: it recognizes the canonical form the
@@ -92,32 +89,23 @@ def refuse(message: str) -> None:
 
 def parse_artifact(path: Path) -> tuple[dict, str, dict]:
     """Frontmatter, SQL, bound params — from exactly the fences the explore
-    SKILL.md's Output format specifies."""
-    if not path.exists():
-        raise SystemExit(f"ERROR: artifact not found at {path}.")
-    text = path.read_text()
-    m = FRONTMATTER_RE.match(text)
-    if not m:
-        raise SystemExit(f"ERROR: {path} has no YAML frontmatter — not an artifact.")
-    try:
-        fm = yaml.safe_load(m.group(1)) or {}
-    except yaml.YAMLError as e:
-        raise SystemExit(f"ERROR: unparseable frontmatter in {path}: {e}")
-    body = m.group(2)
-    sql_m = SQL_FENCE_RE.search(body)
-    if not sql_m:
+    SKILL.md's Output format specifies.
+
+    Fence-parsing itself is delegated to `_shared/explore_artifact.py`, shared
+    with `kattfot:verify` so the two consumers of this tamper-check input
+    cannot quietly disagree about what the fences are. Promote enforces its
+    own rule on top of the shared parser's neutral result: no ```sql fence
+    means there is nothing to scaffold a draft from, which is a refusal here
+    (verify treats the same absence as a cannot-verify report, not a refusal
+    — it has nothing to gate).
+    """
+    fm, sql, params = explore_artifact_lib.parse_artifact(path)
+    if sql is None:
         raise SystemExit(
             f"ERROR: no ```sql fence found in {path} — the Provenance section "
             f"is required for promotion (it is the tamper-check input)."
         )
-    params: dict = {}
-    json_m = JSON_FENCE_RE.search(body, sql_m.end())
-    if json_m:
-        try:
-            params = json.loads(json_m.group(1)) or {}
-        except json.JSONDecodeError as e:
-            raise SystemExit(f"ERROR: unparseable bound-parameters JSON in {path}: {e}")
-    return fm, sql_m.group(1).strip(), params
+    return fm, sql, params
 
 
 def verify_provenance(fm: dict, sql: str, params: dict, artifact: Path) -> list:
