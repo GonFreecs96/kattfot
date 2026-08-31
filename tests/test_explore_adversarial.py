@@ -38,14 +38,25 @@ every probe below either
       mechanism (`_resync_to_comma`, section 2.5) that finds the next
       comma-joined sibling by scanning past *anything* at bracket depth 0
       up to a real clause boundary, rather than by naming the shapes that
-      can appear in between. The lesson the whole history is recording:
-      patch the specific probe that found the bug, but check the *general*
-      shape before calling it closed — and when the general shape keeps
-      producing new specific probes, stop enumerating and fix the
-      mechanism. Section 7 documents two findings from the second re-read
-      that were judged NOT to need a code fix (a bounded, engine-specific
-      string-literal dialect gap, and a known-shape over-block) and pins
-      them instead, with the reasoning for that call.
+      can appear in between. A FIFTH pass found one blind spot IN that
+      mechanism: the boundary check ran on every depth-0 character without
+      skipping backtick-quoted spans, so a backticked reserved word used as
+      an ordinary identifier — `` `order` ``, `` `group` ``, `` `window` ``
+      — read as a real clause boundary and dropped everything after it,
+      the SAME symptom yet again from a cause the general redesign had not
+      accounted for (backticks are not brackets, and `strip_noise`
+      deliberately leaves them and their contents alone). Fixed by
+      skipping a backtick span whole rather than character by character —
+      not a new special case for a new SQL shape, but closing an
+      unguarded gap in the general mechanism itself (section 2.6). The
+      lesson the whole history is recording: patch the specific probe that
+      found the bug, but check the *general* shape before calling it
+      closed — and once a general mechanism exists, re-attack the
+      mechanism itself, not just the shapes it was built to cover. Section
+      7 documents two findings from the second re-read that were judged
+      NOT to need a code fix (a bounded, engine-specific string-literal
+      dialect gap, and a known-shape over-block) and pins them instead,
+      with the reasoning for that call.
 
 Sections mirror the probe catalog this suite was built from:
   1. the statement gate (noise vs. real statements, every deny keyword)
@@ -54,6 +65,7 @@ Sections mirror the probe catalog this suite was built from:
   2.5. the general comma-continuation redesign (JOIN...ON/USING,
        TABLESAMPLE, FOR SYSTEM_TIME, PIVOT, WITH OFFSET — the whole family
        at once, plus regression pins that legitimate queries are unaffected)
+  2.6. the resync mechanism's own backtick blind spot
   3. SELECT * detection
   4. the R6 identifier scan
   5. qualify_sql's rewrite
@@ -650,6 +662,67 @@ def test_a_scalar_subquery_in_the_projection_does_not_leak_into_the_outer_from(c
         capsys, monkeypatch,
     )
     assert sorted(out["surfaces"]) == sorted([SPINE, WEEKLY])
+
+
+# --- 2.6. the resync's own blind spot, found on a FOURTH re-attack ----------
+#
+# The general mechanism in 2.5 has one gap of its own: `_CLAUSE_BOUNDARY`
+# is checked at every depth-0 character, but a backtick is not a bracket —
+# `strip_noise` deliberately leaves backticks and their contents alone
+# (`identifiers()` needs the words inside them), so `_resync_to_comma` was
+# scanning straight through a backtick-quoted span character by character.
+# A backtick is a non-word character, so the position right after one
+# satisfies `\b`: a backticked RESERVED WORD used as an identifier —
+# `` `order` ``, `` `group` ``, `` `window` `` — read as a real clause
+# boundary. `order`/`group`/`window`/`limit` are exactly the words a
+# checkout/orders schema is likely to need backticked (they're reserved),
+# which makes this both a bypass primitive (an attacker names a sibling
+# table after one) and a footgun an honest analyst could trip over
+# unknowingly. Fixed by skipping a backtick-quoted span whole — it can
+# never itself contain the comma or keyword the scan is looking for, so
+# treating it as opaque is exact.
+
+
+@pytest.mark.parametrize("sql", [
+    f"SELECT a FROM {SPINE} `order`, tuff_unregistered z",
+    f"SELECT a FROM {SPINE} `group`, tuff_unregistered z",
+])
+def test_a_backticked_reserved_word_alias_does_not_swallow_its_sibling(sql, capsys, monkeypatch):
+    err = run_refused(["--question", "q", "--sql", sql], capsys, monkeypatch)
+    assert "ERROR (EXPLORE-SURFACE)" in err
+    assert "tuff_unregistered" in err
+
+
+def test_a_backticked_boundary_word_inside_a_join_condition_does_not_swallow_its_sibling(capsys, monkeypatch):
+    err = run_refused(
+        ["--question", "q", "--sql",
+         f"SELECT a FROM {SPINE} s JOIN {WEEKLY} w ON s.x = w.`window`, tuff_unregistered z"],
+        capsys, monkeypatch,
+    )
+    assert "ERROR (EXPLORE-SURFACE)" in err
+    assert "tuff_unregistered" in err
+
+
+@pytest.mark.parametrize("sql, expected", [
+    (f"SELECT a FROM {SPINE} `order`, analytics.secret_table", {SPINE, "analytics.secret_table"}),
+    (f"SELECT a FROM {SPINE} `group`, analytics.secret_table", {SPINE, "analytics.secret_table"}),
+    (f"SELECT a FROM {SPINE} s JOIN {WEEKLY} w ON s.x = w.`window`, analytics.secret_table",
+     {SPINE, WEEKLY, "analytics.secret_table"}),
+    # regression: a NON-boundary backticked identifier must not be treated
+    # any differently — siblings resolve exactly as without the backticks.
+    (f"SELECT a FROM {SPINE} s JOIN {WEEKLY} w ON s.x = w.`channel`, analytics.secret_table",
+     {SPINE, WEEKLY, "analytics.secret_table"}),
+])
+def test_referenced_tables_skips_backtick_spans_when_hunting_for_the_next_comma(sql, expected):
+    assert sqlguard.referenced_tables(sql) == expected
+
+
+def test_a_plain_backticked_table_reference_is_unaffected():
+    """Regression pin: the ordinary, common case — a whole table reference
+    written backticked rather than bare — must resolve exactly as before;
+    the backtick-span skip must not swallow the reference itself, only
+    protect what's inside it from the boundary-keyword check."""
+    assert sqlguard.referenced_tables(f"SELECT a FROM `{SPINE}`") == {SPINE}
 
 
 def test_a_longer_suffixed_name_does_not_collide_with_the_shorter_registered_one():

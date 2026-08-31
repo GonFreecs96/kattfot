@@ -189,12 +189,27 @@ def _resync_to_comma(text: str, pos: int):
     just reached — nothing past it belongs to this item list, and the
     enclosing from-item's own resync call, made independently, is what
     picks up any sibling after IT); or running off the end of the text.
+
+    A backtick-quoted span is skipped whole, not scanned character by
+    character: `strip_noise` deliberately leaves backticks and their
+    contents alone (`identifiers()` needs the words inside), so without
+    this a backticked reserved word — `` `order` ``, `` `window` ``,
+    `` `group` `` — reads as a real ORDER/WINDOW/GROUP clause boundary
+    (the backtick itself is a non-word character, so `\b` is satisfied)
+    and the rest of the FROM list is dropped, exactly the bug this whole
+    function exists to not have. A quoted identifier can never itself
+    contain the comma or boundary keyword this scan is looking for, so
+    treating the span as opaque is exact, not an approximation.
     """
     depth = 0
     n = len(text)
     i = pos
     while i < n:
         ch = text[i]
+        if ch == "`":
+            end = text.find("`", i + 1)
+            i = end + 1 if end != -1 else n
+            continue
         if ch in "([":
             depth += 1
         elif ch in ")]":
