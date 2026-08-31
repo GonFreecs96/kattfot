@@ -231,6 +231,82 @@ cannot honestly ship, each with its literature anchor:
 
 ---
 
+## 6. The exploratory lane is the escape hatch the literature already describes
+
+The governed metric runtime answers only the questions someone registered in
+advance. `kattfot:explore` is the honestly-labeled remainder — free-form
+SELECT over a fail-closed register, stamped T3, never served as T2 — and it
+is the escape-hatch pattern the field already describes, not an ad hoc
+bypass invented for this template.
+
+**Validated.**
+- **The split matches the field's diagnosis of NL2SQL's limits.** A
+  twenty-author production study found unconstrained NL2SQL still unsolved
+  for schema ambiguity and result verification at enterprise scale, and
+  concluded a semantic layer of vetted definitions — not a better prompt —
+  is what closes the gap (Floratou et al., *NL2SQL is a solved problem...
+  Not!*, CIDR 2024). That is `kattfot`'s split: dbt's *Semantic Layer vs.
+  Text-to-SQL*, Cortex Analyst, Minerva, and uMetric certify the governed
+  surface; `explore` is the labeled remainder, not a claim it is solved too.
+- **The register is the same action-space constraint, redrawn around SQL
+  that is genuinely free-form.** Section 2's Action-Selector argument needs
+  only a bounded, code-enforced action set, not a fixed metric list. The
+  register's `live` surfaces, `sqlguard.py`'s single-statement gate,
+  per-identifier R6, and `--param` binding redraw that boundary around
+  tables and identifiers; CaMeL's data/action separation still holds
+  inside it — a poisoned value fills a bound parameter, never the SQL text.
+- **Refuse-and-refer is the abstention finding, made visible.** TrustSQL
+  and EHRSQL (already grounding section 1) show abstaining beats a
+  plausible wrong answer under penalty, but say nothing about where the
+  question goes next. The `EXPLORABLE` referral, run only on the user's
+  explicit yes, closes that half: the same policy this literature scores
+  as optimal, with a named next step instead of a silent downgrade.
+- **Receipts for a lane that normally gets none.** Ad-hoc analysis is the
+  setting Hellerstein et al.'s *Ground: A Data Context Service* (CIDR 2017)
+  built for — context around exploratory queries no one instrumented in
+  advance. `kattfot` gets there differently: every exploratory query still
+  gets a manifest receipt and a hash-chained audit record (Crosby &
+  Wallach 2009) — provenance for a kind of query most systems never log
+  tamper-evidently at all.
+- **The T3 stamp is calibrated-trust labeling, not a disclaimer.** Model
+  Cards and Datasheets say an artifact should disclose its limits at the
+  point of use; Bhatt et al.'s *Uncertainty as a Form of Transparency*
+  (AIES 2021) adds that a confidence signal only changes behavior if it
+  survives to where the number is consumed. The T3 banner meets that bar:
+  a field in the manifest and artifact, and — since the T3 chart lane —
+  every chart, dashboard, and PDF built from it.
+- **Explore → promote is the certification workflow, not a new one.**
+  Minerva and uMetric describe promotion as a review gate, not a code
+  gate. `kattfot:promote` scaffolds a draft at `T3, status: draft` so it
+  changes no enforcement — the existing R4 refusal keeps an unreviewed
+  draft from serving; promotion adds a paper trail (`promoted_from`:
+  question, `query_sha`, `register_sha`), not a bypass.
+
+**Critiqued, and the honest state of it.**
+- *The guard is lexical* — the same critique section 2 makes of the access
+  hook, applied to SQL it cannot fully parse. `sqlguard.py` says so in its
+  own docstring: a construct outside the enumerated FROM/JOIN/comma shapes
+  can hide a table from the register check. The backstop is section 2's:
+  the query runs as the caller's own identity, reading nothing the human
+  could not read directly. A real parser or execution sandbox (IsolateGPT;
+  Anthropic sandbox-runtime) is the same roadmap item, not a second one.
+- *No egress control, still.* Section 2's lethal-trifecta gap (Willison,
+  2025) is not smaller here — free-form SELECT is a wider aperture for the
+  untrusted-data leg, not narrower — so the lane inherits the same tracked,
+  unclosed test rather than opening a new gap.
+- *`select_star: true` is an attestation, not a proof.* It records that a
+  human reviewed a surface's DDL and found no PII column; a test enforces
+  it for the two shipped surfaces, but a fork that sets the flag on an
+  unscanned one has asserted, not verified — the gap the metrics-layer
+  test-suite-verification work (Zhong et al.) argues belongs in CI.
+- *Promotion review quality is bound to the reviewer.* Minerva and uMetric
+  describe certification as human review and neither claims it infallible.
+  The promotion checklist is the mechanical half made concrete; it cannot
+  make a review good, only make skipping one visible — an empty `owner:`
+  or an unedited `NEEDS-DECISION` is a diff any reviewer can see land.
+
+---
+
 ## Sources
 
 **Text-to-SQL reliability.** Yu et al., *Spider* (EMNLP 2018); Lei et al.,
@@ -259,14 +335,17 @@ for Reliable LLM Analytics* (2026); dbt Labs, *Semantic Layer vs. Text-to-SQL*
 Minerva* (2021); Uber *uMetric* (2021); Stancil, *The Missing Piece of the
 Modern Data Stack* (2021); Kimball & Ross, *The Data Warehouse Toolkit* (2013);
 Lenz & Shoshani, *Summarizability in OLAP* (SSDBM 1997); Xiao et al.,
-*Ontology-Based Data Access: A Survey* (IJCAI 2018).
+*Ontology-Based Data Access: A Survey* (IJCAI 2018); Floratou et al.,
+*NL2SQL is a solved problem... Not!* (CIDR 2024).
 
 **Provenance & reproducibility.** W3C *PROV-DM* / *PROV-O* (2013); Buneman et
 al., *Why and Where* (ICDT 2001); Green et al., *Provenance Semirings* (PODS
 2007); Cheney et al., *Provenance in Databases* (FnT-DB 2009); Freire et al.,
-*Provenance for Computational Tasks* (CiSE 2008); Peng, *Reproducible Research*
+*Provenance for Computational Tasks* (CiSE 2008); Hellerstein et al.,
+*Ground: A Data Context Service* (CIDR 2017); Peng, *Reproducible Research*
 (Science 2011); ACM *Artifact Review and Badging*; Gebru et al., *Datasheets
-for Datasets* (2021); Mitchell et al., *Model Cards* (FAT* 2019); Crosby &
+for Datasets* (2021); Mitchell et al., *Model Cards* (FAT* 2019); Bhatt et al.,
+*Uncertainty as a Form of Transparency* (AIES 2021); Crosby &
 Wallach, *Efficient Data Structures for Tamper-Evident Logging* (USENIX
 Security 2009); RFC 6962 *Certificate Transparency*; OpenLineage / Marquez.
 
