@@ -23,16 +23,25 @@ every probe below either
       Section 2's comma-joined-table-after-a-subquery case is exactly this:
       it was missed on the first pass through this file and caught on a
       second, more adversarial re-read — worth saying plainly rather than
-      quietly folding the fix in as if it had been there from the start.
-      Section 7 documents two more findings from that same re-read that
-      were judged NOT to need a code fix (a bounded, engine-specific string-
-      literal dialect gap, and a known-shape over-block) and pins them
-      instead, with the reasoning for that call.
+      quietly folding the fix in as if it had been there from the start. A
+      THIRD pass caught the same bug's sibling, which the second pass's fix
+      had not generalized far enough to close: a matched bareword target
+      immediately followed by `(` (a table-function call — `UNNEST(...)`
+      chief among them, since it is also exempt from the register) lost a
+      comma-sibling the identical way a subquery did, just one branch of
+      the same `if` over. Fixed generally this time — any table-function
+      call, not UNNEST-specifically — which is the shape of lesson this
+      history is recording: patch the specific probe that found the bug,
+      but check the *general* shape before calling it closed. Section 7
+      documents two more findings from the second re-read that were judged
+      NOT to need a code fix (a bounded, engine-specific string-literal
+      dialect gap, and a known-shape over-block) and pins them instead,
+      with the reasoning for that call.
 
 Sections mirror the probe catalog this suite was built from:
   1. the statement gate (noise vs. real statements, every deny keyword)
   2. table-reference extraction (wildcards, escape hatches, shadowing,
-     comma-after-subquery)
+     comma-after-subquery, comma-after-table-function-call)
   3. SELECT * detection
   4. the R6 identifier scan
   5. qualify_sql's rewrite
@@ -428,6 +437,85 @@ def test_a_cte_shadow_does_not_hide_a_real_unregistered_table_in_its_own_body(ca
 def test_unnest_with_alias_and_cross_join_form_stays_exempt():
     sql = f"SELECT x FROM {SPINE} CROSS JOIN UNNEST(SPLIT(terminal_branch, ',')) AS x"
     assert sqlguard.referenced_tables(sql) == {SPINE}
+
+
+# --- the SAME bug's sibling, found on a second re-attack: a matched target
+# immediately followed by "(" -----------------------------------------------
+#
+# The subquery fix above only patched the branch where `_TARGET` FAILS (a
+# bare `(`). It missed the branch where `_TARGET` SUCCEEDS on a bareword
+# that is itself a table-function call — `UNNEST(...)`, `ML.PREDICT(...)`,
+# `EXTERNAL_QUERY(...)`: the match consumes only the name, leaving `pos` at
+# the `(`, where `_ALIAS` and `_COMMA` both fail (neither matches a bare
+# `(`) and the loop broke — abandoning the comma continuation exactly like
+# the original bug, just one token later. `UNNEST` is the dangerous case
+# specifically because it is also exempt: the call was silently skipped
+# AND everything after it was silently dropped, with nothing left in `refs`
+# for `validate_surfaces`/`validate_select_star` to check. Fixed generally
+# (not UNNEST-specifically): any successfully matched target immediately
+# followed by `(` has its argument list skipped via `_skip_parenthesized`
+# before the alias/comma step, the same treatment the subquery branch
+# already got. `EXTERNAL_QUERY`/`ML.PREDICT` weren't full holes before this
+# (the call name itself is unregistered and already refuses), but they hit
+# the identical code path, which is why one of them gets a test too.
+
+
+@pytest.mark.parametrize("sql", [
+    "SELECT n FROM UNNEST([1,2]) AS n, analytics.secret_table t",
+    "SELECT * FROM UNNEST([1]) AS n, analytics.secret_table t",  # compounding w/ SELECT *
+])
+def test_a_table_comma_joined_after_unnest_is_refused(sql, capsys, monkeypatch):
+    err = run_refused(["--question", "q", "--sql", sql], capsys, monkeypatch)
+    assert "ERROR (EXPLORE-SURFACE)" in err
+    assert "analytics.secret_table" in err
+
+
+@pytest.mark.parametrize("sql, expected", [
+    # UNNEST alone: still exempt, still no false positive.
+    ("SELECT x FROM UNNEST(arr) AS x", set()),
+    # a real table, then UNNEST, then nothing — pre-existing shape, still fine.
+    ("SELECT x FROM analytics.a, UNNEST(arr) AS x", {"analytics.a"}),
+    # UNNEST, then a real sibling — the fix.
+    ("SELECT n FROM UNNEST([1,2]) AS n, analytics.secret_table t", {"analytics.secret_table"}),
+    # a real table, THEN unnest, THEN another real sibling — nothing lost
+    # on either side of the call.
+    (f"SELECT a FROM {SPINE} t1, UNNEST([1]) AS n, {WEEKLY} t3", {SPINE, WEEKLY}),
+    # one more instance of the general shape, per the reviewer's ask: any
+    # bareword-call target, not just UNNEST, must not eat its sibling.
+    ("SELECT * FROM EXTERNAL_QUERY('conn', 'SELECT 1') e, analytics.secret_table t",
+     {"EXTERNAL_QUERY", "analytics.secret_table"}),
+])
+def test_referenced_tables_around_a_table_function_call_comma_sibling(sql, expected):
+    assert sqlguard.referenced_tables(sql) == expected
+
+
+def test_join_after_unnest_still_finds_the_next_real_table():
+    """JOIN is its own independent top-level `_FROM_JOIN` match, so it was
+    never at risk from this bug — pinned as a regression guard rather than
+    left to be assumed."""
+    sql = f"SELECT a FROM UNNEST([1]) u JOIN {SPINE} t ON 1=1"
+    assert sqlguard.referenced_tables(sql) == {SPINE}
+
+
+def test_a_real_unnest_query_is_not_falsely_refused_at_the_register_gate(capsys, monkeypatch):
+    """A real, legitimate query — spine CROSS JOIN UNNEST over one of its
+    own array-shaped columns — must clear every governance gate: the fix
+    must not turn into a new false refusal for the ordinary case UNNEST
+    exists to serve. It cannot be proven all the way through `main()`
+    on sqlite: UNNEST has no sqlite translation at all (a dialect
+    limitation, unrelated to governance — see dialect.py's residual
+    checks), so this asserts the failure that DOES surface is
+    EXPLORE-DIALECT, never EXPLORE-SURFACE — proof the register/star/PII
+    gates all passed and only the fixture engine's translation gap stopped
+    it."""
+    err = run_refused(
+        ["--question", "q", "--sql",
+         f"SELECT COUNT(*) AS n FROM {SPINE} t "
+         f"CROSS JOIN UNNEST(SPLIT(t.terminal_branch, ',')) AS x"],
+        capsys, monkeypatch,
+    )
+    assert "ERROR (EXPLORE-DIALECT)" in err
+    assert "EXPLORE-SURFACE" not in err
 
 
 def test_a_longer_suffixed_name_does_not_collide_with_the_shorter_registered_one():

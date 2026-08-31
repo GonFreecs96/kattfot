@@ -190,7 +190,12 @@ def referenced_tables(sql: str) -> set:
     keeps going past one: `FROM (SELECT ...) a, real_table` must still find
     `real_table`. Skipping the subquery's balanced parens (rather than
     abandoning the whole comma list the moment a target isn't a bare or
-    backticked name) is what makes that continuation reachable.
+    backticked name) is what makes that continuation reachable. The same
+    move applies when a bareword target IS matched but is itself a call —
+    `UNNEST(...)`, `EXTERNAL_QUERY(...)`, `ML.PREDICT(...)` — so its argument
+    list doesn't get mistaken for "nothing more to see" either: without
+    skipping past `(...)` there, `FROM UNNEST(arr) AS x, real_table` loses
+    `real_table` the identical way, just one token later.
     """
     text = strip_noise(sql)
     exempt = {c.lower() for c in cte_names(sql)} | _BUILTIN_TARGETS
@@ -204,6 +209,14 @@ def referenced_tables(sql: str) -> set:
                 if name.lower() not in exempt:
                     refs.add(name)
                 pos = m.end()
+                # A table-function call: the matched name is immediately
+                # followed by its argument list (`UNNEST(arr)`,
+                # `ML.PREDICT(MODEL ..., (SELECT ...))`). Skip it so a
+                # comma-sibling after the call is reachable below, exactly
+                # like the subquery case.
+                call_end = _skip_parenthesized(text, pos)
+                if call_end is not None:
+                    pos = call_end
             else:
                 skip_to = _skip_parenthesized(text, pos)
                 if skip_to is None:
