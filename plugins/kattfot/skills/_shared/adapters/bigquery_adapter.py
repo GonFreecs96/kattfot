@@ -18,6 +18,7 @@ import sys
 from ..identity import assert_user_identity
 from .base import (
     CAP_DATE_TYPE,
+    CAP_DRY_RUN,
     CAP_NATIVE_PERCENTILES,
     CAP_PUSHDOWN_AGGREGATION,
     CAP_USER_IDENTITY,
@@ -36,6 +37,7 @@ class BigQueryAdapter(Adapter):
             CAP_PUSHDOWN_AGGREGATION,
             CAP_USER_IDENTITY,
             CAP_DATE_TYPE,
+            CAP_DRY_RUN,
         }
     )
     fixture_backed = False
@@ -95,6 +97,33 @@ class BigQueryAdapter(Adapter):
             job_config.maximum_bytes_billed = int(max_bytes_billed)
         rows = client.query(sql, job_config=job_config).result()
         return [dict(r) for r in rows]
+
+    def dry_run(self, project: str, sql: str, params: dict) -> dict:
+        """`QueryJobConfig(dry_run=True)` — a real API call, made as the human.
+
+        Identity is asserted exactly as in `run_query`, via the same
+        `_client_and_module`: a dry run still leaves the process and still
+        needs to be attributable to a person, even though nothing is scanned or
+        billed. Same typed param binding (`_scalar`) and job labels as
+        `run_query`, because this prices the SAME query, not a paraphrase of
+        it. `use_query_cache=False` so the estimate reflects this query's own
+        cost rather than a prior run's cached result.
+
+        `maximum_bytes_billed` is deliberately NOT set on this job config —
+        nothing is billed on a dry run, so there is nothing for BigQuery to
+        cap. The cap comparison against the register's
+        `defaults.max_bytes_billed` happens client-side, in the exploratory
+        lane, using the byte count this method returns.
+        """
+        bigquery, client = self._client_and_module(project)
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[self._scalar(bigquery, n, v) for n, v in params.items()],
+            labels={"source": JOB_LABEL},
+            dry_run=True,
+            use_query_cache=False,
+        )
+        job = client.query(sql, job_config=job_config)
+        return {"total_bytes_processed": int(job.total_bytes_processed)}
 
     # -- percentiles: real push-down --------------------------------------
 

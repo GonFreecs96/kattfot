@@ -579,12 +579,24 @@ python3 plugins/kattfot/skills/explore/scripts/kattfot_explore.py \
   --param m=US            # bound as a parameter, never interpolated
 # --sql-file query.sql    # or read the statement from a file
 # --engine bigquery       # live warehouse, as you, capped by max_bytes_billed
+# --dry-run               # estimate cost instead of running (see below)
 ```
 
 **Comes back:** the rows (uncapped — by design), the qualified canonical
 SQL, bound params, surfaces read, `accuracy_tier: "T3"`, an unconditional
 `EXPLORATORY (T3)` warning, applicable guardrail caveats, and a manifest
 (`register_sha` · `query_sha` · `result_sha`).
+
+**Cost preview (`--dry-run`):** every governance guard above still runs
+first, unchanged — a refused query is refused, not priced. On `bigquery` it
+makes a real (unbilled) `dry_run=True` job and reports
+`estimate.total_bytes_processed` against the register's `max_bytes_billed`,
+with `estimate.would_exceed` flagging an over-cap query up front; on
+`sqlite` there is no cost dimension to estimate, so it reports
+`estimate_available: false` with an honest reason instead of a faked
+number — still useful as an offline governance lint. Bytes are reported,
+never dollars (on-demand pricing varies by region/edition). No rows, no
+manifest, and no audit-log line: nothing was read.
 
 **Refusals (exit 5, in code):** `EXPLORE-STATEMENT` (not exactly one
 SELECT/WITH, or any DML/DDL/scripting keyword), `EXPLORE-SURFACE` (a table

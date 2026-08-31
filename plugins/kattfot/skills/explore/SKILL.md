@@ -54,6 +54,31 @@ still belongs to the system of record.
 | `sqlite` (default) | The SQL runs against the committed fixture CSVs in in-memory sqlite, via the dialect translator. Untranslatable constructs refuse cleanly (`EXPLORE-DIALECT`). | `fixture_sql` |
 | `bigquery` | The SQL runs on the live warehouse as the authenticated human (ADC; service accounts refused), capped by the register's `max_bytes_billed`. | `bigquery` |
 
+## Cost preview (`--dry-run`)
+
+`--dry-run` estimates what a query would scan instead of running it.
+Governance still comes first: every guard above (statement, surface, star,
+R6) runs unchanged, so a query that would be refused is refused, not priced
+— `--dry-run` never bypasses a refusal.
+
+- **On `bigquery`**, the helper makes a real `dry_run=True` job — the query
+  is validated and priced server-side, nothing is scanned, nothing is
+  billed — and reports `estimate.total_bytes_processed` next to the
+  register's `max_bytes_billed`, with `estimate.would_exceed` telling you up
+  front whether the run would be refused for scanning too much. This is a
+  real, identity-asserted API call (same ADC rules as a normal run), just
+  one that never executes the query.
+- **On `sqlite`**, there is no cost dimension to estimate — a committed
+  fixture CSV has no bytes-scanned concept — so the helper reports
+  `estimate_available: false` with the reason, honestly, rather than a
+  fabricated number. The guards still ran, so this still functions as an
+  offline governance lint even with no price to show.
+- Bytes are reported, never dollars: on-demand pricing varies by region and
+  billing edition, so converting bytes scanned to a cost figure is a
+  deployment-specific step, not something this template hard-codes.
+- No rows, no manifest, and no audit-log line are produced by a dry run —
+  nothing was read, so there is nothing to fingerprint or log as a read.
+
 ## Skill root resolution
 
 Resolve `EXPLORE_ROOT`, first match wins:
@@ -79,7 +104,7 @@ Resolve `EXPLORE_ROOT`, first match wins:
    python3 $EXPLORE_ROOT/scripts/kattfot_explore.py \
      --question "<the user's question, in words>" \
      --sql "SELECT ..." \
-     [--param name=value ...] [--engine sqlite|bigquery]
+     [--param name=value ...] [--engine sqlite|bigquery] [--dry-run]
    ```
 
 5. **Render the artifact** from the helper's JSON using the Output format

@@ -29,6 +29,7 @@ import os
 from .base import (  # noqa: F401  (re-exported)
     ALL_CAPABILITIES,
     CAP_DATE_TYPE,
+    CAP_DRY_RUN,
     CAP_NATIVE_PERCENTILES,
     CAP_PUSHDOWN_AGGREGATION,
     CAP_USER_IDENTITY,
