@@ -696,8 +696,11 @@ mechanism rather than a real disagreement — the helper marks that in
 
 ## `verify` — is this artifact still valid? (offline)
 
-**Purpose:** recompute the definition + query fingerprints from the current
-repo and compare to the artifact's manifest. **No warehouse access.**
+**Purpose:** recompute an artifact's fingerprints from the current repo and
+compare to its manifest. **No warehouse access.** Works on a governed
+`query-metric` artifact (definition + query fingerprints) OR an exploratory
+`kattfot:explore` artifact (Provenance-fence + register fingerprints) —
+auto-detected from `skill: explore` in the frontmatter, no flag needed.
 
 ```
 kattfot:verify <artifact-path>
@@ -708,14 +711,27 @@ kattfot:verify <artifact-path>
 python3 plugins/kattfot/skills/verify/scripts/verify_artifact.py <artifact-path>
 ```
 
-**Statuses:** `VERIFY_OK` (consistent — the *number* itself wasn't
-re-run), `DEFINITION_DRIFT` (the metric file changed — shows old→new hash),
-`QUERY_DRIFT` (rebuilt SQL no longer matches), `DEFINITION_MISSING` (metric
-renamed/removed), `MANIFEST_ABSENT` (the artifact predates manifests).
+**Statuses (governed):** `VERIFY_OK` (consistent — the *number* itself
+wasn't re-run), `DEFINITION_DRIFT` (the metric file changed — shows old→new
+hash), `QUERY_DRIFT` (rebuilt SQL no longer matches), `DEFINITION_MISSING`
+(metric renamed/removed), `MANIFEST_ABSENT` (the artifact predates
+manifests).
 
-**Gotchas:** deliberately does **not** re-check `result_sha` — that needs a
-live re-run via `kattfot:query-metric`. Only verifies `query-metric` artifacts
-(the spine-backed skills' outputs have no manifest yet). Read-only.
+**Statuses (exploratory, T3):** `VERIFY_OK`, `PROVENANCE_TAMPERED` (the
+`## Provenance` fences no longer hash to the manifest's `query_sha` — the
+transcript was edited after the query ran; same check as `PROMOTE-TAMPER`),
+`REGISTER_DRIFT` (the exploration register changed since — shows old→new
+`register_sha`), `REGISTER_MISSING` (the register file can't be found/read),
+`PROVENANCE_ABSENT` (manifest present, but no SQL fence to recompute
+`query_sha` from), `MANIFEST_ABSENT`.
+
+**Gotchas:** deliberately does **not** re-check `result_sha` for either
+lane — a governed re-check needs a live re-run via `kattfot:query-metric`,
+and an explore artifact's rendered rows are a human-facing table, not the
+canonical result, so re-deriving them from markdown would be a parser
+pretending to be a receipt. A tamper/drift finding (exit 1) always outranks
+a co-occurring cannot-verify finding (exit 2). Still does not verify
+funnel/spine outputs (no manifest yet). Read-only.
 
 ---
 
@@ -979,5 +995,5 @@ funnel-pulse ──→ funnel-dropoff ──→ stage-timing ──→ segment-c
    # any of these four (chart-less) ──→ export-report   # spine analysis → PDF
 
 reconcile   # any governed metric, against an external value, on demand
-verify      # any query-metric artifact, offline, at any time
+verify      # any query-metric OR kattfot:explore artifact, offline, at any time
 ```

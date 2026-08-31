@@ -1,9 +1,20 @@
 #!/usr/bin/env python3
 """verify_artifact.py — CLI for the kattfot:verify skill.
 
-Reads a governed query-metric artifact, parses its manifest from the YAML
-frontmatter, and recomputes the definition + query fingerprints from the
-current repo state to detect drift. Offline only — never touches BigQuery.
+Reads a query artifact — governed (`query-metric`) or exploratory
+(`kattfot:explore`, `skill: explore` in its frontmatter) — and recomputes its
+fingerprints from the current repo state to detect drift. Offline only —
+never touches BigQuery. Routing is automatic from the frontmatter; there is no
+flag to pick a lane.
+
+  - Governed artifact: parses the manifest, reloads the metric definition by
+    name, rebuilds the SQL from the recorded dimensions/filters/window, and
+    compares `metric_def_sha` / `query_sha` (`_shared/verify.verify_frontmatter`).
+  - Exploratory artifact: re-parses the ```sql/```json Provenance fences (the
+    same parser `kattfot:promote` uses for its tamper check —
+    `_shared/explore_artifact.py`) and compares the recomputed `query_sha`
+    against the manifest, plus the CURRENT exploration register's
+    `register_sha` against the one recorded (`_shared/verify.verify_explore`).
 
 `--audit-log [PATH]` additionally (or, with no artifact argument, solely)
 replays the audit log's hash chain and compares it against the committed head
@@ -13,9 +24,10 @@ skill uses (`KATTFOT_AUDIT_LOG`, else `<outputs>/audit-log.jsonl`).
 
 Exit codes (worst finding wins when both checks run):
   0  VERIFY_OK / CHAIN_OK
-  1  DEFINITION_DRIFT / QUERY_DRIFT / CHAIN_HEAD_MISMATCH (provenance shifted)
-  2  MANIFEST_ABSENT / DEFINITION_MISSING / CHAIN_HEAD_ABSENT / CHAIN_ABSENT
-     (cannot verify)
+  1  DEFINITION_DRIFT / QUERY_DRIFT / PROVENANCE_TAMPERED / REGISTER_DRIFT /
+     CHAIN_HEAD_MISMATCH (provenance shifted — DETECTED)
+  2  MANIFEST_ABSENT / DEFINITION_MISSING / PROVENANCE_ABSENT /
+     REGISTER_MISSING / CHAIN_HEAD_ABSENT / CHAIN_ABSENT (cannot verify)
   3  usage / IO error
 """
 
@@ -30,6 +42,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from _shared import audit_chain as audit_chain_lib  # noqa: E402
+from _shared import explore_artifact as explore_artifact_lib  # noqa: E402
 from _shared import verify as verify_lib  # noqa: E402
 
 try:
@@ -41,13 +54,13 @@ except ImportError:
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
 # Exit code per status. 0 = clear, 1 = a confirmed shift/tamper was DETECTED,
-# 2 = could not fully verify (inconclusive), 3 = usage/IO error.
+# 2 = could not fully verify (inconclusive), 3 = usage/IO error. verify.py's
+# own sentinels get their exit code from `verify_lib.EXIT_CODE` — the ONE
+# source of truth for what those mean — rather than being re-listed here by
+# hand; only the audit-chain sentinels (which verify.py knows nothing about)
+# are added on top.
 _EXIT = {
-    verify_lib.VERIFY_OK: 0,
-    verify_lib.DEFINITION_DRIFT: 1,
-    verify_lib.QUERY_DRIFT: 1,
-    verify_lib.MANIFEST_ABSENT: 2,
-    verify_lib.DEFINITION_MISSING: 2,
+    **verify_lib.EXIT_CODE,
     audit_chain_lib.CHAIN_OK: 0,
     audit_chain_lib.CHAIN_HEAD_MISMATCH: 1,
     audit_chain_lib.CHAIN_HEAD_BEHIND: 2,
@@ -55,19 +68,22 @@ _EXIT = {
     audit_chain_lib.CHAIN_ABSENT: 2,
 }
 
-# Severity for combining checks — NOT the exit code. A confirmed detection
-# outranks an inconclusive "cannot verify", even though its exit code (1) is
-# the smaller number: a tampered audit log co-occurring with a manifest-absent
-# artifact must exit 1 (detected), not 2 (inconclusive). Combining by numeric
-# max over exit codes would invert that and bury the alarm.
-_SEVERITY = {0: 0, 3: 1, 2: 2, 1: 3}  # ok < usage < inconclusive < detected
-
 
 def _worse(a: str | None, b: str) -> str:
-    """The higher-severity of two statuses (by _SEVERITY of their exit codes)."""
+    """The higher-severity of two statuses.
+
+    Severity is `verify_lib.EXIT_SEVERITY` of a status's exit code — NOT the
+    exit code itself: a confirmed detection (exit 1) outranks an inconclusive
+    "cannot verify" (exit 2), even though 1 is the smaller number. A tampered
+    audit log co-occurring with a manifest-absent artifact must exit 1
+    (detected), not 2 (inconclusive); combining by numeric max over exit codes
+    would invert that and bury the alarm. Reuses `verify_lib`'s table rather
+    than keeping a second copy of the same ranking here.
+    """
     if a is None:
         return b
-    return b if _SEVERITY[_EXIT.get(b, 3)] > _SEVERITY[_EXIT.get(a, 3)] else a
+    sev = verify_lib.EXIT_SEVERITY
+    return b if sev[_EXIT.get(b, 3)] > sev[_EXIT.get(a, 3)] else a
 
 
 def default_audit_log_path() -> Path:
@@ -90,7 +106,9 @@ def parse_frontmatter(text: str) -> dict:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Offline drift check for a query-metric artifact.")
+    p = argparse.ArgumentParser(
+        description="Offline drift check for a query-metric or kattfot:explore artifact."
+    )
     p.add_argument("artifact", nargs="?", help="path to the artifact .md file")
     p.add_argument(
         "--audit-log",
@@ -116,7 +134,15 @@ def main() -> int:
             return 3
 
         fm = parse_frontmatter(path.read_text())
-        result = verify_lib.verify_frontmatter(fm)
+        if fm.get("skill") == "explore":
+            # Same fences, same parser `kattfot:promote` uses for its tamper
+            # check — re-reading the file here (rather than threading a body
+            # string through `parse_frontmatter`) keeps the governed path's
+            # parsing untouched and the routing decision a one-line check.
+            _, sql, params = explore_artifact_lib.parse_artifact(path)
+            result = verify_lib.verify_explore(fm, sql, params)
+        else:
+            result = verify_lib.verify_frontmatter(fm)
 
         status = result["status"]
         print(f"{status} -- {result['detail']}")

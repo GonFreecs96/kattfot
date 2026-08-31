@@ -176,7 +176,9 @@ Manifest: `register_sha {register_sha}` · `query_sha {query_sha}` · `result_sh
 
 > The Provenance fences are load-bearing, not stylistic: `kattfot:promote`
 > re-parses the SQL and parameters from exactly these blocks and recomputes
-> `query_sha` as its tamper check. Render them verbatim from the helper JSON.
+> `query_sha` as its tamper check, and `kattfot:verify` re-parses the same
+> blocks the same way to check an existing artifact for drift later. Render
+> them verbatim from the helper JSON.
 
 ## Hard rules
 
