@@ -124,8 +124,13 @@ def load_csv_into(conn: sqlite3.Connection, path: Path, table: str) -> int:
 
 class SqliteAdapter(Adapter):
     name = "sqlite"
-    # No native percentiles and no user identity: both are honest omissions, and
-    # `percentiles()` below covers the first by computing client-side.
+    # No native percentiles, no user identity, and no dry-run estimate: all
+    # three are honest omissions. `percentiles()` below covers the first by
+    # computing client-side — there is a real answer either way. The other
+    # two have no client-side cover at all: there is no principal to assert
+    # for a fixture read, and no cost dimension to a committed CSV to
+    # estimate, so `dry_run()` stays the base class's NotImplementedError
+    # stub rather than a shim that returns a number meaning nothing.
     CAPABILITIES = frozenset({CAP_PUSHDOWN_AGGREGATION})
     fixture_backed = True
 

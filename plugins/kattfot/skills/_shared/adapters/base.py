@@ -19,6 +19,16 @@ Two responsibilities, deliberately kept separate:
    and gets them; the difference in *where* the arithmetic happened is reported,
    not hidden.
 
+   `CAP_DRY_RUN` is a stricter version of the same idea: it gates *whether the
+   method exists to call at all*, not just where the work happens.
+   `percentiles()` always returns something on every engine — pushed down or
+   computed client-side, both real answers. `dry_run()` has no client-side
+   fallback that means anything: sqlite has no cost dimension to price, so
+   there is no "compute it a different way," only the honest stub
+   (`NotImplementedError`) the base class ships. A caller checks
+   `supports(CAP_DRY_RUN)` before calling `dry_run()` for exactly that
+   reason — the sqlite adapter never overrides it.
+
 `capabilities()` exists so a skill can also branch on availability before
 building a query — e.g. surface "computed client-side over N rows" in an
 artifact's provenance instead of implying warehouse push-down.
@@ -34,6 +44,7 @@ CAP_NATIVE_PERCENTILES = "native_percentiles"
 CAP_PUSHDOWN_AGGREGATION = "pushdown_aggregation"
 CAP_USER_IDENTITY = "user_identity"
 CAP_DATE_TYPE = "date_type"
+CAP_DRY_RUN = "dry_run_estimate"
 
 ALL_CAPABILITIES = frozenset(
     {
@@ -41,6 +52,7 @@ ALL_CAPABILITIES = frozenset(
         CAP_PUSHDOWN_AGGREGATION,
         CAP_USER_IDENTITY,
         CAP_DATE_TYPE,
+        CAP_DRY_RUN,
     }
 )
 
@@ -85,6 +97,26 @@ class Adapter:
         governed metrics have a fixed SQL shape and need no cap. Engines with
         no cost dimension (sqlite fixtures) accept and ignore it, keeping the
         adapters drop-in interchangeable."""
+        raise NotImplementedError
+
+    def dry_run(self, project: str, sql: str, params: dict) -> dict:
+        """Estimate what `sql` would cost to run, without running it.
+
+        The second capability-difference showcase, alongside `percentiles`:
+        BigQuery can price a query without executing it (`QueryJobConfig(dry_run=
+        True)` — validated and estimated server-side, nothing scanned, nothing
+        billed); sqlite fixtures have no cost dimension at all, because a
+        committed CSV loaded into memory has no bytes-scanned concept to
+        estimate. Rather than inventing a fake number for the fixture engine, an
+        adapter declares `CAP_DRY_RUN` or not, and a caller (the exploratory
+        lane's `--dry-run` flag) checks the capability and reports the honest
+        difference instead of a shimmed one.
+
+        Returns `{"total_bytes_processed": int}` — bytes, not currency.
+        On-demand pricing varies by region and billing edition, so this layer
+        reports what the warehouse would scan and leaves the bytes-to-money
+        conversion to the deployment.
+        """
         raise NotImplementedError
 
     # -- view naming -------------------------------------------------------

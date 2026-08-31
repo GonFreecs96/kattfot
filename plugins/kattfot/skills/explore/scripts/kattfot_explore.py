@@ -28,9 +28,35 @@ Deliberately NOT here: metric allow-lists (there is no metric), maturity
 cutoffs (an ad-hoc window lives inside the SQL where this layer cannot see
 it — the T3 stamp is the caveat), and any silent fallback between engines.
 
-Exit codes: 0 success; 5 governance refusal (statement / surface / star /
-PII / dialect); 2/3/4 via the adapter layer (ADC missing, deps missing,
-service account refused); 1 bad invocation or missing register.
+`--dry-run`: estimate what the query would cost instead of running it.
+Governance precedes cost — every guard above runs first, unchanged, so a
+query that would be refused is refused, not priced. On an engine without
+`CAP_DRY_RUN` (sqlite), one more guard runs explicitly inside the `--dry-run`
+branch itself: dialect translatability. `run_query` is normally the only
+place that check happens (it is where `dialect.translate_sql` runs), and a
+dry run never calls `run_query` — so without this extra call the "every
+guard still ran" claim below would be false for exactly the sqlite path it
+describes; an untranslatable construct now refuses (`EXPLORE-DIALECT`, same
+text as a real run) under `--dry-run` too, not just at execution time. Past
+that, the estimate is capability-gated (`CAP_DRY_RUN`,
+`_shared/adapters/base.py`): BigQuery reports real bytes-to-be-scanned via a
+dry-run job that never executes and bills nothing; sqlite has no cost
+dimension to estimate, so it reports `estimate_available: false` with an
+honest reason rather than a faked number — the guards still ran, so this is
+a governance lint, not a refusal. A dry run gets no manifest, no
+`result_sha`, and — unlike every other exit-0 path here — no audit append:
+the manifest and the audit chain
+both fingerprint a *read* (what ran, what came back), and a dry run reads
+nothing. An auditor reconstructing "what did this person query" would want
+dry-run attempts too, but the audit record schema is built entirely around
+results, and this lane keeps one schema rather than growing a second for
+attempts; the BigQuery dry-run call itself is still a real, identity-
+asserted API call, so it is not unattributable, just not logged here.
+
+Exit codes: 0 success (including a `--dry-run` cost preview, or its honest
+"no estimate" reply on sqlite); 5 governance refusal (statement / surface /
+star / PII / dialect); 2/3/4 via the adapter layer (ADC missing, deps
+missing, service account refused); 1 bad invocation or missing register.
 """
 
 from __future__ import annotations
@@ -50,7 +76,7 @@ from _shared import exploration as exploration_lib  # noqa: E402
 from _shared import guardrails as guardrails_lib  # noqa: E402
 from _shared import manifest as manifest_lib  # noqa: E402
 from _shared import sqlguard  # noqa: E402
-from _shared.dialect import DialectError  # noqa: E402
+from _shared.dialect import DialectError, translate_sql  # noqa: E402
 from _shared.pii import is_pii_column, pii_reason  # noqa: E402
 
 # Reuse the governed helper's project resolution, filter parsing, and audit
@@ -77,6 +103,19 @@ T3_WARNING = (
 def refuse(message: str) -> None:
     sys.stderr.write(message.rstrip() + "\n")
     sys.exit(REFUSAL_EXIT)
+
+
+def refuse_dialect_error(e: DialectError) -> None:
+    """The one refusal text for an untranslatable construct, shared by the
+    real sqlite execution path and the `--dry-run` pre-check below — the two
+    must say the same thing, or a caller could learn different rules
+    depending on whether they priced the query first."""
+    refuse(
+        f"ERROR (EXPLORE-DIALECT): {e}\nThe sqlite fixture engine runs a "
+        f"translated subset of BigQuery SQL (see _shared/dialect.py). "
+        f"Rewrite with translated constructs, or run with "
+        f"--engine bigquery against a live warehouse."
+    )
 
 
 def validate_surfaces(register: dict, refs: set) -> dict:
@@ -152,6 +191,107 @@ def qualify_sql(sql: str, refs: set, project: str) -> str:
     return out
 
 
+def format_bytes(n: int) -> str:
+    """Base-2 human-readable rendering of a byte count (`B`/`KiB`/.../`PiB`),
+    for the `--dry-run` console output. The raw integer stays the
+    authoritative field in the JSON; this is a convenience alongside it."""
+    val = float(n)
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
+        if val < 1024.0:
+            return f"{val:.0f} {unit}" if unit == "B" else f"{val:.2f} {unit}"
+        val /= 1024.0
+    # Falls out of the loop only at PiB and above — its own return rather
+    # than a loop-exit condition, so every code path has an explicit return.
+    return f"{val:.2f} PiB"
+
+
+def build_dry_run_result(
+    *,
+    adapter,
+    engine: str,
+    mode: str,
+    reason: str,
+    project: str,
+    qualified_sql: str,
+    params: dict,
+    refs: set,
+    question: str,
+    max_bytes: int | None,
+) -> dict:
+    """The `--dry-run` result: the same provenance envelope a normal result
+    carries (T3 stamp, question, surfaces, engine, qualified SQL) reporting a
+    cost estimate instead of rows.
+
+    Capability-gated, same as `percentiles()`: only an engine advertising
+    `CAP_DRY_RUN` can price a query without running it (today, only BigQuery).
+    On sqlite this still runs every governance guard — including, by the time
+    this is called, the dialect-translatability check `main()` runs ahead of
+    this function on that path — and reports `estimate_available: false` with
+    an honest reason rather than faking a byte count: a governance lint that
+    works fully offline, not a refusal.
+
+    `estimate.would_exceed` is a tri-state, not a bool: `None` when the
+    register configures no `defaults.max_bytes_billed` (nothing to compare
+    against — not a pass), `True`/`False` once it does. Same tri-state
+    reasoning as `max_bytes_billed` itself being nullable.
+
+    No `manifest` and no `result_sha` here, unlike a normal result: those
+    fingerprint a READ (the query_sha of what ran, the result_sha of what came
+    back), and a dry run reads nothing — there is no result to fingerprint.
+    The caller likewise skips the audit append entirely; see the module
+    docstring for why that is a deliberate omission, not an oversight.
+    """
+    result = {
+        "skill": "explore",
+        "dry_run": True,
+        "accuracy_tier": "T3",
+        "question": question,
+        "surfaces": sorted(refs),
+        "source_mode": mode,
+        "source_mode_reason": reason,
+        "source_project": project,
+        "engine": engine,
+        "fixture_backed": adapter.fixture_backed,
+        "engine_capabilities": sorted(adapter.capabilities()),
+        "query": qualified_sql,
+        "query_params": params,
+        "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
+        "agent": {
+            "skill": "explore",
+            "plugin_version": manifest_lib.plugin_version(),
+        },
+        "warnings": [T3_WARNING],
+    }
+    if adapter.supports(adapters_lib.CAP_DRY_RUN):
+        estimate = adapter.dry_run(project, qualified_sql, params)
+        total_bytes = int(estimate["total_bytes_processed"])
+        # None (not False) when the register sets no cap: there is nothing
+        # to compare the estimate against, so "would not exceed" would be a
+        # false pass rather than an honest "no cap configured."
+        would_exceed = (total_bytes > max_bytes) if max_bytes is not None else None
+        result["estimate_available"] = True
+        result["estimate"] = {
+            "total_bytes_processed": total_bytes,
+            "total_bytes_processed_human": format_bytes(total_bytes),
+            "max_bytes_billed": max_bytes,
+            "max_bytes_billed_human": (
+                format_bytes(max_bytes) if max_bytes is not None else None
+            ),
+            "would_exceed": would_exceed,
+        }
+    else:
+        result["estimate_available"] = False
+        result["estimate_unavailable_reason"] = (
+            f"the {engine} engine does not advertise "
+            f"{adapters_lib.CAP_DRY_RUN!r} — it has no cost dimension to "
+            f"estimate (a committed fixture read has no bytes-scanned concept "
+            f"the way a warehouse query does). Every governance guard above "
+            f"still ran, so --dry-run still works offline as a governance "
+            f"lint even with no estimate to report."
+        )
+    return result
+
+
 def build_audit_record(result: dict, user_email: str | None) -> dict:
     """Same schema as the governed lane's trace (one audit log, one shape),
     with `metric: null` and the exploratory fields added: the question asked
@@ -184,6 +324,16 @@ def main():
         "--engine",
         default=None,
         help="override KATTFOT_ENGINE for this run (sqlite | bigquery)",
+    )
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "estimate what the query would cost instead of running it. Every "
+            "governance guard still runs unchanged — a query that would be "
+            "refused is refused, not estimated. No rows, no manifest, no "
+            "audit append."
+        ),
     )
     p.add_argument("--output-format", default="json", choices=["json"])
     args = p.parse_args()
@@ -219,17 +369,48 @@ def main():
     max_bytes = exploration_lib.max_bytes_billed(register)
 
     adapter = adapters_lib.get_adapter(args.engine)
+
+    if args.dry_run:
+        # All governance above is unchanged and already ran — a query that
+        # would be refused was refused before reaching this point, not
+        # estimated. Nothing below this branch executes: no run_query, no
+        # rows, no manifest, no audit append (see build_dry_run_result and
+        # the module docstring for why the audit chain does not get a line).
+        #
+        # One more guard has to run explicitly HERE rather than being
+        # skipped: on an engine without CAP_DRY_RUN (sqlite), `run_query` —
+        # the only place dialect translation normally happens — never runs
+        # under `--dry-run`. Without this check, an untranslatable construct
+        # would silently exit 0 under `--dry-run` and exit 5 without it,
+        # which would make the "every governance guard still ran" claim in
+        # `build_dry_run_result` false for exactly the sqlite path it is
+        # about. Same rule, same refusal text as the real run.
+        if not adapter.supports(adapters_lib.CAP_DRY_RUN):
+            try:
+                translate_sql(qualified_sql)
+            except DialectError as e:
+                refuse_dialect_error(e)
+        result = build_dry_run_result(
+            adapter=adapter,
+            engine=engine,
+            mode=mode,
+            reason=reason,
+            project=project,
+            qualified_sql=qualified_sql,
+            params=params,
+            refs=refs,
+            question=args.question.strip(),
+            max_bytes=max_bytes,
+        )
+        print(json.dumps(result, default=str, indent=2))
+        return
+
     try:
         rows = adapter.run_query(
             project, qualified_sql, params, max_bytes_billed=max_bytes
         )
     except DialectError as e:
-        refuse(
-            f"ERROR (EXPLORE-DIALECT): {e}\nThe sqlite fixture engine runs a "
-            f"translated subset of BigQuery SQL (see _shared/dialect.py). "
-            f"Rewrite with translated constructs, or run with "
-            f"--engine bigquery against a live warehouse."
-        )
+        refuse_dialect_error(e)
     fixture_backed = adapter.fixture_backed
 
     warnings = [T3_WARNING]

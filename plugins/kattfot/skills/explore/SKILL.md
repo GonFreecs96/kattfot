@@ -51,8 +51,41 @@ still belongs to the system of record.
 
 | `KATTFOT_ENGINE` | What happens | `source_mode` |
 |---|---|---|
-| `sqlite` (default) | The SQL runs against the committed fixture CSVs in in-memory sqlite, via the dialect translator. Untranslatable constructs refuse cleanly (`EXPLORE-DIALECT`). | `fixture_sql` |
+| `sqlite` (default) | The SQL runs against the committed fixture CSVs in in-memory sqlite, via the dialect translator. Untranslatable constructs refuse cleanly (`EXPLORE-DIALECT`) — checked on a real run and, explicitly, under `--dry-run` too (see below). | `fixture_sql` |
 | `bigquery` | The SQL runs on the live warehouse as the authenticated human (ADC; service accounts refused), capped by the register's `max_bytes_billed`. | `bigquery` |
+
+## Cost preview (`--dry-run`)
+
+`--dry-run` estimates what a query would scan instead of running it.
+Governance still comes first: every guard above (statement, surface, star,
+R6, dialect) runs unchanged, so a query that would be refused is refused,
+not priced — `--dry-run` never bypasses a refusal. On `sqlite`, the dialect
+check normally only happens as a side effect of executing the query, so
+`--dry-run` runs it explicitly instead — an untranslatable construct
+refuses (`EXPLORE-DIALECT`) exactly as it would on a real run, not just
+when you finally execute for real.
+
+- **On `bigquery`**, the helper makes a real `dry_run=True` job — the query
+  is validated and priced server-side, nothing is scanned, nothing is
+  billed — and reports `estimate.total_bytes_processed` next to the
+  register's `max_bytes_billed`, with `estimate.would_exceed` telling you up
+  front whether the run would be refused for scanning too much.
+  `would_exceed` (and `max_bytes_billed`) is `null` rather than `false` when
+  the register configures no cap — nothing to compare against, not a pass.
+  This is a real, identity-asserted API call (same ADC rules as a normal
+  run), just one that never executes the query.
+- **On `sqlite`**, there is no cost dimension to estimate — a committed
+  fixture CSV has no bytes-scanned concept — so the helper reports
+  `estimate_available: false` with the reason, honestly, rather than a
+  fabricated number. Every guard above (statement/surface/star/R6/dialect)
+  still ran, so this still functions as an offline governance lint even
+  with no price to show.
+- Bytes are reported, never dollars: on-demand pricing varies by region and
+  billing edition, so converting bytes scanned to a cost figure is a
+  deployment-specific step, not something this template hard-codes.
+- No rows, no manifest, and no audit-log line are produced by a dry run —
+  nothing was read, so there is nothing to fingerprint or log as a read.
+  **No artifact either** — see step 5.
 
 ## Skill root resolution
 
@@ -79,12 +112,21 @@ Resolve `EXPLORE_ROOT`, first match wins:
    python3 $EXPLORE_ROOT/scripts/kattfot_explore.py \
      --question "<the user's question, in words>" \
      --sql "SELECT ..." \
-     [--param name=value ...] [--engine sqlite|bigquery]
+     [--param name=value ...] [--engine sqlite|bigquery] [--dry-run]
    ```
 
 5. **Render the artifact** from the helper's JSON using the Output format
    below, into `${KATTFOT_OUTPUTS_DIR:-outputs/kattfot}/<date>-explore-<slug>.md`
-   (slug: a few words from the question, kebab-case).
+   (slug: a few words from the question, kebab-case). **Skip this step
+   entirely on `--dry-run`.** A dry-run result has no `rows`, no
+   `row_count`, and no `manifest` — the Output format below requires all
+   three, and forcing a dry-run result through it means either stalling or
+   fabricating a manifest for a query that never ran. Instead, report the
+   estimate in chat: `estimate.total_bytes_processed_human` against
+   `estimate.max_bytes_billed_human` (or the `estimate_unavailable_reason`
+   on sqlite), state `estimate.would_exceed` plainly (including the `null`
+   case — "no cap configured, so no signal either way"), then ask whether to
+   run it for real. Only a real (non-dry-run) result gets an artifact.
 6. **Chart it if the user wants a picture.** The artifact goes through the
    same governed pipeline as a metric: `kattfot:visualize-metric` builds the
    spec (name the column mapping with `--x` / `--value-column` / `--series`

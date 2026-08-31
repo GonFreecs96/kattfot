@@ -27,6 +27,8 @@ trade-off is recorded rather than discovered.
 
 import datetime as dt
 import sqlite3
+import sys
+import types
 
 import pytest
 
@@ -328,6 +330,218 @@ def test_capabilities_differ_and_are_declared():
 def test_unknown_capability_raises():
     with pytest.raises(ValueError):
         adapters.get_adapter("sqlite").supports("teleportation")
+
+
+# ---------------------------------------------------------------------------
+# 4b. Dry-run cost estimate — another honest capability difference
+# ---------------------------------------------------------------------------
+# Same shape as the percentile capability split: BigQuery can price a query
+# without running it (`QueryJobConfig(dry_run=True)`), sqlite fixtures have no
+# cost dimension to estimate at all. `CAP_DRY_RUN` is declared on the
+# BigQuery adapter only; the base class's `dry_run()` stays a NotImplementedError
+# stub, same voice as `percentiles()`.
+
+
+class _FakeScalarQueryParameter:
+    def __init__(self, name, type_, value):
+        self.name = name
+        self.type_ = type_
+        self.value = value
+
+
+class _FakeQueryJobConfig:
+    """Stands in for `bigquery.QueryJobConfig`: records every kwarg it was
+    built with so a test can inspect what the adapter asked for, without the
+    real client library installed."""
+
+    def __init__(self, **kwargs):
+        self.query_parameters = kwargs.get("query_parameters", [])
+        self.labels = kwargs.get("labels", {})
+        self.dry_run = kwargs.get("dry_run", False)
+        self.use_query_cache = kwargs.get("use_query_cache")
+        # Real QueryJobConfig has this as a settable attribute, not a
+        # constructor kwarg — `run_query` sets it after construction when a
+        # cap is given. Defaults to None so a test can assert dry_run() never
+        # touches it.
+        self.maximum_bytes_billed = None
+
+
+class _FakeJob:
+    def __init__(self, total_bytes_processed):
+        self.total_bytes_processed = total_bytes_processed
+
+    def result(self):
+        # A dry-run job is already complete when `client.query()` returns —
+        # BigQuery validates and estimates it synchronously, never runs it —
+        # so `dry_run()` must read `total_bytes_processed` straight off the
+        # job and must never call `.result()` (which would try to fetch rows
+        # from a query that never executed). Raising here turns that
+        # regression into a loud test failure instead of a silent one.
+        raise AssertionError(
+            "a dry-run job is already complete; never .result() it"
+        )
+
+
+class _FakeClient:
+    """Class-level `instances` so a test can inspect the client
+    `_client_and_module` builds internally, without the adapter exposing it."""
+
+    instances: list = []
+
+    def __init__(self, project=None):
+        self.project = project
+        self.last_sql = None
+        self.last_job_config = None
+        type(self).instances.append(self)
+
+    def query(self, sql, job_config=None):
+        self.last_sql = sql
+        self.last_job_config = job_config
+        return _FakeJob(total_bytes_processed=123456789)
+
+
+def _install_fake_bigquery(monkeypatch):
+    """Inject a minimal fake `google.cloud.bigquery` so `from google.cloud
+    import bigquery` succeeds inside `_client_and_module` on a machine (like
+    this repo's default venv) with no google-cloud-bigquery installed. Only
+    what `run_query`/`dry_run` actually touch is faked: `Client`,
+    `QueryJobConfig`, `ScalarQueryParameter`."""
+    bigquery_mod = types.ModuleType("google.cloud.bigquery")
+    bigquery_mod.Client = _FakeClient
+    bigquery_mod.QueryJobConfig = _FakeQueryJobConfig
+    bigquery_mod.ScalarQueryParameter = _FakeScalarQueryParameter
+    google_mod = types.ModuleType("google")
+    cloud_mod = types.ModuleType("google.cloud")
+    google_mod.cloud = cloud_mod
+    cloud_mod.bigquery = bigquery_mod
+    monkeypatch.setitem(sys.modules, "google", google_mod)
+    monkeypatch.setitem(sys.modules, "google.cloud", cloud_mod)
+    monkeypatch.setitem(sys.modules, "google.cloud.bigquery", bigquery_mod)
+    _FakeClient.instances = []
+    return bigquery_mod
+
+
+def test_bigquery_supports_dry_run_and_sqlite_does_not():
+    sqlite_adapter = adapters.get_adapter("sqlite")
+    bq_adapter = adapters.get_adapter("bigquery")
+    assert bq_adapter.supports(adapters.CAP_DRY_RUN)
+    assert not sqlite_adapter.supports(adapters.CAP_DRY_RUN)
+    # supports() validates against ALL_CAPABILITIES before checking either
+    # adapter's own set — a typo'd token raises rather than silently reading
+    # as unsupported.
+    assert adapters.CAP_DRY_RUN in adapters_base.ALL_CAPABILITIES
+
+
+def test_base_adapter_dry_run_is_not_implemented():
+    with pytest.raises(NotImplementedError):
+        adapters_base.Adapter().dry_run("proj", "SELECT 1", {})
+
+
+def test_sqlite_adapter_inherits_the_not_implemented_dry_run():
+    """sqlite does not override `dry_run` — it does not declare `CAP_DRY_RUN`,
+    so the exploratory lane checks the capability and never calls this, but
+    the method itself stays the honest stub rather than a shim."""
+    adapter = adapters.get_adapter("sqlite")
+    with pytest.raises(NotImplementedError):
+        adapter.dry_run("proj", "SELECT 1", {})
+
+
+def test_bigquery_dry_run_asserts_identity_before_querying(monkeypatch):
+    """Mirrors `test_bigquery_adapter_asserts_identity_before_querying`, but
+    made airtight: the real-client version of that test tolerates exit code 3
+    (missing google-cloud-bigquery, which this repo's default venv does not
+    install) as an acceptable outcome, which means on this machine it never
+    actually reaches `assert_user_identity` and would pass even if `dry_run`
+    called it too late — or not at all.
+
+    Installing the fake client FIRST removes that escape hatch: the import
+    always succeeds, so the only way to reach `assert_user_identity` and get
+    exit 4 is for `dry_run` to have called it, and the only way for
+    `_FakeClient.instances` to stay empty is for it to have called it
+    *before* building a client. Both are asserted, not just tolerated."""
+    import _shared.adapters.bigquery_adapter as bqa
+
+    _install_fake_bigquery(monkeypatch)
+    calls = []
+
+    def boom():
+        calls.append("asserted")
+        raise SystemExit(4)
+
+    monkeypatch.setattr(bqa, "assert_user_identity", boom)
+    adapter = bqa.BigQueryAdapter()
+    with pytest.raises(SystemExit) as exc:
+        adapter.dry_run("proj", "SELECT 1", {})
+    assert exc.value.code == 4
+    assert calls == ["asserted"]
+    assert _FakeClient.instances == []  # no client was ever built
+
+
+def test_bigquery_dry_run_builds_a_dry_run_job_config_with_typed_params(monkeypatch):
+    """The dry-run request must look just like a real run's job config — same
+    typed param binding (`_scalar`), same job labels — except `dry_run=True`,
+    `use_query_cache=False`, and NO `maximum_bytes_billed`: nothing is billed
+    on a dry run, so there is nothing to cap. `total_bytes_processed` comes
+    back from whatever the (fake) job reports."""
+    import _shared.adapters.bigquery_adapter as bqa
+
+    fake_bq = _install_fake_bigquery(monkeypatch)
+    identity_calls = []
+    monkeypatch.setattr(
+        bqa,
+        "assert_user_identity",
+        lambda: identity_calls.append(1) or {"type": "authorized_user"},
+    )
+
+    adapter = bqa.BigQueryAdapter()
+    params = {
+        "flag": True,
+        "n": 3,
+        "x": 1.5,
+        "d": dt.date(2026, 6, 1),
+        "ts": dt.datetime(2026, 6, 1, 12, 0),
+        "s": "hello",
+    }
+    result = adapter.dry_run("proj", "SELECT 1", params)
+
+    assert result == {"total_bytes_processed": 123456789}
+    assert identity_calls == [1]
+
+    client = fake_bq.Client.instances[-1]
+    cfg = client.last_job_config
+    assert client.last_sql == "SELECT 1"
+    assert cfg.dry_run is True
+    assert cfg.use_query_cache is False
+    assert cfg.maximum_bytes_billed is None
+    assert cfg.labels == {"source": bqa.JOB_LABEL}
+
+    by_name = {p.name: p for p in cfg.query_parameters}
+    assert by_name["flag"].type_ == "BOOL"
+    assert by_name["n"].type_ == "INT64"
+    assert by_name["x"].type_ == "FLOAT64"
+    assert by_name["d"].type_ == "DATE"
+    assert by_name["ts"].type_ == "DATETIME"
+    assert by_name["s"].type_ == "STRING"
+
+
+def test_bigquery_dry_run_refuses_rather_than_report_zero_bytes(monkeypatch):
+    """`total_bytes_processed` is typed Optional in the client library. If a
+    (hypothetical, malformed) dry-run job ever reported None, silently
+    treating that as 0 would read as "definitely under the cap" — the one
+    lie a cost preview must never tell. `dry_run()` must raise instead of
+    guessing."""
+    import _shared.adapters.bigquery_adapter as bqa
+
+    _install_fake_bigquery(monkeypatch)
+    monkeypatch.setattr(bqa, "assert_user_identity", lambda: {"type": "authorized_user"})
+    monkeypatch.setattr(
+        _FakeClient, "query",
+        lambda self, sql, job_config=None: _FakeJob(total_bytes_processed=None),
+    )
+
+    adapter = bqa.BigQueryAdapter()
+    with pytest.raises(RuntimeError, match="total_bytes_processed"):
+        adapter.dry_run("proj", "SELECT 1", {})
 
 
 def test_percentile_arithmetic_matches_the_bigquery_definition():
