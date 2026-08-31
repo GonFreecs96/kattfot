@@ -216,7 +216,7 @@ def build_dry_run_result(
     params: dict,
     refs: set,
     question: str,
-    max_bytes,
+    max_bytes: int | None,
 ) -> dict:
     """The `--dry-run` result: the same provenance envelope a normal result
     carries (T3 stamp, question, surfaces, engine, qualified SQL) reporting a

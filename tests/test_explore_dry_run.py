@@ -42,9 +42,19 @@ def _no_audit(monkeypatch):
     monkeypatch.setenv("KATTFOT_AUDIT_DISABLE", "1")
 
 
+@pytest.fixture(autouse=True)
+def _bigquery_project(monkeypatch):
+    """Every bigquery-mode test in this file needs a project to resolve
+    against; harmless for the sqlite-mode tests, which never read it —
+    except `test_sqlite_dry_run_resolves_project_placeholder_when_unset`
+    below, which deliberately unsets it again to exercise that path (the one
+    thing making this fixture module-wide would otherwise hide)."""
+    monkeypatch.setenv("KATTFOT_BIGQUERY_PROJECT", "test-proj")
+
+
 def run_ok(argv, capsys, monkeypatch) -> dict:
     monkeypatch.setattr(sys, "argv", ["kattfot_explore"] + argv)
-    assert kattfot_explore.main() in (0, None)
+    assert kattfot_explore.main() is None  # main() never returns a code; it prints and falls off
     return json.loads(capsys.readouterr().out)
 
 
@@ -143,6 +153,32 @@ def test_dry_run_and_a_real_run_refuse_the_same_construct_with_the_same_text(
     assert with_dry_run == without_dry_run
 
 
+def test_a_pii_query_with_bigquery_dry_run_refuses_before_ever_pricing_it(
+    capsys, monkeypatch
+):
+    """Every other guard-order test in this file runs on sqlite, where the
+    estimate is unreachable regardless (no CAP_DRY_RUN) — so none of them
+    actually prove governance precedes cost on the one engine where cost
+    IS reachable. This is that proof: `--engine bigquery --dry-run` on a
+    PII query must refuse before `BigQueryAdapter.dry_run` — which would
+    otherwise make a real, billable-adjacent API call — is ever invoked."""
+    calls = []
+    monkeypatch.setattr(
+        bqa.BigQueryAdapter,
+        "dry_run",
+        lambda self, project, sql, params: calls.append(1) or {
+            "total_bytes_processed": 1
+        },
+    )
+    err = run_refused(
+        ["--question", "q", "--sql", f"SELECT customer_email FROM {SPINE}",
+         "--engine", "bigquery", "--dry-run"],
+        capsys, monkeypatch,
+    )
+    assert "ERROR (R6)" in err
+    assert calls == []  # dry_run was never called
+
+
 # ---------------------------------------------------------------------------
 # The sqlite path: honest "no estimate", not a refusal
 # ---------------------------------------------------------------------------
@@ -198,16 +234,25 @@ def test_sqlite_dry_run_still_carries_the_qualified_sql_and_params(
     assert out["surfaces"] == [SPINE]
 
 
+def test_sqlite_dry_run_resolves_project_placeholder_when_unset(capsys, monkeypatch):
+    """`_bigquery_project` above sets `KATTFOT_BIGQUERY_PROJECT` for every
+    test in this module; this test overrides that back to unset for itself,
+    so the sqlite (`fixture_sql`) project-resolution path — which keeps the
+    `${VAR}` placeholder literal rather than erroring — still gets exercised
+    here rather than only in test_explore.py's non-dry-run coverage."""
+    monkeypatch.delenv("KATTFOT_BIGQUERY_PROJECT", raising=False)
+    out = run_ok(
+        ["--question", "q", "--sql", f"SELECT COUNT(*) AS n FROM {SPINE}",
+         "--dry-run"],
+        capsys, monkeypatch,
+    )
+    assert out["source_project"] == "${KATTFOT_BIGQUERY_PROJECT}"
+    assert "${KATTFOT_BIGQUERY_PROJECT}" in out["query"]
+
+
 # ---------------------------------------------------------------------------
 # The BigQuery path: would_exceed on both sides of the register cap
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def _bigquery_project(monkeypatch):
-    """Every bigquery-mode test needs a project to resolve against; harmless
-    for the sqlite-mode tests above, which never read it."""
-    monkeypatch.setenv("KATTFOT_BIGQUERY_PROJECT", "test-proj")
 
 
 def test_dry_run_would_exceed_is_false_under_the_cap(capsys, monkeypatch):
