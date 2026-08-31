@@ -19,29 +19,41 @@ every probe below either
       identifier reaches the projection, no write executes) — pinned with a
       comment naming why it is safe despite not being refused; or
   (c) is a genuine HOLE — the probe defeats a stated guarantee, and
-      `sqlguard.py` gets a real (minimal) fix alongside the pinning test.
-      Section 2's comma-joined-table-after-a-subquery case is exactly this:
-      it was missed on the first pass through this file and caught on a
-      second, more adversarial re-read — worth saying plainly rather than
-      quietly folding the fix in as if it had been there from the start. A
-      THIRD pass caught the same bug's sibling, which the second pass's fix
-      had not generalized far enough to close: a matched bareword target
+      `sqlguard.py` gets a real fix alongside the pinning test. Section 2's
+      comma-joined-table-after-a-subquery case is exactly this: it was
+      missed on the first pass through this file and caught on a second,
+      more adversarial re-read — worth saying plainly rather than quietly
+      folding the fix in as if it had been there from the start. A THIRD
+      pass caught the same bug's sibling, which the second pass's fix had
+      not generalized far enough to close: a matched bareword target
       immediately followed by `(` (a table-function call — `UNNEST(...)`
       chief among them, since it is also exempt from the register) lost a
       comma-sibling the identical way a subquery did, just one branch of
-      the same `if` over. Fixed generally this time — any table-function
-      call, not UNNEST-specifically — which is the shape of lesson this
-      history is recording: patch the specific probe that found the bug,
-      but check the *general* shape before calling it closed. Section 7
-      documents two more findings from the second re-read that were judged
-      NOT to need a code fix (a bounded, engine-specific string-literal
-      dialect gap, and a known-shape over-block) and pins them instead,
-      with the reasoning for that call.
+      the same `if` over — patched with a second, symmetric special case.
+      A FOURTH pass showed that two special cases were never going to be
+      enough: `a JOIN b ON cond, c` — ordinary SQL, no obfuscation — lost
+      `c` the same way, and so would TABLESAMPLE, FOR SYSTEM_TIME AS OF,
+      PIVOT/UNPIVOT, or the next construct nobody had thought to try yet.
+      That pass replaced the growing pile of special cases with one general
+      mechanism (`_resync_to_comma`, section 2.5) that finds the next
+      comma-joined sibling by scanning past *anything* at bracket depth 0
+      up to a real clause boundary, rather than by naming the shapes that
+      can appear in between. The lesson the whole history is recording:
+      patch the specific probe that found the bug, but check the *general*
+      shape before calling it closed — and when the general shape keeps
+      producing new specific probes, stop enumerating and fix the
+      mechanism. Section 7 documents two findings from the second re-read
+      that were judged NOT to need a code fix (a bounded, engine-specific
+      string-literal dialect gap, and a known-shape over-block) and pins
+      them instead, with the reasoning for that call.
 
 Sections mirror the probe catalog this suite was built from:
   1. the statement gate (noise vs. real statements, every deny keyword)
   2. table-reference extraction (wildcards, escape hatches, shadowing,
      comma-after-subquery, comma-after-table-function-call)
+  2.5. the general comma-continuation redesign (JOIN...ON/USING,
+       TABLESAMPLE, FOR SYSTEM_TIME, PIVOT, WITH OFFSET — the whole family
+       at once, plus regression pins that legitimate queries are unaffected)
   3. SELECT * detection
   4. the R6 identifier scan
   5. qualify_sql's rewrite
@@ -442,22 +454,22 @@ def test_unnest_with_alias_and_cross_join_form_stays_exempt():
 # --- the SAME bug's sibling, found on a second re-attack: a matched target
 # immediately followed by "(" -----------------------------------------------
 #
-# The subquery fix above only patched the branch where `_TARGET` FAILS (a
-# bare `(`). It missed the branch where `_TARGET` SUCCEEDS on a bareword
-# that is itself a table-function call — `UNNEST(...)`, `ML.PREDICT(...)`,
-# `EXTERNAL_QUERY(...)`: the match consumes only the name, leaving `pos` at
-# the `(`, where `_ALIAS` and `_COMMA` both fail (neither matches a bare
-# `(`) and the loop broke — abandoning the comma continuation exactly like
-# the original bug, just one token later. `UNNEST` is the dangerous case
-# specifically because it is also exempt: the call was silently skipped
-# AND everything after it was silently dropped, with nothing left in `refs`
-# for `validate_surfaces`/`validate_select_star` to check. Fixed generally
-# (not UNNEST-specifically): any successfully matched target immediately
-# followed by `(` has its argument list skipped via `_skip_parenthesized`
-# before the alias/comma step, the same treatment the subquery branch
-# already got. `EXTERNAL_QUERY`/`ML.PREDICT` weren't full holes before this
-# (the call name itself is unregistered and already refuses), but they hit
-# the identical code path, which is why one of them gets a test too.
+# The subquery fix above only patched the case where `_TARGET` FAILS to
+# match (a bare `(`). It missed the case where `_TARGET` SUCCEEDS on a
+# bareword that is itself a table-function call — `UNNEST(...)`,
+# `ML.PREDICT(...)`, `EXTERNAL_QUERY(...)`: the match consumed only the
+# name, leaving the cursor at the `(`, where neither an alias nor a comma
+# could match, and the loop broke — abandoning the comma continuation
+# exactly like the original bug, just one token later. `UNNEST` was the
+# dangerous case specifically because it is also exempt: the call was
+# silently skipped AND everything after it was silently dropped, with
+# nothing left in `refs` for `validate_surfaces`/`validate_select_star` to
+# check. At the time, this was fixed by adding a second, symmetric paren-
+# skip for the target-matched case. (That fix has since been subsumed by
+# the general resync redesign below — see the section-2.5 comment — so
+# `referenced_tables` no longer has two separate paren-skip call sites at
+# all; the tests here still pin the same UNNEST-specific shapes so the
+# original finding stays covered by name, not just by the general matrix.)
 
 
 @pytest.mark.parametrize("sql", [
@@ -516,6 +528,128 @@ def test_a_real_unnest_query_is_not_falsely_refused_at_the_register_gate(capsys,
     )
     assert "ERROR (EXPLORE-DIALECT)" in err
     assert "EXPLORE-SURFACE" not in err
+
+
+# --- 2.5. the general redesign, found on a THIRD re-attack --------------------
+#
+# Rounds 2 and 3 each patched one shape of the same root cause: the comma-
+# continuation loop only reached a sibling when the preceding from-item
+# ended in exactly `target [call-args] [alias]`. A subquery's parens and a
+# table-function call's parens were the two shapes patched — but ANYTHING
+# else between a target and its comma sibling hit the identical `break`:
+# a JOIN condition (`ON ...` / `USING (...)`), TABLESAMPLE, FOR SYSTEM_TIME
+# AS OF, PIVOT/UNPIVOT, UNNEST ... WITH OFFSET. The JOIN...ON case is the
+# serious one — `a JOIN b ON cond, c` is ordinary standard SQL, not an edge
+# case, and the module's own docstring claims comma continuations are
+# handled.
+#
+# Rather than add a third (fourth, fifth, ...) special case,
+# `referenced_tables` was redesigned around one general mechanism:
+# `_resync_to_comma` scans forward from wherever a from-item's target
+# match left off, tracking bracket depth, until it finds either the next
+# depth-0 comma (another sibling — keep going) or a real clause boundary
+# (WHERE/GROUP/ORDER/HAVING/QUALIFY/WINDOW/LIMIT/a set operator/`;`/an
+# enclosing `)`/`]` closing — the item list is over). JOIN, ON, USING, AS,
+# WITH, FOR, TABLESAMPLE, and PIVOT/UNPIVOT are all just scanned through as
+# ordinary text; none of them needs to be named. This is what closes the
+# whole family in one change instead of enumerating it forever.
+
+
+@pytest.mark.parametrize("sql", [
+    f"SELECT a FROM {SPINE} s JOIN {WEEKLY} w ON 1=0, tuff_unregistered z",
+    f"SELECT a FROM {SPINE} s JOIN {WEEKLY} w USING (cohort_week), tuff_unregistered z",
+    f"SELECT a FROM {SPINE} FOR SYSTEM_TIME AS OF CURRENT_TIMESTAMP(), tuff_unregistered z",
+    f"SELECT a FROM {SPINE} TABLESAMPLE SYSTEM (10 PERCENT), tuff_unregistered z",
+    f"SELECT a FROM {SPINE} PIVOT(SUM(x) FOR y IN (1,2)), tuff_unregistered z",
+    "SELECT n FROM UNNEST([1,2]) WITH OFFSET AS o, tuff_unregistered z",
+])
+def test_a_comma_sibling_after_any_from_item_decorator_is_refused(sql, capsys, monkeypatch):
+    err = run_refused(["--question", "q", "--sql", sql], capsys, monkeypatch)
+    assert "ERROR (EXPLORE-SURFACE)" in err
+    assert "tuff_unregistered" in err
+
+
+def test_select_star_compounds_with_a_join_on_comma_sibling(tmp_path, capsys, monkeypatch):
+    """The compounding shape for the JOIN...ON case specifically, mirroring
+    the subquery version in section 2: SELECT * over a surface reached only
+    past a JOIN...ON condition and a comma. Pre-redesign, `refs` lost
+    everything after the ON condition, so `validate_select_star` had
+    nothing unattested to complain about. Post-fix, the sibling is found
+    and its attestation enforced exactly as if the ON clause weren't
+    there."""
+    reg = tmp_path / "exploration.yaml"
+    reg.write_text(
+        f"surfaces:\n"
+        f"  {SPINE}:\n    status: live\n    select_star: true\n"
+        f"  {WEEKLY}:\n    status: live\n"  # no select_star attestation
+    )
+    monkeypatch.setenv("KATTFOT_EXPLORATION_FILE", str(reg))
+    err = run_refused(
+        ["--question", "q", "--sql",
+         f"SELECT * FROM {SPINE} s JOIN {WEEKLY} w ON s.cohort_week = w.cohort_week"],
+        capsys, monkeypatch,
+    )
+    assert "ERROR (EXPLORE-STAR)" in err
+
+
+@pytest.mark.parametrize("sql, expected", [
+    (f"SELECT a FROM {SPINE} s JOIN {WEEKLY} w ON 1=0, tuff_unregistered z",
+     {SPINE, WEEKLY, "tuff_unregistered"}),
+    (f"SELECT a FROM {SPINE} s JOIN {WEEKLY} w USING (cohort_week), tuff_unregistered z",
+     {SPINE, WEEKLY, "tuff_unregistered"}),
+    (f"SELECT a FROM {SPINE} FOR SYSTEM_TIME AS OF CURRENT_TIMESTAMP(), tuff_unregistered z",
+     {SPINE, "tuff_unregistered"}),
+    (f"SELECT a FROM {SPINE} TABLESAMPLE SYSTEM (10 PERCENT), tuff_unregistered z",
+     {SPINE, "tuff_unregistered"}),
+    (f"SELECT a FROM {SPINE} PIVOT(SUM(x) FOR y IN (1,2)), tuff_unregistered z",
+     {SPINE, "tuff_unregistered"}),
+    ("SELECT n FROM UNNEST([1,2]) WITH OFFSET AS o, tuff_unregistered z",
+     {"tuff_unregistered"}),
+])
+def test_referenced_tables_around_a_from_item_decorator_comma_sibling(sql, expected):
+    assert sqlguard.referenced_tables(sql) == expected
+
+
+# --- regression pins: the redesign must not change what already worked ------
+
+
+def test_plain_join_on_with_no_sibling_is_unaffected():
+    sql = f"SELECT a FROM {SPINE} s JOIN {WEEKLY} w ON 1=1"
+    assert sqlguard.referenced_tables(sql) == {SPINE, WEEKLY}
+
+
+def test_plain_comma_join_with_no_decorator_is_unaffected():
+    sql = f"SELECT a FROM {SPINE}, {WEEKLY}"
+    assert sqlguard.referenced_tables(sql) == {SPINE, WEEKLY}
+
+
+def test_a_cte_is_unaffected_by_the_resync_redesign():
+    sql = (
+        "WITH recent AS (SELECT * FROM analytics.a) "
+        "SELECT * FROM recent r, analytics.b b2 "
+        "JOIN analytics.c ON b2.k = c.k "
+        "LEFT JOIN analytics.d USING (k)"
+    )
+    assert sqlguard.referenced_tables(sql) == {
+        "analytics.a", "analytics.b", "analytics.c", "analytics.d",
+    }
+
+
+def test_unnest_alone_still_resolves_to_empty_under_the_resync_redesign():
+    assert sqlguard.referenced_tables("SELECT x FROM UNNEST(arr) AS x") == set()
+
+
+def test_a_scalar_subquery_in_the_projection_does_not_leak_into_the_outer_from(capsys, monkeypatch):
+    """A scalar subquery in the SELECT list has its own FROM, matched by
+    the same independent top-level scan as any other subquery — it must
+    add its own table (correctly, since the lexical scan really does read
+    it) without corrupting or duplicating what the outer FROM found."""
+    out = run_ok(
+        ["--question", "q", "--sql",
+         f"SELECT channel, (SELECT COUNT(*) FROM {WEEKLY}) AS n FROM {SPINE} LIMIT 1"],
+        capsys, monkeypatch,
+    )
+    assert sorted(out["surfaces"]) == sorted([SPINE, WEEKLY])
 
 
 def test_a_longer_suffixed_name_does_not_collide_with_the_shorter_registered_one():

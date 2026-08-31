@@ -138,13 +138,24 @@ def assert_single_select(sql: str) -> None:
 
 _FROM_JOIN = re.compile(r"\b(?:from|join)\b", re.IGNORECASE)
 _TARGET = re.compile(r"\s*(`[^`]+`|[A-Za-z_][\w.]*)")
-_ALIAS = re.compile(r"\s+(?:as\s+)?([A-Za-z_]\w*)", re.IGNORECASE)
-_COMMA = re.compile(r"\s*,")
 _CTE_NAME = re.compile(r"\b([A-Za-z_]\w*)\s+as\s*\(", re.IGNORECASE)
-_OPEN_PAREN = re.compile(r"\s*\(")
 
 #: Targets that look like tables to a lexical reader but are not.
 _BUILTIN_TARGETS = {"unnest"}
+
+#: Clause-level keywords that END a FROM/JOIN item list, once reached at
+#: bracket depth 0. Reaching one means the statement has moved past its
+#: table list into a different clause (or a set operator introducing a new
+#: SELECT), so nothing after it is a sibling of the tables just scanned.
+#: Deliberately NOT here: ON, USING, JOIN, AS, WITH, FOR, TABLESAMPLE,
+#: PIVOT/UNPIVOT, OFFSET — every one of those is legal INSIDE a FROM item
+#: list (a join condition, a table decorator, UNNEST's WITH OFFSET alias
+#: clause) and must be scanned straight through, never stopped at.
+_CLAUSE_BOUNDARY = re.compile(
+    r"\b(?:where|group|order|having|qualify|window|limit"
+    r"|union|intersect|except)\b",
+    re.IGNORECASE,
+)
 
 
 def cte_names(sql: str) -> set:
@@ -153,49 +164,71 @@ def cte_names(sql: str) -> set:
     return {m.group(1) for m in _CTE_NAME.finditer(strip_noise(sql))}
 
 
-def _skip_parenthesized(text: str, pos: int):
-    """If `text[pos:]` opens with `(` (after optional whitespace), return the
-    index just past its balanced closing `)` — else None.
+def _resync_to_comma(text: str, pos: int):
+    """From `pos`, find the next top-level (bracket-depth 0) comma that
+    starts another FROM-list sibling — or None if the FROM/JOIN item list
+    ends before one.
 
-    Depth-only bracket counting is safe here because `text` has already had
-    every string literal and comment replaced by noise-stripping, so a `(`
-    or `)` that was inside a former string cannot appear in what's left.
-    Unbalanced input (should not occur in real SQL) returns None so the
-    caller falls back to stopping, rather than looping past the end.
+    This is the one mechanism `referenced_tables` leans on for everything
+    that can sit between a from-item and its next comma-joined sibling
+    besides a plain bareword alias: a JOIN ... ON/USING condition,
+    TABLESAMPLE, FOR SYSTEM_TIME AS OF, PIVOT/UNPIVOT, a table-function's
+    own argument list (`UNNEST(arr)`, `ML.PREDICT(MODEL m, (SELECT ...))`),
+    UNNEST ... WITH OFFSET, or a shape not yet invented. None of those
+    introduce a new top-level comma or a real clause boundary, so scanning
+    straight through them — respecting bracket depth, so a comma nested
+    inside a `(...)` argument list or a `[...]` array literal is never
+    mistaken for one — is sufficient. Nothing about any of those
+    constructs needs to be named or special-cased for this to work.
+
+    Stops (returns None) on: a real clause boundary at depth 0
+    (`_CLAUSE_BOUNDARY`, or a `;` — belt and suspenders, since
+    `assert_single_select` already guarantees one statement by the time
+    the lane calls this); a `)`/`]` closing when depth is already 0 (this
+    FROM sits inside an enclosing subquery or array whose own close was
+    just reached — nothing past it belongs to this item list, and the
+    enclosing from-item's own resync call, made independently, is what
+    picks up any sibling after IT); or running off the end of the text.
     """
-    m = _OPEN_PAREN.match(text, pos)
-    if not m:
-        return None
     depth = 0
-    i = m.end() - 1  # the '(' itself
     n = len(text)
+    i = pos
     while i < n:
-        if text[i] == "(":
+        ch = text[i]
+        if ch in "([":
             depth += 1
-        elif text[i] == ")":
-            depth -= 1
+        elif ch in ")]":
             if depth == 0:
+                return None
+            depth -= 1
+        elif depth == 0:
+            if ch == ",":
                 return i + 1
+            if ch == ";":
+                return None
+            if _CLAUSE_BOUNDARY.match(text, i):
+                return None
         i += 1
     return None
 
 
 def referenced_tables(sql: str) -> set:
-    """The table references of the statement: each FROM/JOIN target plus any
-    comma-joined continuation, backticks stripped, CTE names and UNNEST
-    excluded. Subqueries need no special handling — their own FROMs match
-    the same scan.
+    """The table references of the statement: each FROM/JOIN target plus
+    every later sibling in the same comma list, backticks stripped, CTE
+    names and UNNEST excluded. Subqueries need no special handling — their
+    own FROMs match the same scan.
 
-    A parenthesized subquery contributes no ref of its own, but a comma list
-    keeps going past one: `FROM (SELECT ...) a, real_table` must still find
-    `real_table`. Skipping the subquery's balanced parens (rather than
-    abandoning the whole comma list the moment a target isn't a bare or
-    backticked name) is what makes that continuation reachable. The same
-    move applies when a bareword target IS matched but is itself a call —
-    `UNNEST(...)`, `EXTERNAL_QUERY(...)`, `ML.PREDICT(...)` — so its argument
-    list doesn't get mistaken for "nothing more to see" either: without
-    skipping past `(...)` there, `FROM UNNEST(arr) AS x, real_table` loses
-    `real_table` the identical way, just one token later.
+    A from-item is a target — a bareword, a backticked name, or nothing
+    parseable at all (a parenthesized subquery) — followed by however much
+    text belongs to it: an alias, a join condition, a table-function's own
+    argument list, a decorator. `_resync_to_comma` is what finds where that
+    ends: either the next depth-0 comma (another sibling — the loop keeps
+    going) or a real clause boundary (the item list is over). Earlier
+    versions of this function tried to enumerate the shapes that can
+    follow a target one at a time (an alias, then a subquery's parens,
+    then a table-function call's parens...) and kept missing another one;
+    resyncing to the next structurally-meaningful token, rather than
+    parsing what's in between, is what makes the enumeration unnecessary.
     """
     text = strip_noise(sql)
     exempt = {c.lower() for c in cte_names(sql)} | _BUILTIN_TARGETS
@@ -209,26 +242,10 @@ def referenced_tables(sql: str) -> set:
                 if name.lower() not in exempt:
                     refs.add(name)
                 pos = m.end()
-                # A table-function call: the matched name is immediately
-                # followed by its argument list (`UNNEST(arr)`,
-                # `ML.PREDICT(MODEL ..., (SELECT ...))`). Skip it so a
-                # comma-sibling after the call is reachable below, exactly
-                # like the subquery case.
-                call_end = _skip_parenthesized(text, pos)
-                if call_end is not None:
-                    pos = call_end
-            else:
-                skip_to = _skip_parenthesized(text, pos)
-                if skip_to is None:
-                    break  # neither a name nor a subquery — nothing parseable, move on
-                pos = skip_to  # the subquery itself; its own FROM/JOIN match separately
-            alias = _ALIAS.match(text, pos)
-            if alias:
-                pos = alias.end()
-            comma = _COMMA.match(text, pos)
-            if not comma:
+            resynced = _resync_to_comma(text, pos)
+            if resynced is None:
                 break
-            pos = comma.end()
+            pos = resynced
     return refs
 
 
