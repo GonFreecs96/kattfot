@@ -18,20 +18,26 @@ every probe below either
       guarantee still holds (no unregistered table is actually read, no PII
       identifier reaches the projection, no write executes) — pinned with a
       comment naming why it is safe despite not being refused; or
-  (c) is a genuine HOLE — the probe defeats a stated guarantee. None were
-      found that were not also fixable; see the section 4 JSON-path item for
-      the one case that looks like a hole and is documented as a deliberate
-      gap instead (fixing it would mean scanning literal values, which the
-      design explicitly rejects: a WHERE-clause literal containing an email
-      address must not trip the scan).
+  (c) is a genuine HOLE — the probe defeats a stated guarantee, and
+      `sqlguard.py` gets a real (minimal) fix alongside the pinning test.
+      Section 2's comma-joined-table-after-a-subquery case is exactly this:
+      it was missed on the first pass through this file and caught on a
+      second, more adversarial re-read — worth saying plainly rather than
+      quietly folding the fix in as if it had been there from the start.
+      Section 7 documents two more findings from that same re-read that
+      were judged NOT to need a code fix (a bounded, engine-specific string-
+      literal dialect gap, and a known-shape over-block) and pins them
+      instead, with the reasoning for that call.
 
 Sections mirror the probe catalog this suite was built from:
   1. the statement gate (noise vs. real statements, every deny keyword)
-  2. table-reference extraction (wildcards, escape hatches, shadowing)
+  2. table-reference extraction (wildcards, escape hatches, shadowing,
+     comma-after-subquery)
   3. SELECT * detection
   4. the R6 identifier scan
   5. qualify_sql's rewrite
   6. parameter binding
+  7. re-attack findings judged NOT to need a `sqlguard.py` change
 
 Offline throughout — sqlite fixtures only, same as test_explore.py.
 """
@@ -303,6 +309,73 @@ def test_a_comma_join_smuggling_a_second_unregistered_table_is_refused(capsys, m
     )
     assert "ERROR (EXPLORE-SURFACE)" in err
     assert "analytics.secret_table" in err
+
+
+# --- a real hole, found on re-attack: comma-joined table after a subquery --
+#
+# `referenced_tables`'s comma-continuation loop used to `break` the instant
+# a FROM target wasn't a bare or backticked name — which is exactly what a
+# leading `(subquery)` looks like. That silently abandoned the rest of the
+# comma list: `FROM (SELECT 1) sub, real_table` produced `refs == set()`,
+# so `validate_surfaces`/`validate_select_star` had nothing to check and let
+# `real_table` through unregistered, unattested, and unscanned by anything
+# that depends on `refs` — a plain legal cross join, no obfuscation. Fixed
+# by skipping the subquery's balanced parens instead of abandoning the loop,
+# so the comma continuation is still walked afterward. These tests would
+# fail against the pre-fix guard (`refs == set()`, no EXPLORE-SURFACE).
+
+
+@pytest.mark.parametrize("sql", [
+    # bare (dataset-prefix-less) form — the exact original repro: this text
+    # also happens to equal the sqlite fixture's PHYSICAL table name, so
+    # pre-fix this did not just skip the register check, it returned real
+    # rows from it.
+    "SELECT w.channel FROM (SELECT 1 AS x) sub, cart_checkout_funnel_weekly w LIMIT 3",
+    f"SELECT a FROM {SPINE} t1, (SELECT 1 AS x) sub2, analytics.secret_table t3",
+    "SELECT a FROM (SELECT 1) sub, analytics.secret_table",
+])
+def test_a_table_comma_joined_after_a_subquery_is_refused(sql, capsys, monkeypatch):
+    err = run_refused(["--question", "q", "--sql", sql], capsys, monkeypatch)
+    assert "ERROR (EXPLORE-SURFACE)" in err
+
+
+def test_select_star_after_a_subquery_comma_needs_attestation(tmp_path, capsys, monkeypatch):
+    """The compounding shape: SELECT * over a surface reached only past a
+    leading subquery in the FROM list. Before the fix, `refs` (and so
+    `entries`) came back empty, so `validate_select_star` had nothing
+    unattested to complain about — a legal cross join defeated the
+    register AND the star gate AND (for a truly PII-bearing column) the R6
+    scan's usefulness at once, since nothing named the surface for any of
+    them to check. Post-fix, the surface is found and the attestation is
+    enforced exactly as it would be without the leading subquery."""
+    reg = tmp_path / "exploration.yaml"
+    reg.write_text(f"surfaces:\n  {WEEKLY}:\n    status: live\n")  # no select_star
+    monkeypatch.setenv("KATTFOT_EXPLORATION_FILE", str(reg))
+    err = run_refused(
+        ["--question", "q", "--sql", f"SELECT * FROM (SELECT 1 AS z) sub, {WEEKLY} w LIMIT 3"],
+        capsys, monkeypatch,
+    )
+    assert "ERROR (EXPLORE-STAR)" in err
+
+
+@pytest.mark.parametrize("sql, expected", [
+    # subquery alone, no sibling: nothing to add, loop still terminates.
+    ("SELECT a FROM (SELECT 1 AS a) sub", set()),
+    # subquery then a real sibling.
+    (f"SELECT a FROM (SELECT 1) sub, {SPINE} t", {SPINE}),
+    # a real table BEFORE the subquery, then a real sibling AFTER it — the
+    # pre-fix code kept the first (its own separate iteration never touched
+    # the subquery) but lost the second; both must survive now.
+    (f"SELECT a FROM {SPINE} t1, (SELECT 1) sub2, {WEEKLY} t3", {SPINE, WEEKLY}),
+    # doubly-nested parens around the subquery.
+    (f"SELECT a FROM ((SELECT 1)) sub, {SPINE} t", {SPINE}),
+    # JOIN after a subquery was already fine pre-fix (JOIN is its own
+    # independent top-level match, not reached via comma-continuation) —
+    # kept here as a regression pin, not a new fix.
+    (f"SELECT a FROM (SELECT 1) sub JOIN {SPINE} t ON 1=1", {SPINE}),
+])
+def test_referenced_tables_around_a_subquery_comma_sibling(sql, expected):
+    assert sqlguard.referenced_tables(sql) == expected
 
 
 def test_an_unregistered_table_inside_a_subquery_from_is_refused(capsys, monkeypatch):
@@ -618,3 +691,99 @@ def test_an_unused_hostile_param_name_is_silently_harmless(capsys, monkeypatch):
     )
     assert out["query_params"] == {"x'; DROP TABLE--": "payload"}
     assert out["rows"][0]["n"] > 0
+
+
+# =============================================================================
+# 7. Re-attack findings judged NOT to need a sqlguard.py change
+# =============================================================================
+
+
+def test_backslash_escaped_quote_hides_a_table_from_the_guard_on_sqlite_only():
+    """DOCUMENTED, BOUNDED GAP — not fixed, per the module docstring's known-
+    gaps list (updated alongside this test).
+
+    `strip_noise`'s string-literal pattern honors `\\`-escaped quotes, which
+    is correct BigQuery lexing: on the real target engine, whatever this
+    guard treats as "inside a string" really is one, as far as BigQuery's
+    own parser is concerned, so nothing executable is hidden THERE. sqlite
+    (the fixture engine — committed synthetic data only, never real) has no
+    backslash-escaping: a lone `'` always closes a string, full stop. Fed
+    the same text, the two engines disagree about where the string ends,
+    and this guard follows BigQuery's rule even when the query is about to
+    run on sqlite.
+
+    `'x\\' AND cohort_week IN (SELECT c FROM tuff_secret_table) --'` is ONE
+    string to this guard (the backslash "escapes" the first `'`, so
+    scanning continues to the LAST `'`) — `tuff_secret_table` never reaches
+    `identifiers()` or `referenced_tables()`. sqlite reads it differently:
+    `'x\\'` closes at the second character (no escaping), and everything
+    from there to the next real `'` is live SQL, `tuff_secret_table`
+    included. Proven end to end in
+    test_backslash_escaped_quote_end_to_end_fails_only_at_the_sqlite_layer
+    below: the query is not refused, and fails only because the fixture db
+    has no table by that name — i.e. this guard let it through, and only
+    the ABSENCE of a matching CSV is what stops it. A fork whose
+    `KATTFOT_SAMPLE_DIR` happened to hold a same-named table would not be
+    stopped by this guard.
+
+    Not fixed because the two directions trade off against each other and
+    neither is free: rejecting backslash-escapes entirely would make this
+    guard MIS-lex real BigQuery queries that legitimately escape a quote,
+    over-blocking on the production engine to protect a fixture engine that
+    is synthetic-only by design; a dual-dialect-aware lexer is more parser
+    than this module claims to be. The bound is real, though: this can only
+    matter on sqlite, sqlite only ever serves committed synthetic fixtures
+    (or whatever a fork points `KATTFOT_SAMPLE_DIR` at — a documented,
+    deliberate escape hatch, not this guard's job to close), and on the
+    engine that actually holds real data (BigQuery, reached via the
+    individual human's own ADC identity) the guard's lexing is correct. If
+    this ever changes — say, sqlite becomes a real per-deployment path —
+    this test flips from asserting the hidden name to asserting it is
+    caught, and that flip is the signal to act on, not a silent regression.
+    """
+    sql = (
+        f"SELECT cohort_week FROM {SPINE} "
+        "WHERE 'x\\' AND cohort_week IN (SELECT c FROM tuff_secret_table) --' IS NULL"
+    )
+    assert "tuff_secret_table" not in sqlguard.identifiers(sql)
+    assert "tuff_secret_table" not in sqlguard.referenced_tables(sql)
+
+
+def test_backslash_escaped_quote_end_to_end_fails_only_at_the_sqlite_layer(capsys, monkeypatch):
+    """Companion to the gap test above: proves the guard does not refuse
+    this query (no EXPLORE-STATEMENT/-SURFACE/R6 in the failure), and that
+    the ONLY thing standing between this input and a live table read on
+    sqlite is the fixture directory not happening to contain a table named
+    `tuff_secret_table` — not this guard."""
+    sql = (
+        f"SELECT cohort_week FROM {SPINE} "
+        "WHERE 'x\\' AND cohort_week IN (SELECT c FROM tuff_secret_table) --' IS NULL"
+    )
+    msg = run_execution_error(["--question", "q", "--sql", sql], capsys, monkeypatch)
+    assert "no such table: tuff_secret_table" in msg
+
+
+def test_extract_from_and_trim_from_over_block_the_column_as_a_table(capsys, monkeypatch):
+    """NIT, pinned as documented over-blocking, not fixed. `_FROM_JOIN`
+    matches any `\\bfrom\\b`, including the FROM inside `EXTRACT(part FROM
+    expr)` / `TRIM(expr FROM chars)` function-call syntax — standard SQL,
+    not obfuscation. The scanner reads `cart_created_at` as a FROM target
+    and refuses it as an unregistered "surface" it never was.
+
+    This is the safe direction the module's opening paragraph names
+    explicitly ("over-blocking is accepted... a wall is allowed to be
+    blunt"): a real, legitimate query gets a false refusal, but nothing
+    is ever under-blocked by it — there is no way for this same mechanism
+    to let an unauthorized table through. A tighter fix (excluding a FROM
+    immediately preceded by EXTRACT(/TRIM(/SUBSTRING() is possible but not
+    done here, to keep the change surface to the genuine hole in section 2
+    and the honest gap above; this test exists so the over-block is a
+    tracked, intentional trade-off rather than a surprise a real analyst
+    hits first."""
+    err = run_refused(
+        ["--question", "q", "--sql",
+         f"SELECT EXTRACT(DAY FROM cart_created_at) AS d FROM {SPINE}"],
+        capsys, monkeypatch,
+    )
+    assert "ERROR (EXPLORE-SURFACE)" in err
+    assert "cart_created_at" in err

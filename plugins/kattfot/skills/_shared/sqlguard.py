@@ -25,9 +25,24 @@ What it is NOT: a SQL parser. Known gaps, stated rather than discovered:
     human's own identity — it can read nothing the human cannot — and
     warehouse-side ACLs.
   * the identifier scan is blunt: an alias named `email` refuses even when no
-    such column exists. Rename the alias.
-  * string literals and comments are stripped before every check, so a keyword
-    inside a quoted value neither triggers nor hides anything.
+    such column exists. Rename the alias. The same bluntness over-blocks in
+    the other direction too: `EXTRACT(DAY FROM x)` / `TRIM(x FROM y)` read
+    their `FROM` as a table keyword, refusing `x` as an unregistered
+    "surface" it never was. Accepted, per the opening paragraph — a false
+    refusal, never a false pass.
+  * string literals and comments are stripped before every check, so a
+    keyword or table name inside a quoted value neither triggers nor hides
+    anything **when the lexing agrees with the engine that will run the
+    query**. `strip_noise`'s string-literal pattern honors `\`-escaped
+    quotes and `#` line comments — real in BigQuery, so on that engine this
+    holds without qualification: whatever this module treats as "inside a
+    string" really is, as far as BigQuery's own parser is concerned. sqlite
+    (used only for the committed synthetic fixtures, never for real data)
+    disagrees: it has no backslash-escaping, so a value like `'x\' AND ...`
+    is one string to this guard but two sqlite tokens with live SQL between
+    them, and a table name in that gap is invisible to `referenced_tables`
+    /`identifiers` yet real to sqlite. tests/test_explore_adversarial.py
+    pins this exactly, bounded to the fixture engine.
 
 Pure and dependency-free; raises SqlGuardError, which callers convert into a
 governance refusal (exit 5).
@@ -126,6 +141,7 @@ _TARGET = re.compile(r"\s*(`[^`]+`|[A-Za-z_][\w.]*)")
 _ALIAS = re.compile(r"\s+(?:as\s+)?([A-Za-z_]\w*)", re.IGNORECASE)
 _COMMA = re.compile(r"\s*,")
 _CTE_NAME = re.compile(r"\b([A-Za-z_]\w*)\s+as\s*\(", re.IGNORECASE)
+_OPEN_PAREN = re.compile(r"\s*\(")
 
 #: Targets that look like tables to a lexical reader but are not.
 _BUILTIN_TARGETS = {"unnest"}
@@ -137,11 +153,44 @@ def cte_names(sql: str) -> set:
     return {m.group(1) for m in _CTE_NAME.finditer(strip_noise(sql))}
 
 
+def _skip_parenthesized(text: str, pos: int):
+    """If `text[pos:]` opens with `(` (after optional whitespace), return the
+    index just past its balanced closing `)` — else None.
+
+    Depth-only bracket counting is safe here because `text` has already had
+    every string literal and comment replaced by noise-stripping, so a `(`
+    or `)` that was inside a former string cannot appear in what's left.
+    Unbalanced input (should not occur in real SQL) returns None so the
+    caller falls back to stopping, rather than looping past the end.
+    """
+    m = _OPEN_PAREN.match(text, pos)
+    if not m:
+        return None
+    depth = 0
+    i = m.end() - 1  # the '(' itself
+    n = len(text)
+    while i < n:
+        if text[i] == "(":
+            depth += 1
+        elif text[i] == ")":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return None
+
+
 def referenced_tables(sql: str) -> set:
     """The table references of the statement: each FROM/JOIN target plus any
     comma-joined continuation, backticks stripped, CTE names and UNNEST
     excluded. Subqueries need no special handling — their own FROMs match
     the same scan.
+
+    A parenthesized subquery contributes no ref of its own, but a comma list
+    keeps going past one: `FROM (SELECT ...) a, real_table` must still find
+    `real_table`. Skipping the subquery's balanced parens (rather than
+    abandoning the whole comma list the moment a target isn't a bare or
+    backticked name) is what makes that continuation reachable.
     """
     text = strip_noise(sql)
     exempt = {c.lower() for c in cte_names(sql)} | _BUILTIN_TARGETS
@@ -150,12 +199,16 @@ def referenced_tables(sql: str) -> set:
         pos = kw.end()
         while True:
             m = _TARGET.match(text, pos)
-            if not m:
-                break  # `FROM (subquery)` or nothing parseable — move on
-            name = m.group(1).strip("`")
-            if name.lower() not in exempt:
-                refs.add(name)
-            pos = m.end()
+            if m:
+                name = m.group(1).strip("`")
+                if name.lower() not in exempt:
+                    refs.add(name)
+                pos = m.end()
+            else:
+                skip_to = _skip_parenthesized(text, pos)
+                if skip_to is None:
+                    break  # neither a name nor a subquery — nothing parseable, move on
+                pos = skip_to  # the subquery itself; its own FROM/JOIN match separately
             alias = _ALIAS.match(text, pos)
             if alias:
                 pos = alias.end()
