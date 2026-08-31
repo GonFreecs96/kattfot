@@ -54,17 +54,13 @@ except ImportError:
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
 # Exit code per status. 0 = clear, 1 = a confirmed shift/tamper was DETECTED,
-# 2 = could not fully verify (inconclusive), 3 = usage/IO error.
+# 2 = could not fully verify (inconclusive), 3 = usage/IO error. verify.py's
+# own sentinels get their exit code from `verify_lib.EXIT_CODE` — the ONE
+# source of truth for what those mean — rather than being re-listed here by
+# hand; only the audit-chain sentinels (which verify.py knows nothing about)
+# are added on top.
 _EXIT = {
-    verify_lib.VERIFY_OK: 0,
-    verify_lib.DEFINITION_DRIFT: 1,
-    verify_lib.QUERY_DRIFT: 1,
-    verify_lib.MANIFEST_ABSENT: 2,
-    verify_lib.DEFINITION_MISSING: 2,
-    verify_lib.PROVENANCE_TAMPERED: 1,
-    verify_lib.REGISTER_DRIFT: 1,
-    verify_lib.PROVENANCE_ABSENT: 2,
-    verify_lib.REGISTER_MISSING: 2,
+    **verify_lib.EXIT_CODE,
     audit_chain_lib.CHAIN_OK: 0,
     audit_chain_lib.CHAIN_HEAD_MISMATCH: 1,
     audit_chain_lib.CHAIN_HEAD_BEHIND: 2,
@@ -72,19 +68,22 @@ _EXIT = {
     audit_chain_lib.CHAIN_ABSENT: 2,
 }
 
-# Severity for combining checks — NOT the exit code. A confirmed detection
-# outranks an inconclusive "cannot verify", even though its exit code (1) is
-# the smaller number: a tampered audit log co-occurring with a manifest-absent
-# artifact must exit 1 (detected), not 2 (inconclusive). Combining by numeric
-# max over exit codes would invert that and bury the alarm.
-_SEVERITY = {0: 0, 3: 1, 2: 2, 1: 3}  # ok < usage < inconclusive < detected
-
 
 def _worse(a: str | None, b: str) -> str:
-    """The higher-severity of two statuses (by _SEVERITY of their exit codes)."""
+    """The higher-severity of two statuses.
+
+    Severity is `verify_lib.EXIT_SEVERITY` of a status's exit code — NOT the
+    exit code itself: a confirmed detection (exit 1) outranks an inconclusive
+    "cannot verify" (exit 2), even though 1 is the smaller number. A tampered
+    audit log co-occurring with a manifest-absent artifact must exit 1
+    (detected), not 2 (inconclusive); combining by numeric max over exit codes
+    would invert that and bury the alarm. Reuses `verify_lib`'s table rather
+    than keeping a second copy of the same ranking here.
+    """
     if a is None:
         return b
-    return b if _SEVERITY[_EXIT.get(b, 3)] > _SEVERITY[_EXIT.get(a, 3)] else a
+    sev = verify_lib.EXIT_SEVERITY
+    return b if sev[_EXIT.get(b, 3)] > sev[_EXIT.get(a, 3)] else a
 
 
 def default_audit_log_path() -> Path:

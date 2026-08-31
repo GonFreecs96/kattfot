@@ -82,16 +82,53 @@ PROVENANCE_ABSENT = "PROVENANCE_ABSENT"
 REGISTER_DRIFT = "REGISTER_DRIFT"
 REGISTER_MISSING = "REGISTER_MISSING"
 
-#: Severity among the explore-lane finding statuses that can co-occur, worst
-#: wins. Mirrors the CLI's detected > inconclusive precedence (see
-#: verify_artifact.py's `_worse`): a confirmed tamper or drift must not be
-#: masked by a co-occurring cannot-verify state just because it was found
-#: second.
-_EXPLORE_SEVERITY = {
-    PROVENANCE_TAMPERED: 2,
-    REGISTER_DRIFT: 2,
-    REGISTER_MISSING: 1,
+#: Canonical exit code for every status this module can return — the ONE
+#: source of truth. `verify_artifact.py`'s CLI builds its own `_EXIT` map by
+#: merging this in (`**verify_lib.EXIT_CODE`) rather than re-listing exit
+#: codes for verify.py's sentinels by hand, and it merges in the audit-chain
+#: sentinels separately, since this module knows nothing about those. Keeping
+#: the table here, beside the sentinels themselves, means a new status added
+#: to this module cannot go live without an exit code — a second table
+#: somewhere else is exactly how a forgotten entry would quietly default to
+#: "lowest severity" and bury a real finding.
+#:
+#: 0 clear, 1 a confirmed drift/tamper was DETECTED, 2 could not fully verify
+#: (inconclusive). 3 (usage/IO) is never produced by this module — it belongs
+#: to the CLI layer — but is a valid key of `EXIT_SEVERITY` below for the same
+#: reason `verify_artifact.py`'s original `_EXIT.get(status, 3)` defaulted to
+#: it: an unrecognized status is a bug, not a legitimate outcome, so it must
+#: not silently rank as OK.
+EXIT_CODE = {
+    VERIFY_OK: 0,
+    DEFINITION_DRIFT: 1,
+    QUERY_DRIFT: 1,
+    DEFINITION_MISSING: 2,
+    MANIFEST_ABSENT: 2,
+    PROVENANCE_TAMPERED: 1,
+    REGISTER_DRIFT: 1,
+    PROVENANCE_ABSENT: 2,
+    REGISTER_MISSING: 2,
 }
+
+#: Severity RANK of an exit code, worst wins — NOT the exit code itself, and
+#: NOT monotonic with it. A confirmed detection (exit 1) outranks an
+#: inconclusive cannot-verify (exit 2), even though 1 < 2 numerically: an
+#: explore artifact that is both tampered AND missing its register must
+#: report PROVENANCE_TAMPERED, not REGISTER_MISSING — burying a real tamper
+#: behind "couldn't check everything" is worse than the inconclusive report
+#: alone. Combining by raw exit-code max would invert that.
+#:
+#: This is the SAME table `verify_artifact.py`'s CLI uses (imported, not
+#: copied) to combine the artifact check against `--audit-log` — one ranking,
+#: not two that could quietly drift apart.
+EXIT_SEVERITY = {0: 0, 3: 1, 2: 2, 1: 3}  # ok < usage < inconclusive < detected
+
+
+def _status_severity(status: str) -> int:
+    """`EXIT_SEVERITY` of one status's `EXIT_CODE` — worst-wins rank for
+    combining findings. See `EXIT_CODE` for why an unrecognized status
+    defaults to the exit-3 (usage/IO) rank rather than to OK."""
+    return EXIT_SEVERITY[EXIT_CODE.get(status, 3)]
 
 
 def _load_query_helpers():
@@ -304,10 +341,10 @@ def verify_explore(fm: dict, sql: str | None, params: dict, *, exploration=None)
 
     # Worst finding wins the top-level status — a confirmed tamper or drift
     # must not be masked by a co-occurring cannot-verify finding just because
-    # it was appended later (same detected > inconclusive precedence
-    # verify_artifact.py's `_worse` uses to combine the artifact and
-    # --audit-log checks).
-    worst = max(findings, key=lambda f: _EXPLORE_SEVERITY.get(f["status"], 0))
+    # it was appended later. `_status_severity` (== EXIT_SEVERITY of
+    # EXIT_CODE) is the same ranking verify_artifact.py's `_worse` uses to
+    # combine the artifact and --audit-log checks — one table, not two.
+    worst = max(findings, key=lambda f: _status_severity(f["status"]))
     return {
         "status": worst["status"],
         "findings": findings,

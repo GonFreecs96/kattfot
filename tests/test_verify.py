@@ -498,6 +498,25 @@ def test_explore_tamper_and_register_drift_both_report_detected_wins(
     assert vf.REGISTER_DRIFT in out
 
 
+def test_explore_tamper_and_register_missing_detected_outranks_inconclusive(
+    tmp_path, explore_register, monkeypatch, capsys
+):
+    """The case `verify_explore`'s severity ranking exists for: tamper (exit 1,
+    DETECTED) and register-missing (exit 2, cannot-verify) are DIFFERENT exit
+    codes, unlike the tamper+drift combo above (both exit 1, so that test
+    would still pass with the ranking reversed). Both findings must be
+    reported, and the DETECTED one must win the top-level status/exit —
+    burying a confirmed tamper behind "couldn't check the register" would be
+    worse than the inconclusive report alone."""
+    art = _explore_artifact(tmp_path, monkeypatch, capsys)
+    art.write_text(art.read_text().replace("GROUP BY market", "GROUP BY market, region"))
+    explore_register.unlink()
+    code, out = _run_verify(art, monkeypatch, capsys)
+    assert code == 1
+    assert vf.PROVENANCE_TAMPERED in out
+    assert vf.REGISTER_MISSING in out
+
+
 def test_governed_artifact_routing_is_unchanged(tmp_path, monkeypatch, capsys):
     """A governed artifact carries no `skill:` frontmatter key at all (only
     `kattfot:explore` writes one) — confirm the CLI's new routing check still
