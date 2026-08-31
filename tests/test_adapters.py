@@ -371,7 +371,15 @@ class _FakeJob:
         self.total_bytes_processed = total_bytes_processed
 
     def result(self):
-        return []
+        # A dry-run job is already complete when `client.query()` returns —
+        # BigQuery validates and estimates it synchronously, never runs it —
+        # so `dry_run()` must read `total_bytes_processed` straight off the
+        # job and must never call `.result()` (which would try to fetch rows
+        # from a query that never executed). Raising here turns that
+        # regression into a loud test failure instead of a silent one.
+        raise AssertionError(
+            "a dry-run job is already complete; never .result() it"
+        )
 
 
 class _FakeClient:
@@ -439,11 +447,21 @@ def test_sqlite_adapter_inherits_the_not_implemented_dry_run():
 
 
 def test_bigquery_dry_run_asserts_identity_before_querying(monkeypatch):
-    """Mirrors `test_bigquery_adapter_asserts_identity_before_querying`: a dry
-    run is a real API call made as the human, so identity must be asserted
-    before any client is built — even though nothing gets billed."""
+    """Mirrors `test_bigquery_adapter_asserts_identity_before_querying`, but
+    made airtight: the real-client version of that test tolerates exit code 3
+    (missing google-cloud-bigquery, which this repo's default venv does not
+    install) as an acceptable outcome, which means on this machine it never
+    actually reaches `assert_user_identity` and would pass even if `dry_run`
+    called it too late — or not at all.
+
+    Installing the fake client FIRST removes that escape hatch: the import
+    always succeeds, so the only way to reach `assert_user_identity` and get
+    exit 4 is for `dry_run` to have called it, and the only way for
+    `_FakeClient.instances` to stay empty is for it to have called it
+    *before* building a client. Both are asserted, not just tolerated."""
     import _shared.adapters.bigquery_adapter as bqa
 
+    _install_fake_bigquery(monkeypatch)
     calls = []
 
     def boom():
@@ -454,9 +472,9 @@ def test_bigquery_dry_run_asserts_identity_before_querying(monkeypatch):
     adapter = bqa.BigQueryAdapter()
     with pytest.raises(SystemExit) as exc:
         adapter.dry_run("proj", "SELECT 1", {})
-    assert exc.value.code in (3, 4)
-    if exc.value.code == 4:
-        assert calls == ["asserted"]
+    assert exc.value.code == 4
+    assert calls == ["asserted"]
+    assert _FakeClient.instances == []  # no client was ever built
 
 
 def test_bigquery_dry_run_builds_a_dry_run_job_config_with_typed_params(monkeypatch):
@@ -504,6 +522,26 @@ def test_bigquery_dry_run_builds_a_dry_run_job_config_with_typed_params(monkeypa
     assert by_name["d"].type_ == "DATE"
     assert by_name["ts"].type_ == "DATETIME"
     assert by_name["s"].type_ == "STRING"
+
+
+def test_bigquery_dry_run_refuses_rather_than_report_zero_bytes(monkeypatch):
+    """`total_bytes_processed` is typed Optional in the client library. If a
+    (hypothetical, malformed) dry-run job ever reported None, silently
+    treating that as 0 would read as "definitely under the cap" — the one
+    lie a cost preview must never tell. `dry_run()` must raise instead of
+    guessing."""
+    import _shared.adapters.bigquery_adapter as bqa
+
+    _install_fake_bigquery(monkeypatch)
+    monkeypatch.setattr(bqa, "assert_user_identity", lambda: {"type": "authorized_user"})
+    monkeypatch.setattr(
+        _FakeClient, "query",
+        lambda self, sql, job_config=None: _FakeJob(total_bytes_processed=None),
+    )
+
+    adapter = bqa.BigQueryAdapter()
+    with pytest.raises(RuntimeError, match="total_bytes_processed"):
+        adapter.dry_run("proj", "SELECT 1", {})
 
 
 def test_percentile_arithmetic_matches_the_bigquery_definition():

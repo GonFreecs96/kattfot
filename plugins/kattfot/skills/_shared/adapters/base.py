@@ -19,6 +19,16 @@ Two responsibilities, deliberately kept separate:
    and gets them; the difference in *where* the arithmetic happened is reported,
    not hidden.
 
+   `CAP_DRY_RUN` is a stricter version of the same idea: it gates *whether the
+   method exists to call at all*, not just where the work happens.
+   `percentiles()` always returns something on every engine — pushed down or
+   computed client-side, both real answers. `dry_run()` has no client-side
+   fallback that means anything: sqlite has no cost dimension to price, so
+   there is no "compute it a different way," only the honest stub
+   (`NotImplementedError`) the base class ships. A caller checks
+   `supports(CAP_DRY_RUN)` before calling `dry_run()` for exactly that
+   reason — the sqlite adapter never overrides it.
+
 `capabilities()` exists so a skill can also branch on availability before
 building a query — e.g. surface "computed client-side over N rows" in an
 artifact's provenance instead of implying warehouse push-down.

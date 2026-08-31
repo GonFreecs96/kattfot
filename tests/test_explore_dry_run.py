@@ -13,10 +13,13 @@ number.
 
 `tests/test_adapters.py` covers the BigQuery adapter's `dry_run()` in
 isolation (job config shape, typed params, identity assertion). This file
-covers the lane: guard order, the sqlite honest-reply path, the
-client-side `would_exceed` comparison against the register's
-`max_bytes_billed`, and that a dry run leaves no trace in the audit log
-(nothing was read, so nothing is logged as a read).
+covers the lane: guard order (including dialect translatability, which
+normally only runs inside `run_query` and has to be checked explicitly on
+the sqlite `--dry-run` path since that never calls it), the sqlite
+honest-reply path, the client-side `would_exceed` comparison against the
+register's `max_bytes_billed` (both sides of the cap, and the `None`
+tri-state when no cap is configured), and that a dry run leaves no trace in
+the audit log (nothing was read, so nothing is logged as a read).
 """
 
 import json
@@ -104,6 +107,42 @@ def test_a_non_select_statement_with_dry_run_still_refuses(capsys, monkeypatch):
     assert "ERROR (EXPLORE-STATEMENT)" in err
 
 
+DIALECT_SQL = (
+    f"SELECT APPROX_QUANTILES(gmv_usd, 100)[OFFSET(50)] AS p50 FROM {SPINE}"
+)
+
+
+def test_an_untranslatable_construct_with_dry_run_still_refuses_on_sqlite(
+    capsys, monkeypatch
+):
+    """The bug this guards against: `run_query` (where dialect translation
+    normally happens) never executes under `--dry-run`, so without an
+    explicit pre-check an untranslatable construct would exit 0 with
+    `--dry-run` and exit 5 without it — silently contradicting the "every
+    governance guard still ran" claim on the sqlite honest-reply path."""
+    err = run_refused(
+        ["--question", "q", "--sql", DIALECT_SQL, "--dry-run"],
+        capsys, monkeypatch,
+    )
+    assert "ERROR (EXPLORE-DIALECT)" in err
+    assert "--engine bigquery" in err
+
+
+def test_dry_run_and_a_real_run_refuse_the_same_construct_with_the_same_text(
+    capsys, monkeypatch
+):
+    """Parity check: the refusal text must not depend on whether the query
+    was being priced or executed — a caller should learn the same rule
+    either way."""
+    with_dry_run = run_refused(
+        ["--question", "q", "--sql", DIALECT_SQL, "--dry-run"], capsys, monkeypatch
+    )
+    without_dry_run = run_refused(
+        ["--question", "q", "--sql", DIALECT_SQL], capsys, monkeypatch
+    )
+    assert with_dry_run == without_dry_run
+
+
 # ---------------------------------------------------------------------------
 # The sqlite path: honest "no estimate", not a refusal
 # ---------------------------------------------------------------------------
@@ -121,6 +160,7 @@ def test_sqlite_dry_run_reports_no_estimate_available_with_a_reason(
     assert out["dry_run"] is True
     assert out["accuracy_tier"] == "T3"
     assert out["engine"] == "sqlite"
+    assert out["fixture_backed"] is True
     assert out["estimate_available"] is False
     assert "estimate" not in out
     assert "cost dimension" in out["estimate_unavailable_reason"]
@@ -220,10 +260,42 @@ def test_bigquery_dry_run_result_shape_and_no_rows(capsys, monkeypatch):
     assert out["source_mode"] == "bigquery"
     assert out["dry_run"] is True
     assert out["accuracy_tier"] == "T3"
+    assert out["fixture_backed"] is False
     assert "rows" not in out
     assert "row_count" not in out
     assert "manifest" not in out
     assert "estimate_unavailable_reason" not in out
+
+
+def test_dry_run_would_exceed_is_none_when_the_register_has_no_cap(
+    tmp_path, capsys, monkeypatch
+):
+    """A tri-state, not a bool: no `defaults.max_bytes_billed` in the
+    register means there is nothing to compare the estimate against, so
+    `would_exceed` must be `None` — an untested `False` here would silently
+    read as "definitely under the cap" when no cap was ever configured."""
+    reg = tmp_path / "exploration.yaml"
+    reg.write_text(
+        "surfaces:\n"
+        f"  {SPINE}:\n"
+        "    status: live\n"
+        "    select_star: true\n"
+        # deliberately no `defaults:` block at all
+    )
+    monkeypatch.setenv("KATTFOT_EXPLORATION_FILE", str(reg))
+    monkeypatch.setattr(
+        bqa.BigQueryAdapter,
+        "dry_run",
+        lambda self, project, sql, params: {"total_bytes_processed": 999},
+    )
+    out = run_ok(
+        ["--question", "q", "--sql", f"SELECT COUNT(*) AS n FROM {SPINE}",
+         "--engine", "bigquery", "--dry-run"],
+        capsys, monkeypatch,
+    )
+    assert out["estimate"]["max_bytes_billed"] is None
+    assert out["estimate"]["max_bytes_billed_human"] is None
+    assert out["estimate"]["would_exceed"] is None
 
 
 # ---------------------------------------------------------------------------

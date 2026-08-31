@@ -588,15 +588,20 @@ SQL, bound params, surfaces read, `accuracy_tier: "T3"`, an unconditional
 (`register_sha` · `query_sha` · `result_sha`).
 
 **Cost preview (`--dry-run`):** every governance guard above still runs
-first, unchanged — a refused query is refused, not priced. On `bigquery` it
-makes a real (unbilled) `dry_run=True` job and reports
+first, unchanged, including dialect translatability on `sqlite` — that check
+normally only happens as a side effect of executing the query, so
+`--dry-run` runs it explicitly instead, and an untranslatable construct
+still refuses (`EXPLORE-DIALECT`). A refused query is refused, not priced.
+On `bigquery` it makes a real (unbilled) `dry_run=True` job and reports
 `estimate.total_bytes_processed` against the register's `max_bytes_billed`,
-with `estimate.would_exceed` flagging an over-cap query up front; on
-`sqlite` there is no cost dimension to estimate, so it reports
-`estimate_available: false` with an honest reason instead of a faked
+with `estimate.would_exceed` flagging an over-cap query up front —
+`would_exceed`/`max_bytes_billed` are `null`, not `false`, when the register
+sets no cap; on `sqlite` there is no cost dimension to estimate, so it
+reports `estimate_available: false` with an honest reason instead of a faked
 number — still useful as an offline governance lint. Bytes are reported,
 never dollars (on-demand pricing varies by region/edition). No rows, no
-manifest, and no audit-log line: nothing was read.
+manifest, no audit-log line, and no rendered artifact: nothing was read, so
+report the estimate in chat and ask before running for real.
 
 **Refusals (exit 5, in code):** `EXPLORE-STATEMENT` (not exactly one
 SELECT/WITH, or any DML/DDL/scripting keyword), `EXPLORE-SURFACE` (a table

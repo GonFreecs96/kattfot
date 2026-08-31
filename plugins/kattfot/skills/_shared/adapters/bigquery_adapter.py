@@ -123,7 +123,19 @@ class BigQueryAdapter(Adapter):
             use_query_cache=False,
         )
         job = client.query(sql, job_config=job_config)
-        return {"total_bytes_processed": int(job.total_bytes_processed)}
+        total_bytes = job.total_bytes_processed
+        # The client library types this Optional (job statistics generally
+        # are), but a completed dry-run job always reports it in practice. A
+        # missing value is refused rather than defaulted to 0: a wrong "0
+        # bytes" would read as "definitely under the cap," which is the one
+        # lie a cost preview must never tell.
+        if total_bytes is None:
+            raise RuntimeError(
+                "BigQuery dry-run job completed without reporting "
+                "total_bytes_processed — cannot produce a trustworthy "
+                "estimate."
+            )
+        return {"total_bytes_processed": int(total_bytes)}
 
     # -- percentiles: real push-down --------------------------------------
 
