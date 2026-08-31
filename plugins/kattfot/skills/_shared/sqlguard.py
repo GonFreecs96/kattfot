@@ -25,9 +25,24 @@ What it is NOT: a SQL parser. Known gaps, stated rather than discovered:
     human's own identity — it can read nothing the human cannot — and
     warehouse-side ACLs.
   * the identifier scan is blunt: an alias named `email` refuses even when no
-    such column exists. Rename the alias.
-  * string literals and comments are stripped before every check, so a keyword
-    inside a quoted value neither triggers nor hides anything.
+    such column exists. Rename the alias. The same bluntness over-blocks in
+    the other direction too: `EXTRACT(DAY FROM x)` / `TRIM(x FROM y)` read
+    their `FROM` as a table keyword, refusing `x` as an unregistered
+    "surface" it never was. Accepted, per the opening paragraph — a false
+    refusal, never a false pass.
+  * string literals and comments are stripped before every check, so a
+    keyword or table name inside a quoted value neither triggers nor hides
+    anything **when the lexing agrees with the engine that will run the
+    query**. `strip_noise`'s string-literal pattern honors `\`-escaped
+    quotes and `#` line comments — real in BigQuery, so on that engine this
+    holds without qualification: whatever this module treats as "inside a
+    string" really is, as far as BigQuery's own parser is concerned. sqlite
+    (used only for the committed synthetic fixtures, never for real data)
+    disagrees: it has no backslash-escaping, so a value like `'x\' AND ...`
+    is one string to this guard but two sqlite tokens with live SQL between
+    them, and a table name in that gap is invisible to `referenced_tables`
+    /`identifiers` yet real to sqlite. tests/test_explore_adversarial.py
+    pins this exactly, bounded to the fixture engine.
 
 Pure and dependency-free; raises SqlGuardError, which callers convert into a
 governance refusal (exit 5).
@@ -123,12 +138,24 @@ def assert_single_select(sql: str) -> None:
 
 _FROM_JOIN = re.compile(r"\b(?:from|join)\b", re.IGNORECASE)
 _TARGET = re.compile(r"\s*(`[^`]+`|[A-Za-z_][\w.]*)")
-_ALIAS = re.compile(r"\s+(?:as\s+)?([A-Za-z_]\w*)", re.IGNORECASE)
-_COMMA = re.compile(r"\s*,")
 _CTE_NAME = re.compile(r"\b([A-Za-z_]\w*)\s+as\s*\(", re.IGNORECASE)
 
 #: Targets that look like tables to a lexical reader but are not.
 _BUILTIN_TARGETS = {"unnest"}
+
+#: Clause-level keywords that END a FROM/JOIN item list, once reached at
+#: bracket depth 0. Reaching one means the statement has moved past its
+#: table list into a different clause (or a set operator introducing a new
+#: SELECT), so nothing after it is a sibling of the tables just scanned.
+#: Deliberately NOT here: ON, USING, JOIN, AS, WITH, FOR, TABLESAMPLE,
+#: PIVOT/UNPIVOT, OFFSET — every one of those is legal INSIDE a FROM item
+#: list (a join condition, a table decorator, UNNEST's WITH OFFSET alias
+#: clause) and must be scanned straight through, never stopped at.
+_CLAUSE_BOUNDARY = re.compile(
+    r"\b(?:where|group|order|having|qualify|window|limit"
+    r"|union|intersect|except)\b",
+    re.IGNORECASE,
+)
 
 
 def cte_names(sql: str) -> set:
@@ -137,11 +164,86 @@ def cte_names(sql: str) -> set:
     return {m.group(1) for m in _CTE_NAME.finditer(strip_noise(sql))}
 
 
+def _resync_to_comma(text: str, pos: int):
+    """From `pos`, find the next top-level (bracket-depth 0) comma that
+    starts another FROM-list sibling — or None if the FROM/JOIN item list
+    ends before one.
+
+    This is the one mechanism `referenced_tables` leans on for everything
+    that can sit between a from-item and its next comma-joined sibling
+    besides a plain bareword alias: a JOIN ... ON/USING condition,
+    TABLESAMPLE, FOR SYSTEM_TIME AS OF, PIVOT/UNPIVOT, a table-function's
+    own argument list (`UNNEST(arr)`, `ML.PREDICT(MODEL m, (SELECT ...))`),
+    UNNEST ... WITH OFFSET, or a shape not yet invented. None of those
+    introduce a new top-level comma or a real clause boundary, so scanning
+    straight through them — respecting bracket depth, so a comma nested
+    inside a `(...)` argument list or a `[...]` array literal is never
+    mistaken for one — is sufficient. Nothing about any of those
+    constructs needs to be named or special-cased for this to work.
+
+    Stops (returns None) on: a real clause boundary at depth 0
+    (`_CLAUSE_BOUNDARY`, or a `;` — belt and suspenders, since
+    `assert_single_select` already guarantees one statement by the time
+    the lane calls this); a `)`/`]` closing when depth is already 0 (this
+    FROM sits inside an enclosing subquery or array whose own close was
+    just reached — nothing past it belongs to this item list, and the
+    enclosing from-item's own resync call, made independently, is what
+    picks up any sibling after IT); or running off the end of the text.
+
+    A backtick-quoted span is skipped whole, not scanned character by
+    character: `strip_noise` deliberately leaves backticks and their
+    contents alone (`identifiers()` needs the words inside), so without
+    this a backticked reserved word — `` `order` ``, `` `window` ``,
+    `` `group` `` — reads as a real ORDER/WINDOW/GROUP clause boundary
+    (the backtick itself is a non-word character, so `\b` is satisfied)
+    and the rest of the FROM list is dropped, exactly the bug this whole
+    function exists to not have. A quoted identifier can never itself
+    contain the comma or boundary keyword this scan is looking for, so
+    treating the span as opaque is exact, not an approximation.
+    """
+    depth = 0
+    n = len(text)
+    i = pos
+    while i < n:
+        ch = text[i]
+        if ch == "`":
+            end = text.find("`", i + 1)
+            i = end + 1 if end != -1 else n
+            continue
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            if depth == 0:
+                return None
+            depth -= 1
+        elif depth == 0:
+            if ch == ",":
+                return i + 1
+            if ch == ";":
+                return None
+            if _CLAUSE_BOUNDARY.match(text, i):
+                return None
+        i += 1
+    return None
+
+
 def referenced_tables(sql: str) -> set:
-    """The table references of the statement: each FROM/JOIN target plus any
-    comma-joined continuation, backticks stripped, CTE names and UNNEST
-    excluded. Subqueries need no special handling — their own FROMs match
-    the same scan.
+    """The table references of the statement: each FROM/JOIN target plus
+    every later sibling in the same comma list, backticks stripped, CTE
+    names and UNNEST excluded. Subqueries need no special handling — their
+    own FROMs match the same scan.
+
+    A from-item is a target — a bareword, a backticked name, or nothing
+    parseable at all (a parenthesized subquery) — followed by however much
+    text belongs to it: an alias, a join condition, a table-function's own
+    argument list, a decorator. `_resync_to_comma` is what finds where that
+    ends: either the next depth-0 comma (another sibling — the loop keeps
+    going) or a real clause boundary (the item list is over). Earlier
+    versions of this function tried to enumerate the shapes that can
+    follow a target one at a time (an alias, then a subquery's parens,
+    then a table-function call's parens...) and kept missing another one;
+    resyncing to the next structurally-meaningful token, rather than
+    parsing what's in between, is what makes the enumeration unnecessary.
     """
     text = strip_noise(sql)
     exempt = {c.lower() for c in cte_names(sql)} | _BUILTIN_TARGETS
@@ -150,19 +252,15 @@ def referenced_tables(sql: str) -> set:
         pos = kw.end()
         while True:
             m = _TARGET.match(text, pos)
-            if not m:
-                break  # `FROM (subquery)` or nothing parseable — move on
-            name = m.group(1).strip("`")
-            if name.lower() not in exempt:
-                refs.add(name)
-            pos = m.end()
-            alias = _ALIAS.match(text, pos)
-            if alias:
-                pos = alias.end()
-            comma = _COMMA.match(text, pos)
-            if not comma:
+            if m:
+                name = m.group(1).strip("`")
+                if name.lower() not in exempt:
+                    refs.add(name)
+                pos = m.end()
+            resynced = _resync_to_comma(text, pos)
+            if resynced is None:
                 break
-            pos = comma.end()
+            pos = resynced
     return refs
 
 
