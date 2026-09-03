@@ -174,11 +174,16 @@ code path that lets a caller argue past it.
 (regulator-grade, reconciling to a system of record) is refused outright —
 this runtime serves no T1 metric, because a governed convenience layer
 cannot inherit a control it does not implement. **T2** (operational,
-decision-grade, reviewed and version-pinned) is the only tier served, and
-`tests/test_metric_catalog.py` enforces that every bundled metric is T2. **T3**
-(exploratory, ad hoc, no stable definition) belongs to a lane this template
-does not implement; a genuinely exploratory question should be named as one
-rather than forced through a T2 metric it does not fit.
+decision-grade, reviewed and version-pinned) is the only tier served by
+`query-metric`, and `tests/test_metric_catalog.py` enforces that every bundled
+metric is T2. **T3** (exploratory, ad hoc, no stable definition) is refused on
+the governed path but is not homeless: it is the tier of the exploratory lane
+(`kattfot:explore`, [section 12](#12-the-exploratory-lane-t3)), where every
+result is stamped T3, and of the inert drafts `kattfot:promote` scaffolds on
+the way back (`accuracy_tier: T3`, `status: draft`). A genuinely exploratory
+question should be named as one and sent to that lane rather than forced
+through a T2 metric it does not fit; a T3 refusal on the governed path carries
+an `EXPLORABLE` referral for exactly this reason.
 
 **What this guarantees.** A tier is a claim about the review a number has
 survived, and it travels with the number into every artifact, chart, and PDF
@@ -190,12 +195,18 @@ decision-grade or something that was never meant to be.
 - **A tier is not a confidence interval.** It says a definition was reviewed
   and is version-pinned, not that the underlying data is accurate or that
   the sample size is adequate.
-- **This template has never had a T1 or T3 metric to test the refusal
-  against.** The catalog linter enforces "every bundled metric is T2" by
-  construction; the R4 refusal path for a *hypothetical* T1/T3 metric is
-  exercised by the `load-context` contract tests
-  (`tests/test_read_apis.py`), not by a real regulator-grade metric living in
-  this repository.
+- **The T1 refusal has only ever been exercised against a synthetic
+  metric.** The catalog linter enforces "every bundled metric is T2" by
+  construction, so no regulator-grade metric lives in this repository; the
+  R4 path for T1 is exercised by contract tests that write a throwaway
+  definition (`tests/test_read_apis.py`, `tests/test_adapters.py`). The T3
+  side is different: since the exploratory lane shipped
+  ([section 12](#12-the-exploratory-lane-t3)), the refusal is exercised by
+  real `kattfot:promote` drafts — `tests/test_promote.py` scaffolds one from
+  an explore artifact, asserts `query-metric` refuses it under R4 with the
+  `EXPLORABLE` referral, and asserts the same file is served once review
+  edits the tier to T2. That is the review gate working end to end, not a
+  hypothetical.
 
 ## 6. Per-stage maturity
 

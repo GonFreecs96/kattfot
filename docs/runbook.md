@@ -79,10 +79,14 @@ This is the muscle memory to teach a new user (and yourself):
    conversion by week for the last 8 weeks` — a governed, tier-stamped
    number, run as you.
 
-There is no open-ended exploratory lane in this template (a T3-style ad hoc
-SQL surface is out of scope — see [`governance-model.md`](governance-model.md#5-accuracy-tiers--r4)).
-A recurring question that has no registered metric belongs in
-[`adding-a-module.md`](adding-a-module.md), not in a workaround.
+4. **Ask something no metric can serve** → `kattfot:explore` — free-form
+   SELECT over the registered surfaces, stamped **T3 — not decision-grade**,
+   entered only on your explicit confirmation (see
+   [`governance-model.md` §12](governance-model.md#12-the-exploratory-lane-t3)).
+
+A *recurring* question that has no registered metric belongs in
+[`adding-a-module.md`](adding-a-module.md) — or, if it started as an
+exploration, in `kattfot:promote` — not in a standing workaround.
 
 ---
 
@@ -294,9 +298,10 @@ limits) in [`governance-model.md`](governance-model.md).
 - **Runs as you (ADC), never a service account**, on the warehouse path. No
   shared key; a refusal here is the system working, not a bug to work
   around.
-- **Tiers are load-bearing.** T2 is served and stamped; T1 and T3 are
-  refused outright. A consumer can never silently embed a non-governed
-  number — that is the `TIER_REFUSED` guarantee.
+- **Tiers are load-bearing.** T2 is served and stamped; T1 is refused
+  outright; T3 is refused on the governed path and served only through
+  `kattfot:explore`, stamped as such. A consumer can never silently embed a
+  non-governed number — that is the `TIER_REFUSED` guarantee.
 - **Refusals are clean (R1–R6).** Name the rule + the offending input, give
   the allow-list, no apology, no workaround, no artifact written.
   **R6/PII is a hard refuse enforced in code** — no override.
