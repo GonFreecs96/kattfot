@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""demo_skills.py — run all sixteen functional skills offline, and fail if any of them cannot.
+"""demo_skills.py — run all eighteen functional skills offline, and fail if any of them cannot.
 
 `scripts/demo.py` walks the compose chain (a governed metric becomes an artifact,
 becomes a chart, becomes a PDF) and is the best way to *see* what the plugin
@@ -29,7 +29,7 @@ contract `kattfot:verify` reads.
 
 Usage
 -----
-    python3 scripts/demo_skills.py                 # the gate: all sixteen
+    python3 scripts/demo_skills.py                 # the gate: all eighteen
     python3 scripts/demo_skills.py --only catalog,funnel-pulse
     python3 scripts/demo_skills.py --allow-missing-optional
     python3 scripts/demo_skills.py --json
@@ -37,7 +37,7 @@ Usage
 `visualize-metric` needs matplotlib and `export-report` needs fpdf2 — offline
 dependencies, not network ones, so by default a missing one is a failure with the
 install command. `--allow-missing-optional` downgrades that to a reported gap, and
-the summary then says how many of the sixteen actually ran.
+the summary then says how many of the eighteen actually ran.
 """
 
 from __future__ import annotations
@@ -807,7 +807,7 @@ def rel(path) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--only", default=None,
-                    help="comma-separated skill names to run (default: all sixteen)")
+                    help="comma-separated skill names to run (default: all eighteen)")
     ap.add_argument("--allow-missing-optional", action="store_true",
                     help="report a missing matplotlib/fpdf2 as a gap instead of failing")
     ap.add_argument("--json", action="store_true", help="machine-readable summary")
@@ -849,7 +849,7 @@ def main() -> int:
                             "outputs": {k: rel(v) for k, v in produced.items()}})
         except Exception as exc:  # noqa: BLE001
             # Broad on purpose: one skill failing must not stop the summary, because
-            # "which of the sixteen are broken" is the whole output of this script.
+            # "which of the eighteen are broken" is the whole output of this script.
             results.append({"skill": skill, "status": "FAIL",
                             "detail": f"{type(exc).__name__}: {exc}", "outputs": {}})
 

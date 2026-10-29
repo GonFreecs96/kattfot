@@ -10,9 +10,78 @@ how an agent can be given real access to a data warehouse and still be unable
 to produce a number nobody can defend.
 
 It ships as a complete, runnable example rather than a framework you have to
-imagine into being. Clone it, run the test suite, run the demo, and you are
-looking at real governed artifacts — before you have configured a single
-credential.
+imagine into being. Clone it, run the demo, and you are looking at real
+governed artifacts — before you have configured a single credential.
+
+## Sixty seconds
+
+```bash
+git clone https://github.com/GonFreecs96/kattfot.git && cd kattfot
+python3 -m venv .venv && .venv/bin/pip install -r tests/requirements.txt \
+  -r plugins/kattfot/skills/visualize-metric/scripts/requirements.txt
+.venv/bin/python scripts/demo.py --skip-pdf
+```
+
+No cloud account, no credentials, no network: `KATTFOT_ENGINE` defaults to
+`sqlite`, so the metric's real SQL runs against the committed fixture CSVs.
+About two seconds later, `outputs/kattfot/` holds a governed artifact, its
+chart spec, and the chart as SVG, PNG and self-contained HTML. The artifact
+opens like this:
+
+```yaml
+---
+metric: cart_to_checkout_start_conversion
+accuracy_tier: T2
+source_view: analytics.cart_checkout_funnel_weekly
+engine: sqlite
+fixture_backed: true
+time_range_start: 2026-04-27
+time_range_end: 2026-08-10
+maturity_cutoff: 2026-08-10
+dimensions: ['channel']
+manifest:
+  plugin_version: 0.2.0
+  metric_def_sha: 630f5144a6d892eb
+  query_sha: a2edd162be9583b0
+  result_sha: 9960f2458b68254c
+---
+> ⚠️ FIXTURE DATA — these numbers come from committed synthetic fixtures,
+> not from a warehouse.
+```
+
+Every line of that header is a control: the tier says what the number may be
+used for, the maturity cutoff says which cohorts were withheld, the three
+fingerprints let `kattfot:verify` tell you offline, months later, whether the
+definition, the query or the result has drifted. The watermark is load-bearing.
+
+Three gates keep the claim "it all runs offline" true, and all three run in CI
+on every push: `pytest` (1,400+ tests), `scripts/scrub_check.py` (the
+deny-token gate), and `scripts/demo_skills.py` (every functional skill, in an
+environment scrubbed of credentials). [`examples/`](examples/) has committed
+output you can read without cloning.
+
+## How it is meant to be operated
+
+The code enforces the controls; people still own the definitions. The division
+of labour this template assumes:
+
+- **A metric has a named owner.** Each definition's frontmatter carries
+  `owner`, `accuracy_tier`, `version` and `last_reviewed`; the catalog flags a
+  definition as stale when nobody has reviewed it inside the window. A
+  definition change is a pull request against a markdown file, reviewed like
+  code.
+- **The agent runs unattended on the governed lane.** Reads of registered
+  metrics, drift checks, the funnel pulse and the nowcast need no human in the
+  loop, because every answer is allow-listed, tiered and receipted, and
+  anything outside the allow-list is a refusal that names the rule.
+- **A human signs off on anything that widens the surface.** Switching to the
+  exploratory lane needs the user's explicit confirmation; a promoted draft
+  metric stays inert (T3, `status: draft`) until a reviewer edits the tier;
+  T1 (financial or regulatory) is refused outright rather than served
+  without the machinery to back it.
+- **Identity is never shared.** Every warehouse query runs as the individual
+  human via browser OAuth. A service account is refused in code, so an audit
+  line always names a person.
 
 ## The governance thesis
 
@@ -100,9 +169,9 @@ The full reasoning behind each control — including what each one does
 
 ## Quick start
 
-Nothing to configure. `KATTFOT_ENGINE` defaults to `sqlite`, which runs each
-metric's real SQL against the committed fixture CSVs — no cloud account, no
-credentials, no network.
+The sixty-second block above is the shortest path. The rest of this section is
+the full surface: the gates, every skill, the compose chain, and a real
+warehouse.
 
 **Want proof before you clone?** [`examples/`](examples/) has real, committed
 output — a governed metric artifact, an interactive chart, a dashboard, PDF
@@ -111,11 +180,6 @@ chart-spec provenance JSON behind it — all fixture-backed and watermarked,
 browsable on GitHub with nothing installed.
 
 ```bash
-git clone https://github.com/markreid-lab/kattfot.git && cd kattfot
-
-python3 -m venv .venv
-.venv/bin/pip install -r tests/requirements.txt
-
 .venv/bin/python -m pytest        # the test suite
 python3 scripts/scrub_check.py    # the deny-token gate
 ```

@@ -9,7 +9,7 @@ No network, no cloud account, no credentials: `KATTFOT_ENGINE` defaults to `sqli
 so every metric's real SQL runs against the committed fixture CSVs. This is the
 fastest way to see what the plugin actually produces.
 
-For the *gate* — every one of the fifteen skills, run in an environment scrubbed of
+For the *gate* — every one of the eighteen functional skills, run in an environment scrubbed of
 credentials, failing if any cannot — use `scripts/demo_skills.py`. This script walks
 one chain in depth; that one covers the whole surface in breadth.
 
