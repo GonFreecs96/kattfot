@@ -7,6 +7,15 @@ Contract (Claude Code PreToolUse "command" hook):
           "permissionDecision": "deny", "permissionDecisionReason": "..."}}.
           On allow, print nothing.
   exit:   always 0. Denial is signaled via the JSON body, not the exit code.
+
+Fail-closed, two layers. If the matcher itself raises, this adapter DENIES with
+the error in the reason rather than letting an unchecked command through. And
+`hooks.json` sets `"onFailure": "block"` (Claude Code >= 2.1.295), so a hook that
+times out, fails to start, or exits non-zero blocks the tool call too — without
+it, Claude Code treats a timed-out or crashed PreToolUse hook as "no decision"
+and the call proceeds. Unparseable stdin is the one deliberate exception: there
+is no command to judge, so it exits 0 with no decision (pinned in
+`tests/test_bq_bypass_hook.py`).
 """
 
 from __future__ import annotations
@@ -30,7 +39,14 @@ def main() -> int:
         return 0
 
     command = (payload.get("tool_input") or {}).get("command") or ""
-    reason = deny_reason(command)
+    try:
+        reason = deny_reason(command)
+    except Exception as exc:  # noqa: BLE001 — any internal failure fails closed
+        reason = (
+            f"kattfot access-path hook failed while checking this command "
+            f"({type(exc).__name__}: {exc}); denying rather than allowing an "
+            f"unchecked warehouse route. Fix the hook, then retry."
+        )
     if reason is None:
         return 0
 

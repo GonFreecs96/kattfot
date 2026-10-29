@@ -68,10 +68,11 @@ ever added, that test flips from "assert not caught" to "assert blocked."
 - Three outline-only skills: `release-scorecard`, `customer-journey`, `publish`.
 - `browse` module: `declared` → `live` (needs a view/fixture + funnel spec).
 
-### 5. Small loose end
+### 5. Small loose end — closed 2026-10-28 (`tier-0-research-pass`)
 Pre-existing Zhong et al. over-reach in `research-review.md` **§5 (~line 227)** —
 out of scope for this session's §6 diff, but it's the same misattribution §6
-fixed. Two-minute cleanup for whole-doc consistency.
+fixed. Dropped the attribution the same way §6 did; the paper stays in Sources
+as a text-to-SQL evaluation reference.
 
 ## How to resume the review-gated workflow
 Implementer (Sonnet) in an isolated git worktree → reviewer (Opus) on the diff →

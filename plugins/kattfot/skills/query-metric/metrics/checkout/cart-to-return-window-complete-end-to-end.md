@@ -2,6 +2,8 @@
 name: cart_to_return_window_complete_end_to_end
 display_name: Cart to Return Window Complete conversion (settled, end to end)
 owner: analytics-owner
+version: 1
+last_reviewed: 2026-10-28
 module: checkout
 entity: checkout_session
 relationships: [order, shipment]

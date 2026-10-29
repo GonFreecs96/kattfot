@@ -257,8 +257,8 @@ def render_catalog(args) -> str:
         f"{cat['metric_count']} ratio metrics · {cat['kpi_count']} latency KPIs "
         f"· {len(cat['spines'])} spines",
         "",
-        "| name | display_name | accuracy_tier | module | definition |",
-        "|---|---|---|---|---|",
+        "| name | display_name | accuracy_tier | module | version | freshness | definition |",
+        "|---|---|---|---|---|---|---|",
     ]
     for m in cat["metrics"]:
         # A non-T2 metric is NAMED so a consumer can see it exists, and its
@@ -273,7 +273,7 @@ def render_catalog(args) -> str:
         )
         lines.append(
             f"| {m['name']} | {m['display_name']} | {m['accuracy_tier']} | "
-            f"{m['module']} | {definition} |"
+            f"{m['module']} | {m.get('version') or '—'} | {m.get('freshness')} | {definition} |"
         )
     non_t2 = [m for m in cat["metrics"] if m["accuracy_tier"] != SERVED_TIER]
     if non_t2:

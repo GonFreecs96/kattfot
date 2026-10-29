@@ -210,7 +210,7 @@ def analyze_shape(sql: str, surfaces: list) -> dict:
         for k in ("source_view", "numerator_column", "denominator_column", "time_column")
         if out[k] == NEEDS
     ]
-    out["needs_decision"] = ["owner", "entity", "maturity_stage", "accuracy_tier"] + needs
+    out["needs_decision"] = ["owner", "last_reviewed", "entity", "maturity_stage", "accuracy_tier"] + needs
     return out
 
 
@@ -232,6 +232,9 @@ def compose_draft(
         "name": name,
         "display_name": f"{display} (Draft)",
         "owner": "NEEDS-OWNER",
+        # The catalog linter requires both; the reviewer dates the review, not the scaffold.
+        "version": 1,
+        "last_reviewed": NEEDS,
         "module": module or NEEDS,
         "entity": NEEDS,
         # T3 + draft on purpose: query-metric refuses this (R4) until a human
@@ -295,6 +298,7 @@ def compose_draft(
         "## Promotion checklist",
         "",
         "- [ ] `owner:` — a named owner, not a team alias that resolves to nobody",
+        "- [ ] `last_reviewed:` — the ISO date of the review that edits the tier (the linter requires it)",
         "- [ ] `entity:` — the registered entity this measures (see `load-context entities`)",
         "- [ ] `maturity_stage:` — which stage settles this number; without it the",
         "      metric has NO maturity gate and reports immature cohorts as final",

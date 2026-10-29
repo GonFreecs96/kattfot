@@ -71,6 +71,7 @@ none of them writes an output file.
 | Rule | Trigger | Enforced in |
 |---|---|---|
 | **R1** | The question does not match a registered metric | code (`find_metric_file`) — with a nearest-match suggestion |
+| **R1-AMBIGUOUS** | The question matches several registered metrics about equally well | code (`ambiguous_candidates`) — every reading named, none chosen |
 | **R2** | A requested dimension is not in the metric's `allowed_dimensions` | code (`validate_request`) |
 | **R3** | A requested filter column is not in the metric's `allowed_filters` | code (`validate_request`) |
 | **R4** | The metric's tier is not served (T1 or T3) | code (`validate_tier`) + agent |

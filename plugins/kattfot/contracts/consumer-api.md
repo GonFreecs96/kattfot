@@ -115,6 +115,13 @@ performs this drift check offline.
   freshness threshold, append after a blank line:
   `STALE: {filename} last updated {YYYY-MM-DD}, owner: {owner}` (the `, owner: ...` suffix is
   omitted when the file has no `owner:` frontmatter — e.g. `tiers`).
+- **Definition review** (`catalog`, `load-context catalog`): every ratio metric carries
+  `version` and `last_reviewed`; the listing reports `freshness: fresh | stale` against a review
+  window (180 days by default, `KATTFOT_REVIEW_WINDOW_DAYS`). A missing or unparseable
+  `last_reviewed` is `stale`, never `fresh`. The consumer-API table carries `version` and
+  `freshness` columns; the human-facing markdown marks a stale metric
+  `STALE: last reviewed {YYYY-MM-DD}, owner: {owner}` (or `STALE: never reviewed`). A stale
+  definition still serves — the marker is a review prompt, not a refusal.
 - **Data maturity** (`query-metric` + spine skills): maturity is applied **per stage** — each
   metric / funnel stage / timing transition is withheld only until its own stage settles
   (open→stage lag in the module's funnel spec under `stage_maturity`: payment submitted ~1d →
@@ -132,7 +139,7 @@ The `STALE:` and `MATURITY:` prefixes are stable; consumers may detect them by l
 
 | Scope | Returns | Type |
 |-------|---------|------|
-| `catalog` | All registered metrics: name, display, tier, module, one-liner (entities + latency KPIs appended) | Single (compact) |
+| `catalog` | All registered metrics: name, display, tier, module, version, freshness, one-liner (entities + latency KPIs appended) | Single (compact) |
 | `metric/{slug}` | One metric's full definition | Single |
 | `module/{name}` | All metric defs for a module (e.g. `module/checkout`) | Multi |
 | `entities` | The entity registry: entity, display_name, module, lifecycle_module, status (live/declared), grain, one-liner | Single (compact) |

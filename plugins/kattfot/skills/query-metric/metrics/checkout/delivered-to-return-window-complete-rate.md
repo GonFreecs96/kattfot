@@ -2,6 +2,8 @@
 name: delivered_to_return_window_complete_rate
 display_name: Delivered to Return Window Complete rate
 owner: analytics-owner
+version: 1
+last_reviewed: 2026-10-28
 module: checkout
 entity: shipment
 relationships: [order]

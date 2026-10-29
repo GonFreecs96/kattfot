@@ -2,6 +2,8 @@
 name: approved_to_order_confirmed_rate
 display_name: Approved Payment to Order Confirmed rate
 owner: analytics-owner
+version: 1
+last_reviewed: 2026-10-28
 module: checkout
 entity: payment
 relationships: [order, checkout_session]

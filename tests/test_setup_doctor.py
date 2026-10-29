@@ -10,9 +10,9 @@ skill's remediation table — no network and no real gcloud:
   - check_gcloud: PATH presence via a stubbed shutil.which
   - render_text:  every non-ok check surfaces its fix line
 
-`deps` is intentionally not asserted here: this repo has no CI, and a bare test
-environment may have neither google-cloud-bigquery nor network either way, so the
-doctor's value is the offline verdicts.
+`deps` is intentionally not asserted here: CI installs no cloud client on purpose,
+and a bare test environment may have neither google-cloud-bigquery nor network
+either way, so the doctor's value is the offline verdicts.
 The `probe` path IS asserted for one thing only — that it refuses to guess a
 warehouse project (see the last section).
 """

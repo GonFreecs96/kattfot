@@ -2,6 +2,8 @@
 name: shipped_to_delivered_rate
 display_name: Shipped to Delivered rate
 owner: fulfilment-pm
+version: 1
+last_reviewed: 2026-10-28
 module: checkout
 entity: shipment
 relationships: [market, order]

@@ -22,12 +22,14 @@ below, but you are not bound by [What stays out of a PR](#what-stays-out-of-a-pr
 > own name, carrier/partner names, internal warehouse identifiers,
 > issue-tracker project keys, contact addresses) — is the **only** thing
 > standing between a contribution and one of those tokens re-entering this
-> public repo. **This project has no CI.** The gate is wired into `pytest`
-> (see [Running the checks](#running-the-checks)) so it cannot be skipped by
-> skipping a separate CI job that doesn't exist — but nothing forces you to
-> run `pytest` either. Keeping this repo clean is a **manual discipline**,
-> not an automated backstop: run the gate yourself, every time, especially
-> if you're porting language in from somewhere else.
+> public repo. CI runs it (`.github/workflows/tests.yml`: `pytest`, the scrub
+> gate and the offline demo, on Python 3.9 and 3.12, on every push and pull
+> request), and the gate is also wired into `pytest` (see
+> [Running the checks](#running-the-checks)) so it cannot be skipped by
+> skipping a CI job. But a token CI catches is already on a pushed branch of a
+> public repo. Keeping this repo clean is still a **local discipline**: run the
+> gate yourself before you push, every time, especially if you're porting
+> language in from somewhere else.
 
 ## Repository layout
 
@@ -99,8 +101,9 @@ All three should be green before you open a PR.
 - **R6 / PII** — the code-level denylist refuses personal columns even when a
   metric's own frontmatter would have allowed them (`tests/test_pii_refusal.py`,
   `tests/test_view_ddl_pii.py` — the latter scans view DDL directly).
-- **Catalog lint** — every metric has the required frontmatter, valid enums,
-  a unique name, and is tier **T2** (the only served tier)
+- **Catalog lint** — every metric has the required frontmatter (including
+  `version` and `last_reviewed`, which feed the catalog's freshness signal),
+  valid enums, a unique name, and is tier **T2** (the only served tier)
   (`tests/test_metric_catalog.py`).
 - **Module registry rules** — every spine lists each spine-backed skill under
   exactly one of `skills:` / `excluded:` (never both, never neither, and an
@@ -140,6 +143,11 @@ Scope and limits, worth knowing before you touch it:
   `.cursor/hooks/enforce_bq_path.py` as a thin adapter over the same matcher.
   Neither replaces reading the relevant `SKILL.md` — both are command-string
   blocklists.
+- **Fail-closed.** `hooks.json` declares `"onFailure": "block"` (Claude Code
+  >= 2.1.295), so a hook that times out or crashes blocks the call instead of
+  being treated as "no decision"; and both adapters deny — with the error in the
+  reason — if the matcher itself raises. Cursor's hook schema has no documented
+  `onFailure`, so there the in-script guard is the whole backstop.
 - **It's a blocklist, not a sandbox.** It cannot see into a script file's
   contents — `python3 some_file.py` bypasses it if "bigquery" never appears
   in the Bash command text itself.

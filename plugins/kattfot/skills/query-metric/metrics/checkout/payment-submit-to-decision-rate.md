@@ -2,6 +2,8 @@
 name: payment_submit_to_decision_rate
 display_name: Payment Submit to Decision rate
 owner: payments-pm
+version: 1
+last_reviewed: 2026-10-28
 module: checkout
 entity: payment
 relationships: [checkout_session]

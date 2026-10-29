@@ -2,6 +2,8 @@
 name: order_confirmed_to_shipped_rate
 display_name: Order Confirmed to Shipped rate
 owner: fulfilment-pm
+version: 1
+last_reviewed: 2026-10-28
 module: checkout
 entity: order
 relationships: [shipment]

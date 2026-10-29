@@ -224,7 +224,8 @@ cannot honestly ship, each with its literature anchor:
   utility-under-attack in CI (AgentDojo, InjecAgent).
 - **A metrics-layer maturity set** the semantic-layer literature converges on
   but `kattfot` only partially has: structured CI validation of every metric's
-  SQL against fixtures (test-suite verification, Zhong et al. 2020),
+  SQL against fixtures (test-suite verification as a practice; no single paper
+  argues it),
   additivity typing (Lenz & Shoshani 1997), a conformed-dimension registry,
   usage-based deprecation, and a golden-question regression suite
   (Minerva; dbt-llm-sl-bench).

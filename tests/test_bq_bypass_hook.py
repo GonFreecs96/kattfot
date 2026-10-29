@@ -306,6 +306,54 @@ def test_cursor_adapter_deny_and_allow():
     assert parsed.get("permission") == "allow"
 
 
+def _load_adapter(path: Path, name: str):
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_adapters_fail_closed_when_the_matcher_raises(monkeypatch, capsys):
+    """An internal error in the matcher must DENY, not fall through to allow — a
+    hook that crashes open is a hook an attacker only has to crash. Both runtime
+    adapters, same contract."""
+    import io
+
+    def boom(command):
+        raise RuntimeError("matcher exploded")
+
+    claude = _load_adapter(CLAUDE_HOOK, "enforce_bq_path_claude")
+    monkeypatch.setattr(claude, "deny_reason", boom)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(
+        {"tool_name": "Bash", "tool_input": {"command": "ls"}}
+    )))
+    assert claude.main() == 0
+    decision = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "deny"
+    assert "matcher exploded" in decision["permissionDecisionReason"]
+
+    cursor = _load_adapter(CURSOR_HOOK, "enforce_bq_path_cursor")
+    monkeypatch.setattr(cursor, "deny_reason", boom)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps({"command": "ls"})))
+    assert cursor.main() == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["permission"] == "deny"
+    assert "matcher exploded" in out["user_message"]
+    assert "matcher exploded" in out["agent_message"]
+
+
+def test_claude_hook_is_declared_fail_closed():
+    """`onFailure: block` is what makes a timeout or crash of the hook itself block
+    the Bash call; without it Claude Code treats a timed-out PreToolUse hook as no
+    decision and the call proceeds."""
+    cfg = json.loads((ROOT / "plugins" / "kattfot" / "hooks" / "hooks.json").read_text())
+    hooks = [h for group in cfg["hooks"]["PreToolUse"] for h in group["hooks"]]
+    assert hooks
+    for h in hooks:
+        assert h.get("onFailure") == "block", h
+        assert h.get("timeout"), h
+
+
 def test_malformed_stdin_fail_open():
     for hook_path in (CLAUDE_HOOK, CURSOR_HOOK):
         proc = subprocess.run(

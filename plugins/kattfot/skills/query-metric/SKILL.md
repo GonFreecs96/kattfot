@@ -130,6 +130,14 @@ If nothing matches but the registry is populated, **refuse per R1** and list the
 registered display names. The helper itself offers a nearest-match suggestion on a
 typo, so pass the question through rather than guessing.
 
+If the question matches **several** registered metrics about equally well — a
+generic term ("payment", which reads as approval rate, decline rate, or
+submit-to-decision rate) or two names within a hair of each other — the helper
+refuses per **R1-AMBIGUOUS** rather than taking the top match. The readings are
+different questions with different denominators, and resolving a near-tie by rank
+would silently answer a different question than the one asked. Name every
+candidate back to the user and ask which they meant; do not choose for them.
+
 If the question is genuinely **exploratory** — a one-off cross-tab, a multi-step
 dive with no governed metric intended — do not list T2 metrics at it. Say that it
 belongs in the exploratory lane (`kattfot:explore`, T3, not decision-grade), and
@@ -254,6 +262,27 @@ best chart type and add it to the artifact" — but only offer. Do not auto-run.
 On any refusal: state which rule fired and the specific input that caused it, provide
 the allow-list (R1–R3) so the user can see what is available, do not apologise, do not
 propose a workaround that violates the same rule, and **do not write an output file**.
+
+**R1-AMBIGUOUS** is R1's second form, enforced in code (`ambiguous_candidates` in
+`kattfot_query.py`): the name matches several registered metrics about equally
+well — it is a substring of two or more names, or the two closest fuzzy matches
+both clear `AMBIGUITY_MATCH_FLOOR` (0.6) and sit within `AMBIGUITY_MATCH_MARGIN`
+(0.08) of each other. The helper exits 1 — the same code as a plain R1 miss; the
+prefix is what tells them apart — with no output file and this on stderr:
+
+```
+ERROR (R1-AMBIGUOUS): 'payment' matches multiple registered metrics about equally
+well: checkout_start_to_payment_submit_rate, payment_approval_rate,
+payment_decline_rate, payment_submit_to_decision_rate. Refusing to guess between
+readings — they are different questions with different denominators. Re-run with
+one exact name (or ask the requester which they meant); kattfot:catalog shows each
+metric's definition.
+```
+
+What the user sees is that list and a question: which one? Ambiguity outranks
+helpfulness — a near-tie never gets a "did you mean", because top-1 acceptance of
+a near-tie is the silent-commitment failure the text-to-SQL ambiguity literature
+measures (AmbiQT; `docs/reference/research-review.md`).
 
 ## Output format
 

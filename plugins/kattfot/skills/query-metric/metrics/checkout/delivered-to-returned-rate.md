@@ -2,6 +2,8 @@
 name: delivered_to_returned_rate
 display_name: Return rate (delivered orders sent back)
 owner: fulfilment-pm
+version: 1
+last_reviewed: 2026-10-28
 module: checkout
 entity: shipment
 relationships: [order]

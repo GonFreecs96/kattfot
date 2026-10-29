@@ -2,6 +2,8 @@
 name: example_checkout_completion_rate
 display_name: Checkout Completion Rate (Example)
 owner: analytics-owner
+version: 1                     # REQUIRED: bump when the meaning changes, not on wording
+last_reviewed: 2026-10-28      # REQUIRED: ISO date the owner last confirmed the definition
 module: checkout
 entity: checkout_session       # REQUIRED: the registered entity this metric measures
 # relationships: [order]       # optional: other registered entities it touches

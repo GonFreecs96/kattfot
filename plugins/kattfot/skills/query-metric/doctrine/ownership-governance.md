@@ -51,13 +51,32 @@ not how important it is:
 
 ## Freshness signalling
 
-The intent is that a definition whose review is overdue is *visibly* overdue —
-a `STALE:` marker surfaced next to the metric wherever it is listed, naming the
-owner and the date it was last reviewed. Nothing in this template computes that
-yet: doing it properly needs a `last_reviewed:` field on every definition and a
-lister that reads it, and shipping half of that would be worse than shipping
-none, because a freshness signal that silently fails to fire reads as "fresh".
+A definition whose review is overdue is *visibly* overdue. Every metric carries
+two keys the catalog linter (`tests/test_metric_catalog.py`) requires:
 
-If you want it, the pieces are: add `last_reviewed:` to the metric frontmatter
-schema, extend `tests/test_metric_catalog.py` to require it, and have whatever
-lists your catalog compare it against the cadence above.
+| Key | Meaning |
+|---|---|
+| `version` | Integer, starts at 1. Bump it when the definition's *meaning* changes — numerator, denominator, grain, a caveat that changes how the number reads. A wording fix does not bump it. |
+| `last_reviewed` | ISO date the owner last confirmed the definition still holds. Set it on every review, including the ones that change nothing. |
+
+`kattfot:catalog` (and `kattfot:load-context catalog`) compares `last_reviewed`
+against a review window — 180 days by default, `KATTFOT_REVIEW_WINDOW_DAYS` to
+change it per deployment — and lists each metric as `fresh` or `stale`. In the
+markdown table a stale definition carries the marker
+`STALE: last reviewed {date}, owner: {owner}` next to its name. A definition with
+no `last_reviewed` at all (a consumer override that never set one) lists as
+`STALE: never reviewed`, because a freshness signal that silently fails to fire
+would read as "fresh" — the one failure mode worse than having no signal.
+
+Two things the marker deliberately is not:
+
+- **Not a refusal.** A stale metric still serves. The marker is a prompt for its
+  owner, surfaced where the metric is listed, not a gate on the number.
+- **Not the same signal as load-context's `STALE:` line.** That one keys on the
+  file's modification time (`contracts/consumer-api.md`); this one keys on the
+  owner's explicit `last_reviewed`. A file can be edited without being reviewed,
+  and reviewed without being edited.
+
+The window is one number for the whole catalog. The cadence table above is the
+per-metric judgement; a deployment that wants per-metric windows needs a
+`review_every_days:` key and a one-line change in `catalog.py`.

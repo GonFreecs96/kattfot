@@ -2,6 +2,8 @@
 name: confirmed_not_shipped_rate
 display_name: Confirmed not Shipped (out-of-stock leak) rate
 owner: fulfilment-pm
+version: 1
+last_reviewed: 2026-10-28
 module: checkout
 entity: order
 relationships: [shipment]

@@ -6,7 +6,7 @@ curated view a governed query reads exposes a direct-PII column in the first pla
 someone will eventually reach it another way.
 
 Scans every DDL file the plugin ships and fails pytest on any identifier matching the
-R6 denylist (this repo has no CI; a human must run pytest for this to catch anything).
+R6 denylist, locally and in CI (a token CI catches is already on a pushed branch).
 Comments are stripped first so prose discussing PII does not trip it, which
 matters because the DDL's comments are where the reasoning lives.
 """

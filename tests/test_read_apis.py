@@ -182,6 +182,101 @@ def test_catalog_never_runs_a_query(monkeypatch):
     assert catalog_lib.build()["metric_count"] == 15
 
 
+# --- definition freshness (doctrine/ownership-governance.md) -----------------
+
+import datetime as dt  # noqa: E402  (kept beside the tests that pin the clock)
+
+REVIEWED = dt.date(2026, 10, 28)  # every bundled definition's last_reviewed
+
+
+def test_freshness_is_computed_against_a_pinned_clock():
+    """Inside the window is fresh, one day past it is stale, and the boundary day
+    itself is still fresh. Pinned so the suite does not flip on a calendar date."""
+    f = catalog_lib.freshness
+    assert f("2026-10-28", today=REVIEWED, window_days=180) == "fresh"
+    assert f(REVIEWED, today=REVIEWED + dt.timedelta(days=180), window_days=180) == "fresh"
+    assert f(REVIEWED, today=REVIEWED + dt.timedelta(days=181), window_days=180) == "stale"
+    assert f(dt.datetime(2026, 10, 28, 9, 0), today=REVIEWED, window_days=180) == "fresh"
+
+
+def test_a_missing_or_unparseable_review_date_is_stale_not_fresh():
+    """The doctrine's one warning: a freshness signal that silently fails to fire
+    reads as fresh. So absence and garbage both fail closed."""
+    f = catalog_lib.freshness
+    assert f(None, today=REVIEWED, window_days=180) == "stale"
+    assert f("", today=REVIEWED, window_days=180) == "stale"
+    assert f("last week", today=REVIEWED, window_days=180) == "stale"
+    assert f("2026-13-45", today=REVIEWED, window_days=180) == "stale"
+
+
+def test_the_review_window_defaults_to_180_days_and_reads_the_env(monkeypatch):
+    monkeypatch.delenv("KATTFOT_REVIEW_WINDOW_DAYS", raising=False)
+    assert catalog_lib.review_window_days() == 180
+    assert catalog_lib.freshness(REVIEWED, today=REVIEWED + dt.timedelta(days=30)) == "fresh"
+    monkeypatch.setenv("KATTFOT_REVIEW_WINDOW_DAYS", "7")
+    assert catalog_lib.review_window_days() == 7
+    assert catalog_lib.freshness(REVIEWED, today=REVIEWED + dt.timedelta(days=30)) == "stale"
+    monkeypatch.setenv("KATTFOT_REVIEW_WINDOW_DAYS", "not a number")
+    assert catalog_lib.review_window_days() == 180
+
+
+def test_every_bundled_definition_lists_its_version_and_freshness():
+    """The listing carries the keys the linter requires, and the signal flips for
+    the whole catalog when the clock moves past the window."""
+    fresh = catalog_lib.build(today=REVIEWED)
+    assert fresh["review_window_days"] == 180
+    assert fresh["stale_count"] == 0
+    for m in fresh["metrics"]:
+        assert isinstance(m["version"], int) and m["version"] >= 1
+        assert m["last_reviewed"] == REVIEWED.isoformat()
+        assert m["freshness"] == "fresh"
+    later = catalog_lib.build(today=REVIEWED + dt.timedelta(days=400))
+    assert later["stale_count"] == later["metric_count"] == 15
+    assert {m["freshness"] for m in later["metrics"]} == {"stale"}
+
+
+def test_markdown_surfaces_the_stale_marker_with_date_and_owner():
+    """The doctrine asks for a `STALE:` marker next to the metric wherever it is
+    listed, naming the owner and the date it was last reviewed."""
+    fresh = catalog_lib.render_markdown(catalog_lib.build(today=REVIEWED))
+    assert "STALE:" not in fresh
+    assert "fresh (2026-10-28)" in fresh
+    stale = catalog_lib.render_markdown(
+        catalog_lib.build(today=REVIEWED + dt.timedelta(days=400))
+    )
+    assert "15 stale" in stale
+    assert "STALE: last reviewed 2026-10-28, owner: payments-pm" in stale
+
+
+def test_a_consumer_metric_without_a_review_date_lists_as_stale(tmp_path, monkeypatch):
+    """A consumer override that never set `last_reviewed` is listed — the catalog is
+    not the linter — but it is listed as stale, never as fresh by default."""
+    (tmp_path / "extra.md").write_text(
+        "---\nname: my_local_rate\ndisplay_name: My Local Rate\nowner: me\n"
+        "accuracy_tier: T2\nmodule: checkout\nstatus: live\n---\n\n"
+        "## Definition\nA locally authored rate.\n"
+    )
+    monkeypatch.setenv("KATTFOT_METRICS_DIR", str(tmp_path))
+    cat = catalog_lib.build(today=REVIEWED)
+    hit = next(m for m in cat["metrics"] if m["name"] == "my_local_rate")
+    assert hit["freshness"] == "stale" and hit["last_reviewed"] is None
+    assert cat["stale_count"] == 1
+    assert "STALE: never reviewed, owner: me" in catalog_lib.render_markdown(cat)
+
+
+def test_catalog_cli_pins_the_clock_with_today(capsys):
+    out = json.loads(run(catalog_lib, ["--today", "2030-01-01"], capsys))
+    assert out["stale_count"] == 15
+    out = json.loads(run(catalog_lib, ["--today", REVIEWED.isoformat()], capsys))
+    assert out["stale_count"] == 0
+
+
+def test_load_context_catalog_carries_freshness(capsys):
+    out = run(load_context, ["catalog"], capsys)
+    assert "| version | freshness |" in out
+    assert "| 1 | fresh |" in out or "| 1 | stale |" in out
+
+
 # ===========================================================================
 # coverage
 # ===========================================================================

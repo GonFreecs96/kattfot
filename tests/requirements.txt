@@ -1,5 +1,7 @@
-# Test dependencies (this repo has no CI). Mirrors the runtime floors in the skills' own
-# requirements.txt files where they overlap.
+# Test dependencies — the first thing `.github/workflows/tests.yml` installs (it then adds
+# the two offline skill requirements the demo gate needs: visualize-metric's matplotlib and
+# export-report's fpdf2). Mirrors the runtime floors in the skills' own requirements.txt
+# files where they overlap.
 #
 # Nothing numeric here on purpose: the forecasting skills that needed
 # numpy/scipy/statsmodels ship as documented outlines in this template, so the

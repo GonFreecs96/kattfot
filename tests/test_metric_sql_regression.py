@@ -4,7 +4,7 @@ This is the engine-free half of a golden question-to-answer test per metric. It
 cannot assert the *numbers* on a real warehouse, but it pins the *query
 construction* and the governance shape — so a metric-YAML edit or a builder change
 that breaks the SUM/SUM contract, drops the time filter, or mis-wires a dimension is
-caught by `pytest` rather than at runtime — there is no CI, so someone has to run it.
+caught by `pytest` rather than at runtime, locally and in CI (`.github/workflows/tests.yml`).
 
 The numeric half is covered separately and genuinely: `test_mock_oracle.py` runs the
 arithmetic two independent ways over a committed fixture, and

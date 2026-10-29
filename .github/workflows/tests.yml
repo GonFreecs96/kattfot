@@ -1,0 +1,39 @@
+# The three gates CONTRIBUTING.md asks for before a PR, run on every push and pull
+# request on the oldest and a current supported Python. Nothing cloud is installed on
+# purpose: the whole suite and the demo run offline against committed fixtures, and
+# the hook/identity tests pin that no warehouse client is needed to prove it.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install test deps plus the two offline skill deps the demo gate needs
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements.txt
+          pip install -r plugins/kattfot/skills/visualize-metric/scripts/requirements.txt
+          pip install -r plugins/kattfot/skills/export-report/scripts/requirements.txt
+
+      - name: pytest (governance suite, catalog linter, scrub gate as a test)
+        run: python -m pytest
+
+      - name: scrub gate
+        run: python scripts/scrub_check.py
+
+      - name: offline demo of every functional skill
+        run: python scripts/demo_skills.py

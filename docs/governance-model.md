@@ -85,7 +85,10 @@ around identity (layer 1), the allow-lists (layer 3), or the PII denylist
 (layer 4) by reaching for a raw CLI call or an inline script — the most
 common way a well-intentioned "just this once" workaround defeats every
 control above it. This runs **outside the model's control**: it is not a
-system-prompt instruction the agent could be talked out of.
+system-prompt instruction the agent could be talked out of. And it fails
+closed: the Claude Code hook is declared `onFailure: block`, so a timeout or
+crash of the hook blocks the call rather than counting as no decision, and
+both adapters deny if the matcher itself raises.
 
 **What this does not guarantee.**
 

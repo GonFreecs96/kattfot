@@ -2,6 +2,8 @@
 name: payment_decline_rate
 display_name: Payment decline rate
 owner: payments-pm
+version: 1
+last_reviewed: 2026-10-28
 module: checkout
 entity: payment
 relationships: [market]

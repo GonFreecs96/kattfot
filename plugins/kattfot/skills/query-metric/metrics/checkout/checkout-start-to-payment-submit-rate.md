@@ -2,6 +2,8 @@
 name: checkout_start_to_payment_submit_rate
 display_name: Checkout Start to Payment Submit rate
 owner: checkout-pm
+version: 1
+last_reviewed: 2026-10-28
 module: checkout
 entity: checkout_session
 relationships: [payment]

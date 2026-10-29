@@ -8,7 +8,7 @@ addresses were not. This script is the mechanical check that they stay out:
 it walks every tracked file, matches a deny list case-insensitively, prints
 each hit as `path:line:token`, and exits non-zero if there is even one.
 
-Run it before every commit, and wire it into CI once there is a workflow:
+Run it before every commit; `.github/workflows/tests.yml` runs it on every push too:
 
     python3 scripts/scrub_check.py          # report hits, exit 1 if any
     python3 scripts/scrub_check.py --quiet  # exit code only

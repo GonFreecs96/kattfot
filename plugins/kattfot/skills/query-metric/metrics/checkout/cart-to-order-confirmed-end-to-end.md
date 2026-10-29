@@ -2,6 +2,8 @@
 name: cart_to_order_confirmed_end_to_end
 display_name: Cart to Order Confirmed conversion (end to end)
 owner: analytics-owner
+version: 1
+last_reviewed: 2026-10-28
 module: checkout
 entity: checkout_session
 relationships: [order, payment]

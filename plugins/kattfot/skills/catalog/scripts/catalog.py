@@ -26,18 +26,30 @@ provisioned — is listed with `queryable: false` and its reason. Listing it as
 available would be the catalog's version of the false promise the module registry
 exists to prevent; hiding it would lose the fact that the contract is fixed.
 
+Freshness
+---------
+Every ratio metric carries `version:` and `last_reviewed:` (the catalog linter
+requires both). The listing compares `last_reviewed` against a review window and
+reports `freshness: fresh | stale`, so an overdue definition is visibly overdue
+wherever it is listed — the `STALE:` marker `doctrine/ownership-governance.md`
+describes. A missing or unparseable date counts as stale on purpose: a freshness
+signal that silently fails to fire reads as "fresh".
+
 Never queries anything. Pure file reads, so it works with no credentials and no
 network.
 
 Usage:
     python3 catalog.py                    # JSON
     python3 catalog.py --format markdown  # the tables the skill presents
+    python3 catalog.py --today 2026-08-17 # pin the clock the freshness check uses
 """
 
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -53,6 +65,52 @@ except ImportError:
     sys.exit(3)
 
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n(.*)", re.DOTALL)
+
+#: Days since `last_reviewed` before a definition lists as stale. The doctrine's
+#: cadence table runs from "each release" to "annually"; half a year is the
+#: template default, overridable per deployment with KATTFOT_REVIEW_WINDOW_DAYS.
+#: Distinct from load-context's `STALE:` line, which keys on file mtime.
+DEFAULT_REVIEW_WINDOW_DAYS = 180
+
+
+def review_window_days() -> int:
+    raw = os.environ.get("KATTFOT_REVIEW_WINDOW_DAYS")
+    if not raw:
+        return DEFAULT_REVIEW_WINDOW_DAYS
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return DEFAULT_REVIEW_WINDOW_DAYS
+
+
+def parse_review_date(value) -> dt.date | None:
+    """`last_reviewed` as a date, or None when absent or unparseable. YAML hands
+    an unquoted `2026-10-28` over as a date already; a quoted one is a string."""
+    if isinstance(value, dt.datetime):
+        return value.date()
+    if isinstance(value, dt.date):
+        return value
+    if value is None:
+        return None
+    try:
+        return dt.date.fromisoformat(str(value).strip())
+    except ValueError:
+        return None
+
+
+def freshness(last_reviewed, today: dt.date | None = None,
+              window_days: int | None = None) -> str:
+    """`fresh` when `last_reviewed` is within the window of `today`, else `stale`.
+
+    Missing and unparseable dates are `stale`, never `fresh`: the doctrine's one
+    warning about this signal is that a failure to fire reads as fresh.
+    """
+    today = today or dt.date.today()
+    window = review_window_days() if window_days is None else window_days
+    reviewed = parse_review_date(last_reviewed)
+    if reviewed is None:
+        return "stale"
+    return "fresh" if (today - reviewed).days <= window else "stale"
 
 
 def _plugin_root() -> Path:
@@ -83,7 +141,7 @@ def first_definition_line(body: str) -> str:
     return ""
 
 
-def scan_metrics() -> list:
+def scan_metrics(today: dt.date | None = None) -> list:
     """Every registered ratio metric, consumer overriding bundled on `name:`.
 
     Files with no `name:` (a `LINEAGE.md`) are documentation and are skipped —
@@ -105,6 +163,7 @@ def scan_metrics() -> list:
             name = fm.get("name")
             if not name or name in seen:
                 continue  # first root wins: the consumer override
+            reviewed = parse_review_date(fm.get("last_reviewed"))
             seen[name] = {
                 "name": name,
                 "display_name": fm.get("display_name", name),
@@ -116,6 +175,9 @@ def scan_metrics() -> list:
                 "value_format": fm.get("value_format"),
                 "maturity_stage": fm.get("maturity_stage"),
                 "owner": fm.get("owner"),
+                "version": fm.get("version"),
+                "last_reviewed": reviewed.isoformat() if reviewed else None,
+                "freshness": freshness(reviewed, today=today),
                 "served_by": "kattfot:query-metric",
                 "path": str(path.relative_to(_plugin_root().parent.parent))
                 if str(path).startswith(str(_plugin_root().parent.parent)) else str(path),
@@ -182,9 +244,9 @@ def scan_spines(registry: dict) -> list:
     return out
 
 
-def build(registry: dict | None = None) -> dict:
+def build(registry: dict | None = None, today: dt.date | None = None) -> dict:
     registry = registry if registry is not None else spine.load_registry()
-    metrics = scan_metrics()
+    metrics = scan_metrics(today=today)
     kpis = scan_kpis(registry)
     by_module: dict = {}
     for m in metrics:
@@ -192,6 +254,8 @@ def build(registry: dict | None = None) -> dict:
     return {
         "skill": "catalog",
         "metric_count": len(metrics),
+        "stale_count": sum(1 for m in metrics if m["freshness"] == "stale"),
+        "review_window_days": review_window_days(),
         "kpi_count": len(kpis),
         "metrics_by_module": by_module,
         "metrics": metrics,
@@ -206,28 +270,45 @@ def build(registry: dict | None = None) -> dict:
             "Listing a metric is not a claim about the number: the tier, the "
             "caveats, and the maturity cutoff travel with the result, not with the "
             "catalog entry.",
+            f"freshness is `stale` when last_reviewed is more than "
+            f"{review_window_days()} days old (KATTFOT_REVIEW_WINDOW_DAYS) or "
+            "missing; a stale definition still serves — the marker is a review "
+            "prompt for its owner, not a refusal.",
         ],
     }
 
 
+def reviewed_cell(m: dict) -> str:
+    """The freshness column: the review date when fresh, the doctrine's `STALE:`
+    marker — naming the date and the owner — when not."""
+    if m.get("freshness") == "fresh":
+        return f"fresh ({m['last_reviewed']})"
+    when = f"last reviewed {m['last_reviewed']}" if m.get("last_reviewed") else "never reviewed"
+    owner = f", owner: {m['owner']}" if m.get("owner") else ""
+    return f"STALE: {when}{owner}"
+
+
 def render_markdown(cat: dict) -> str:
+    stale = f" · {cat['stale_count']} stale" if cat.get("stale_count") else ""
     lines = [
         "# kattfot catalog",
         "",
-        f"{cat['metric_count']} governed ratio metrics · {cat['kpi_count']} latency KPIs",
+        f"{cat['metric_count']} governed ratio metrics{stale} · {cat['kpi_count']} latency KPIs",
         "",
         "## Ratio metrics (`kattfot:query-metric`)",
         "",
     ]
     for module in sorted(cat["metrics_by_module"]):
-        lines += [f"### {module}", "", "| Metric | What it measures | Tier | Status |",
-                  "|---|---|---|---|"]
+        lines += [f"### {module}", "",
+                  "| Metric | What it measures | Tier | Status | v | Reviewed |",
+                  "|---|---|---|---|---|---|"]
         for m in cat["metrics"]:
             if (m.get("module") or "(unassigned)") != module:
                 continue
             lines.append(
                 f"| {m['display_name']} (`{m['name']}`) | {m['definition']} | "
-                f"{m['accuracy_tier']} | {m['status']} |"
+                f"{m['accuracy_tier']} | {m['status']} | {m.get('version') or '—'} | "
+                f"{reviewed_cell(m)} |"
             )
         lines.append("")
     if cat["latency_kpis"]:
@@ -258,8 +339,10 @@ def render_markdown(cat: dict) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--format", default="json", choices=["json", "markdown"])
+    ap.add_argument("--today", default=None, type=dt.date.fromisoformat,
+                    help="YYYY-MM-DD; pins the clock the freshness check uses")
     args = ap.parse_args()
-    cat = build()
+    cat = build(today=args.today)
     if args.format == "markdown":
         sys.stdout.write(render_markdown(cat))
     else:

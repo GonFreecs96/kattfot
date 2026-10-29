@@ -50,7 +50,12 @@ is disagree with the runtime about what is registered.
 ## What the output contains
 
 - `metrics[]` — name, display name, the first line of the metric's own
-  `## Definition`, tier, module, entity, status, owner.
+  `## Definition`, tier, module, entity, status, owner, `version`, `last_reviewed`,
+  and `freshness` (`fresh` or `stale` against the review window — 180 days by
+  default, `KATTFOT_REVIEW_WINDOW_DAYS`; `--today YYYY-MM-DD` pins the clock).
+  The markdown table renders a stale metric as `STALE: last reviewed {date},
+  owner: {owner}`; carry that marker through, it is the owner's review prompt.
+  Stale is not refused — the number still serves.
 - `latency_kpis[]` — key, display name, transition, percentiles, tier, and
   `queryable` plus `not_queryable_because`.
 - `spines[]` — each registered module/spine, its grain, its `status`, the
@@ -71,7 +76,8 @@ a `declared` spine's skills as available.
 ## Present it
 
 Lead with a one-line count ("15 governed ratio metrics, 3 latency KPIs, 2
-spines"), then the tables the helper renders, grouped by module. Close with how to
+spines" — and "n stale" whenever the helper reports any), then the tables the
+helper renders, grouped by module. Close with how to
 use them:
 
 - **Run a ratio metric:** `kattfot:query-metric <plain-English question>` — e.g.

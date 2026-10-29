@@ -27,8 +27,9 @@ a team can adjust one metric without forking the catalog.
 ## Required frontmatter
 
 Every field below is checked by the catalog linter. A missing one fails
-`pytest` (`tests/test_metric_catalog.py`) — there is no CI here, so run it
-yourself before you commit.
+`pytest` (`tests/test_metric_catalog.py`), locally and in CI
+(`.github/workflows/tests.yml`) — run it before you commit rather than after CI
+tells you.
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -47,6 +48,8 @@ yourself before you commit.
 | `status` | `live` \| `dummy` \| `deprecated` | `dummy` routes to the CSV-stub oracle. |
 | `entity` | slug | The registered entity the numerator and denominator measure. |
 | `module` | slug | Must match the containing directory and a module in `config/modules.yaml`. |
+| `version` | int ≥ 1 | Definition version. Bump it when the *meaning* changes (numerator, denominator, grain, a caveat that changes how the number reads); a wording fix does not. |
+| `last_reviewed` | `YYYY-MM-DD` | When the owner last confirmed the definition still holds. The catalog lists the metric as `stale` once this is older than the review window (180 days by default; `KATTFOT_REVIEW_WINDOW_DAYS`). See `doctrine/ownership-governance.md`. |
 
 ### Optional but usually worth setting
 

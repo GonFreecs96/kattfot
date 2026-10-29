@@ -2,6 +2,8 @@
 name: fraud_check_failure_rate
 display_name: Fraud / identity check failure rate
 owner: payments-pm
+version: 1
+last_reviewed: 2026-10-28
 module: checkout
 entity: payment
 relationships: [channel]

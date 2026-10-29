@@ -11,6 +11,7 @@ mirroring exactly what the runtime resolver does, so the linter cannot hold a fi
 to a contract the resolver never applies to it.
 """
 
+import datetime as dt
 from pathlib import Path
 
 import pytest
@@ -41,6 +42,8 @@ REQUIRED_FIELDS = [
     "status",
     "entity",     # every metric names the entity its num/den measures
     "module",     # and the module it belongs to
+    "version",       # definition version — bump when the number's meaning changes
+    "last_reviewed", # ISO date the owner last confirmed the definition still holds
 ]
 VALID_TIERS = {"T1", "T2", "T3"}
 SERVED_TIER = "T2"  # the only tier the runtime serves; T1/T3 refuse under R4
@@ -183,6 +186,25 @@ def test_metric_declares_a_maturity_gate(path, fm):
         f"{path.name}: no maturity_stage or maturity_lag_days — the metric would "
         f"never withhold an unsettled cohort"
     )
+
+
+@pytest.mark.parametrize("path,fm", METRICS, ids=_IDS)
+def test_metric_is_versioned_and_reviewed(path, fm):
+    """`version` is an integer >= 1 (not a bool, not a string) and `last_reviewed` an
+    ISO date. Both feed the catalog's freshness signal (doctrine/ownership-governance.md),
+    and a freshness signal that cannot parse its own inputs reads as "fresh" — the one
+    failure that doctrine says is worse than having no signal at all."""
+    v = fm.get("version")
+    assert isinstance(v, int) and not isinstance(v, bool) and v >= 1, (
+        f"{path.name}: version must be an integer >= 1, got {v!r}"
+    )
+    lr = fm.get("last_reviewed")
+    if not isinstance(lr, dt.date):
+        try:
+            lr = dt.date.fromisoformat(str(lr))
+        except ValueError:
+            pytest.fail(f"{path.name}: last_reviewed must be an ISO date (YYYY-MM-DD), got {lr!r}")
+    assert lr <= dt.date.today(), f"{path.name}: last_reviewed {lr} is in the future"
 
 
 @pytest.mark.parametrize("path,fm", METRICS, ids=_IDS)
