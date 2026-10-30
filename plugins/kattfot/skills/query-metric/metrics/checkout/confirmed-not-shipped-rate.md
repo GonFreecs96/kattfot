@@ -19,6 +19,7 @@ denominator_column: orders_confirmed
 maturity_stage: shipped
 value_format: percent
 column_label: Confirmed not Shipped
+aliases: [confirmed not shipped, out of stock leak, out of stock leak rate, confirmed but never shipped, unshipped order rate]
 allowed_dimensions: [channel, payment_method, market, category, checkout_version]
 allowed_filters: [cohort_week, channel, payment_method, market, category, checkout_version]
 default_lookback_weeks: 20

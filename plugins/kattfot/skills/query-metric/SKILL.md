@@ -121,7 +121,13 @@ of the refusal rules R1–R6 and the tier definitions.
 ### Step 1 — Identify the metric
 
 List metric files in both locations, merge with consumer-wins precedence on `name:`.
-Match the question against each metric's `name` and `display_name`.
+Match the question against each metric's `name`, `display_name` and `aliases`
+(the phrasings a user actually types; `AUTHORING.md`).
+`scripts/resolve_question.py "<question>"` is a deterministic pre-pass over
+those same three fields — alias and keyword matching, not an LLM — that prints
+the request it would hand the helper (metric, dimensions, filters, time range)
+or the refusal the helper gives. Its behaviour is pinned by name in the golden
+question suite (`tests/golden/questions.yaml`).
 
 If both locations are empty, say so and point at
 `$AQM_ROOT/templates/example-metric.md` and `$AQM_ROOT/AUTHORING.md`.

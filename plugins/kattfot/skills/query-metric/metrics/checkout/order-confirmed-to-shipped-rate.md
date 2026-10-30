@@ -19,6 +19,7 @@ denominator_column: orders_confirmed
 maturity_stage: shipped
 value_format: percent
 column_label: Confirmed → Shipped
+aliases: [confirmed to shipped rate, confirmed to shipped, order to shipped rate, confirmed orders shipped, shipping rate of confirmed orders]
 allowed_dimensions: [channel, payment_method, market, category, checkout_version]
 allowed_filters: [cohort_week, channel, payment_method, market, category, checkout_version]
 default_lookback_weeks: 20

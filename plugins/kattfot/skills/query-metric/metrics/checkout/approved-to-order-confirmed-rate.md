@@ -19,6 +19,7 @@ denominator_column: payments_approved
 maturity_stage: order_confirmed
 value_format: percent
 column_label: Approved → Confirmed
+aliases: [approved to confirmed rate, approved to order confirmed, approval to confirmation rate, approved payments that confirmed, confirmation rate after approval]
 allowed_dimensions: [channel, payment_method, market, category, checkout_version]
 allowed_filters: [cohort_week, channel, payment_method, market, category, checkout_version]
 default_lookback_weeks: 20

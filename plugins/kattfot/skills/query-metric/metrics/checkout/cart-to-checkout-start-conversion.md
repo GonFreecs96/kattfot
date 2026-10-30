@@ -19,6 +19,7 @@ denominator_column: carts_created
 maturity_stage: checkout_started
 value_format: percent
 column_label: Cart → Checkout
+aliases: [cart to checkout conversion, cart to checkout start, checkout start rate, carts that started checkout, cart to checkout]
 allowed_dimensions: [channel, payment_method, market, category, checkout_version]
 allowed_filters: [cohort_week, channel, payment_method, market, category, checkout_version]
 default_lookback_weeks: 20

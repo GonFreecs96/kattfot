@@ -19,6 +19,7 @@ denominator_column: payments_submitted
 maturity_stage: fraud_fail
 value_format: percent
 column_label: Fraud Fail Rate
+aliases: [fraud check failure rate, fraud failure rate, fraud fail rate, identity check failure rate, fraud check failures]
 allowed_dimensions: [channel, payment_method, market, category, checkout_version]
 allowed_filters: [cohort_week, channel, payment_method, market, category, checkout_version]
 default_lookback_weeks: 20

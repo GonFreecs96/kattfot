@@ -19,6 +19,7 @@ denominator_column: checkouts_started
 maturity_stage: payment_submitted
 value_format: percent
 column_label: Checkout → Payment
+aliases: [checkout to payment rate, checkout to payment submit, checkout start to payment, payment submit rate, checkout to payment conversion]
 allowed_dimensions: [channel, payment_method, market, category, checkout_version]
 allowed_filters: [cohort_week, channel, payment_method, market, category, checkout_version]
 default_lookback_weeks: 20
