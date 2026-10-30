@@ -1,0 +1,386 @@
+# Golden questions — the per-case regression gate for query-metric's resolution path.
+#
+# Each case is one question a user would ask, in two to four phrasings, with ONE
+# pinned expectation: either the governed request it must become (metric,
+# dimensions, filters, optionally time_range) or the refusal rule that must fire.
+# `tests/test_golden_questions.py` turns every (case, phrasing) pair into its own
+# test, so a single regression fails by name. There is no pass rate.
+#
+# Hold-out: the resolver (`query-metric/scripts/resolve_question.py`) receives the
+# phrasing and nothing else. `expect` is compared against what comes back; it is
+# never an input.
+#
+# `kind` is the capability / regression split:
+#   capability — the system answers the governed question it was asked
+#   regression — the system keeps refusing what it must refuse (and names why)
+# Both gate. `pytest -m regression` runs only the guards.
+#
+# Expectations are pinned by hand, not computed. A case that stops passing is a
+# behaviour change to review, not a number to re-record — see CONTRIBUTING.md,
+# "Adding a golden question".
+
+cases:
+
+  # --- capability: every bundled metric resolves at least once ----------------
+
+  - id: approval-rate-uk-last-12-weeks
+    kind: capability
+    rationale: Filter value and window both come out of prose; the UK is a market, not a dimension.
+    phrasings:
+      - "Payment approval rate in the UK over the last 12 weeks"
+      - "What's the approval rate for the UK market in the last 12 weeks?"
+      - "Last 12 weeks approval rate, United Kingdom only"
+    expect:
+      metric: payment_approval_rate
+      dimensions: []
+      filters: {market: uk}
+      time_range: last_12_weeks
+
+  - id: approval-rate-by-market-bank-transfers
+    kind: capability
+    rationale: A dimension and a filter on different columns in one ask; "bank transfer" binds to the review-queue value.
+    phrasings:
+      - "Payment approval rate for bank transfers by market"
+      - "Approval rate split by market for bank transfer payments"
+      - "By market, what is the approval rate on bank transfers?"
+    expect:
+      metric: payment_approval_rate
+      dimensions: [market]
+      filters: {payment_method: bank_transfer_review}
+
+  - id: decline-rate-by-channel
+    kind: capability
+    rationale: Decline and approval share a denominator and must never be confused; the alias layer keeps them apart.
+    phrasings:
+      - "Payment decline rate by channel"
+      - "Decline rate split by channel"
+      - "Share of payments declined, broken down by channel"
+    expect:
+      metric: payment_decline_rate
+      dimensions: [channel]
+      filters: {}
+
+  - id: decline-rate-explicit-date-range
+    kind: capability
+    rationale: An explicit window maps to the helper's START:END form rather than a lookback.
+    phrasings:
+      - "Payment decline rate from 2026-06-01 to 2026-08-31"
+      - "Decline rate between 2026-06-01 and 2026-08-31"
+    expect:
+      metric: payment_decline_rate
+      dimensions: []
+      filters: {}
+      time_range: "2026-06-01:2026-08-31"
+
+  - id: submit-to-decision-cards
+    kind: capability
+    rationale: Submit-to-decision is the review-queue metric, distinct from approval; "cards" binds to card_instant.
+    phrasings:
+      - "Payment submit to decision rate for cards"
+      - "Submit to decision rate on card payments"
+      - "For card payments, what's the payment decision rate?"
+    expect:
+      metric: payment_submit_to_decision_rate
+      dimensions: []
+      filters: {payment_method: card_instant}
+
+  - id: fraud-failure-by-payment-method-and-market
+    kind: capability
+    rationale: Two dimensions joined by "and"; "payment method" is a two-word column.
+    phrasings:
+      - "Fraud check failure rate by payment method and market"
+      - "Fraud failure rate split by payment method and market"
+      - "Identity check failure rate per payment method and market"
+    expect:
+      metric: fraud_check_failure_rate
+      dimensions: [payment_method, market]
+      filters: {}
+
+  - id: cart-to-checkout-by-channel
+    kind: capability
+    rationale: The SKILL.md example phrasing; "by week" is the grain, not a dimension, so it must not refuse R2 on `week`.
+    phrasings:
+      - "Cart to checkout conversion by week for the last 12 weeks, split by channel."
+      - "Cart to checkout start conversion rate by channel"
+      - "What's the cart to checkout conversion, split by channel?"
+    expect:
+      metric: cart_to_checkout_start_conversion
+      dimensions: [channel]
+      filters: {}
+
+  - id: cart-to-order-end-to-end-mobile-app
+    kind: capability
+    rationale: The end-to-end metric, not the first stage, when the user says "overall" or "end to end"; "the app" is a channel value.
+    phrasings:
+      - "Cart to order conversion in the mobile app"
+      - "End to end conversion for the app"
+      - "Overall checkout conversion on the mobile app"
+    expect:
+      metric: cart_to_order_confirmed_end_to_end
+      dimensions: []
+      filters: {channel: mobile_app}
+
+  - id: cart-to-settled-electronics
+    kind: capability
+    rationale: Settled is the return-window-complete reading, the deepest end-to-end stage.
+    phrasings:
+      - "Cart to settled conversion for electronics"
+      - "Settled conversion in electronics"
+      - "Cart to return window complete rate for electronics"
+    expect:
+      metric: cart_to_return_window_complete_end_to_end
+      dimensions: []
+      filters: {category: electronics}
+
+  - id: abandonment-by-category
+    kind: capability
+    rationale: Abandonment and stale are the same registered metric; both must land on it.
+    phrasings:
+      - "Cart abandonment rate by category"
+      - "Stale cart rate split by category"
+      - "Abandonment rate per product category"
+    expect:
+      metric: cart_to_stale_rate
+      dimensions: [category]
+      filters: {}
+
+  - id: checkout-to-payment-v2
+    kind: capability
+    rationale: New checkout and v2 both bind to the v2 checkout_version value.
+    phrasings:
+      - "Checkout to payment rate on the new checkout"
+      - "Checkout start to payment submit rate for v2"
+      - "Payment submit rate for the v2 checkout"
+    expect:
+      metric: checkout_start_to_payment_submit_rate
+      dimensions: []
+      filters: {checkout_version: v2}
+
+  - id: approved-to-confirmed-by-checkout-version
+    kind: capability
+    rationale: Approved→confirmed is its own stage, not approval and not cart→order.
+    phrasings:
+      - "Approved to confirmed rate by checkout version"
+      - "Approved payment to order confirmed rate, split by checkout version"
+      - "Confirmation rate after approval per checkout version"
+    expect:
+      metric: approved_to_order_confirmed_rate
+      dimensions: [checkout_version]
+      filters: {}
+
+  - id: confirmed-not-shipped-home
+    kind: capability
+    rationale: The out-of-stock leak has a plain-English name people actually use.
+    phrasings:
+      - "Confirmed not shipped rate for home goods"
+      - "Out of stock leak rate in home goods"
+      - "Confirmed but never shipped, home goods"
+    expect:
+      metric: confirmed_not_shipped_rate
+      dimensions: []
+      filters: {category: home}
+
+  - id: confirmed-to-shipped-by-market
+    kind: capability
+    rationale: Across markets is a dimension phrase; the plural must map to the column.
+    phrasings:
+      - "Order confirmed to shipped rate by market"
+      - "Confirmed to shipped rate across markets"
+      - "Confirmed orders shipped, per market"
+    expect:
+      metric: order_confirmed_to_shipped_rate
+      dimensions: [market]
+      filters: {}
+
+  - id: shipped-to-delivered-canada
+    kind: capability
+    rationale: Delivery rate reads as shipped→delivered; Canada binds to the ca market value.
+    phrasings:
+      - "Shipped to delivered rate in Canada"
+      - "Delivery rate for the Canadian market"
+      - "Delivery success rate, Canada"
+    expect:
+      metric: shipped_to_delivered_rate
+      dimensions: []
+      filters: {market: ca}
+
+  - id: return-rate-apparel-by-channel
+    kind: capability
+    rationale: Return rate is delivered→returned, not return-window-complete; "clothing" is the apparel category.
+    phrasings:
+      - "Return rate for apparel by channel"
+      - "Share of deliveries returned in clothing, split by channel"
+      - "Apparel return rate per channel"
+    expect:
+      metric: delivered_to_returned_rate
+      dimensions: [channel]
+      filters: {category: apparel}
+
+  - id: delivered-to-kept-wallets
+    kind: capability
+    rationale: Kept is the return-window-complete reading on delivered orders.
+    phrasings:
+      - "Delivered to kept rate for wallets"
+      - "Return window completion rate on wallet payments"
+      - "Kept rate for wallets"
+    expect:
+      metric: delivered_to_return_window_complete_rate
+      dimensions: []
+      filters: {payment_method: wallet}
+
+  # --- regression: R1 ----------------------------------------------------------
+
+  - id: r1-out-of-domain
+    kind: regression
+    rationale: Nothing registered is close; the refusal must be R1 with no metric chosen, even when a valid dimension is attached.
+    phrasings:
+      - "What's our revenue per visitor?"
+      - "How many employees do we have?"
+      - "What's the weather like in Stockholm this week?"
+      - "Customer lifetime value by channel"
+    expect:
+      refusal: R1
+
+  - id: r1-typo-did-you-mean
+    kind: regression
+    rationale: A typo refuses (R1 stays a refusal) and names the right metric; it is never silently accepted.
+    phrasings:
+      - "payment aproval rate"
+      - "payment aprroval rate by market"
+      - "payment approvl rate"
+    expect:
+      refusal: R1
+      suggests: [payment_approval_rate]
+
+  # --- regression: R1-AMBIGUOUS -------------------------------------------------
+
+  - id: r1-ambiguous-payment
+    kind: regression
+    rationale: A generic term reads as several metrics with different denominators; every reading is named, none chosen.
+    phrasings:
+      - "What's the payment rate?"
+      - "How is payment looking?"
+      - "Show me payment by channel"
+    expect:
+      refusal: R1-AMBIGUOUS
+      candidates: [payment_approval_rate, payment_decline_rate]
+
+  - id: r1-ambiguous-funnel-stage
+    kind: regression
+    rationale: A bare stage name is a substring of several registered metrics; a near-tie never gets a did-you-mean.
+    phrasings:
+      - "What's the shipped rate?"
+      - "Confirmed rate by market"
+    expect:
+      refusal: R1-AMBIGUOUS
+
+  # --- regression: R2 ----------------------------------------------------------
+
+  - id: r2-unlisted-dimension
+    kind: regression
+    rationale: A dimension outside allowed_dimensions refuses with the allow-list; `postal_code` is safe-listed geography, so R6 must not fire and R2 must.
+    phrasings:
+      - "Payment approval rate by device type"
+      - "Cart to checkout conversion by country"
+      - "Return rate by postal code"
+    expect:
+      refusal: R2
+
+  - id: r2-abandonment-unlisted-dimension
+    kind: regression
+    rationale: The same guard on a different metric; a multi-word unknown dimension slugs as typed.
+    phrasings:
+      - "Cart abandonment rate by day of week"
+      - "Stale rate per sku"
+      - "Abandonment rate split by coupon"
+    expect:
+      refusal: R2
+
+  # --- regression: R3 ----------------------------------------------------------
+
+  - id: r3-unlisted-filter
+    kind: regression
+    rationale: A filter column outside allowed_filters refuses even though the value would bind safely.
+    phrasings:
+      - "Payment approval rate where loyalty_tier = gold"
+      - "Decline rate filtered to coupon_code = summer10"
+      - "Return rate where carrier = express"
+    expect:
+      refusal: R3
+
+  - id: r3-unlisted-filter-funnel
+    kind: regression
+    rationale: The same guard across early-funnel and fulfilment metrics.
+    phrasings:
+      - "Cart to checkout conversion where device = tablet"
+      - "Fraud failure rate restricted to risk_score = high"
+      - "Delivery rate where warehouse = north"
+    expect:
+      refusal: R3
+
+  # --- regression: R4 (should not answer: wrong tier) ---------------------------
+
+  - id: r4-t1-system-of-record
+    kind: regression
+    rationale: A regulator-grade metric resolves to a real definition and is still refused; T1 comes from the system of record.
+    phrasings:
+      - "What's the recognised revenue this quarter?"
+      - "Booked revenue by market"
+      - "Reported revenue for the UK"
+    expect:
+      refusal: R4
+
+  - id: r4-t3-exploratory-draft
+    kind: regression
+    rationale: A promote draft is inert until review edits the tier; the governed path refers to the exploratory lane instead of serving it.
+    phrasings:
+      - "Coupon redemption rate by channel"
+      - "What's the redemption rate?"
+      - "Coupons redeemed in the app"
+    expect:
+      refusal: R4
+
+  # --- regression: R5 (should not answer: individual-level) ---------------------
+
+  - id: r5-individual-rows
+    kind: regression
+    rationale: Row-level asks are refused before any metric lookup, even with a valid metric and filter alongside.
+    phrasings:
+      - "Show me each order that was declined"
+      - "List the orders from the UK last week"
+      - "Approval rate by order id"
+    expect:
+      refusal: R5
+
+  - id: r5-who-and-which
+    kind: regression
+    rationale: Which-customers and per-session asks are individual-level however the metric is phrased.
+    phrasings:
+      - "Which customers abandoned their cart?"
+      - "Per session, did the payment get approved?"
+      - "Give me a row level dump of shipments"
+    expect:
+      refusal: R5
+
+  # --- regression: R6 (should not answer: PII) ----------------------------------
+
+  - id: r6-pii-dimension
+    kind: regression
+    rationale: A personal column as a dimension is a hard refusal, and it outranks R2 when both apply.
+    phrasings:
+      - "Payment approval rate by customer email"
+      - "Decline rate split by cardholder name"
+      - "Return rate by shipping address"
+      - "Approval rate by customer email and device type"
+    expect:
+      refusal: R6
+
+  - id: r6-pii-filter
+    kind: regression
+    rationale: The same denylist on the filter path; a bound value does not make a personal column acceptable.
+    phrasings:
+      - "Approval rate where customer_phone = 5551234"
+      - "Stale rate filtered to date_of_birth = 1990-01-01"
+      - "Delivery rate where recipient_name = someone"
+    expect:
+      refusal: R6
