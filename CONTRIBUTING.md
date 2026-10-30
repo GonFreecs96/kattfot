@@ -178,6 +178,35 @@ For a whole new business domain rather than one metric, see
 full checklist in
 `plugins/kattfot/skills/query-metric/templates/MODULE-ONBOARDING.md`.
 
+## Adding a golden question
+
+`tests/golden/questions.yaml` is the regression gate for the resolution path:
+each case is one question in two to four phrasings with one pinned
+expectation — the governed request it must become (`metric`, `dimensions`,
+`filters`, optionally `time_range`) or the refusal rule that must fire (`R1`,
+`R1-AMBIGUOUS`, `R2`–`R6`). `tests/test_golden_questions.py` makes every
+(case, phrasing) pair its own test, so a regression fails by name. There is
+no pass rate to hide behind.
+
+1. Add a case with a unique `id`, a `kind` (`capability` — it answers the
+   governed question; `regression` — it keeps refusing what it must), a
+   one-line `rationale`, and the phrasings a real user would type.
+2. Pin `expect` by hand. Decide what the system *should* do first, then run
+   `python3 plugins/kattfot/skills/query-metric/scripts/resolve_question.py "<phrasing>"`
+   to see what it does. If they disagree, that is a finding: fix the alias or
+   the vocabulary, not the expectation.
+3. If a phrasing names the metric a new way, add it to that metric's
+   `aliases:` frontmatter (see `AUTHORING.md`), not to the resolver. Never
+   add a single generic word another metric could claim — that is what
+   `R1-AMBIGUOUS` is for.
+4. Run `pytest tests/test_golden_questions.py`. Structural tests there require
+   every bundled metric to have a capability case and every refusal rule at
+   least two cases, so a new metric without a golden question fails by name.
+
+The resolver is deterministic alias and keyword matching, not an LLM. The
+expectation is never an input to it: the test passes the phrasing alone and
+compares what comes back. `pytest -m regression` runs only the refusal guards.
+
 ## Documentation ownership
 
 `README.md`, `CONTRIBUTING.md`, and everything under `docs/` are written to be

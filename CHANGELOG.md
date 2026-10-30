@@ -22,6 +22,17 @@ Branch `tier-0-research-pass`.
 - `R1-AMBIGUOUS` is documented in `query-metric/SKILL.md` (trigger, exit code, what
   the user sees) and in the refusal table of `doctrine/accuracy-tiers.md`. The code
   has refused near-tie metric names since the research pass; the prose did not say so.
+- Golden-question regression gate (Tier 1 item A): `tests/golden/questions.yaml` —
+  31 cases, 93 phrasings, every bundled metric at least once, every refusal rule
+  (R1, R1-AMBIGUOUS, R2–R6) at least twice, with explicit should-not-answer cases
+  (T1, T3, out-of-domain, individual-level, PII). `tests/test_golden_questions.py`
+  runs one test per (case, phrasing) — no pass rate — plus structural tests that
+  fail by name when a metric lacks a case. Expectations are pinned by hand and
+  never passed to the resolver. `query-metric/scripts/resolve_question.py` is the
+  thin deterministic layer it drives (alias / keyword matching over `name`,
+  `display_name` and the new per-metric `aliases:` frontmatter, then the helper's
+  own `load_metric` / `validate_tier` / `validate_request`); not an LLM, and it
+  queries nothing. `pytest -m regression` runs only the refusal guards.
 
 ### Changed
 - The PreToolUse access-path hook declares `onFailure: block`, and both hook adapters

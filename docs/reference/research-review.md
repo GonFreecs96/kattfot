@@ -206,6 +206,7 @@ is the *baseline* method the nowcasting community measures newer models against.
 | Self-scoring backtest (empirical vs nominal coverage) | Wolffram et al. 2023 | `funnel_nowcast.py --backtest` |
 | Ambiguity refusal (name every reading, never top-1) | AmbiQT (EMNLP 2023); DTE (ACL 2023) | `kattfot_query.py` R1-AMBIGUOUS |
 | Indirect-injection adversarial suite | Greshake 2023; CaMeL 2025; Willison | `tests/test_adversarial_injection.py` |
+| Golden-question regression gate: per-case (no pass rate), 2–4 phrasings, explicit should-not-answer cases, pinned expectations, expectation held out of the resolver | Minerva; dbt-llm-sl-bench | `tests/golden/questions.yaml`, `tests/test_golden_questions.py`, `query-metric/scripts/resolve_question.py` |
 
 **Deliberately roadmap, not built** — deployment infrastructure a template
 cannot honestly ship, each with its literature anchor:
@@ -227,8 +228,11 @@ cannot honestly ship, each with its literature anchor:
   SQL against fixtures (test-suite verification as a practice; no single paper
   argues it),
   additivity typing (Lenz & Shoshani 1997), a conformed-dimension registry,
-  usage-based deprecation, and a golden-question regression suite
-  (Minerva; dbt-llm-sl-bench).
+  and usage-based deprecation. The golden-question regression suite this
+  list used to end with is built (table above); what it deliberately does
+  not do is score an LLM — the resolver under test is deterministic alias
+  matching, so the gate pins the catalog, the refusal thresholds and the
+  vocabulary, not a model.
 
 ---
 
