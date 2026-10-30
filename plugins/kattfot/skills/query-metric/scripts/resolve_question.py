@@ -58,10 +58,11 @@ a an and are as at be been being by can could did do does for from give got has 
 how i in is it its just last let me my of on or our over please s show tell that the
 their there these this those to us was we week weekly weeks were what whats when
 where which who will with would you your trend trending looking like currently
-right now lately recent recently rate rates of
+right now lately recent recently of
 """.split())
-# `rate` is a stopword on purpose: every registered name ends in it, so it adds
-# nothing to a fuzzy miss and would pull every miss toward a tie.
+# `rate` is deliberately NOT a stopword: the helper's ambiguity guard already
+# ignores catalog-common tokens (`kattfot_query.catalog_common_tokens`), so the
+# phrase reaches it whole and the R1 path decides, not this list.
 
 #: Words that name the time grain, not a dimension. "by week" is how the agent's
 #: own examples phrase the cohort grain; it must not become an R2 on `week`.

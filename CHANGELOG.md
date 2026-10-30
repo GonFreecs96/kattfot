@@ -35,6 +35,13 @@ Branch `tier-0-research-pass`.
   queries nothing. `pytest -m regression` runs only the refusal guards.
 
 ### Changed
+- `R1-AMBIGUOUS` scores a miss on the distinctive part of each name, ignoring tokens
+  common to most of the catalog (`rate`, `to`; `catalog_common_tokens`, at least half
+  the names and at least three). Found by the golden suite: `aproval_rate` refused as a
+  near-tie between `payment_approval_rate` and an unrelated `cart_to_stale_rate` on the
+  strength of `_rate` alone. It now gets the plain did-you-mean; generic terms
+  (`payment_rate`) still refuse and now name every reading, not the two that tied on
+  characters.
 - The PreToolUse access-path hook declares `onFailure: block`, and both hook adapters
   (Claude Code, Cursor) deny when the matcher itself raises — a timeout or internal
   error now blocks the Bash call instead of counting as no decision.

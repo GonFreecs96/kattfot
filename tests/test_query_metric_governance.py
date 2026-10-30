@@ -172,6 +172,47 @@ def test_a_clear_winner_is_not_ambiguous():
     assert aq.ambiguous_candidates("payment_approval_rte", available) == []
 
 
+def test_catalog_common_tokens_on_the_bundled_catalog():
+    """`rate` and `to` are house style, not meaning; `payment` (4 of 15) is
+    meaning. A two-name catalog has no common tokens at all — otherwise its
+    whole vocabulary would be 'common' and nothing would be left to score."""
+    bundled = aq.available_metric_names(aq.bundled_metrics_dir())
+    assert aq.catalog_common_tokens(bundled) == {"rate", "to"}
+    assert aq.catalog_common_tokens(["gross_revenue_rate", "gross_revenue_rank"]) == set()
+    assert aq.catalog_common_tokens([]) == set()
+
+
+def test_a_shared_suffix_does_not_manufacture_a_near_tie():
+    """Found by the golden suite: on raw character similarity `aproval_rate`
+    scored 0.73 against payment_approval_rate and 0.67 against
+    cart_to_stale_rate — inside the margin, on the strength of `_rate` alone —
+    and refused R1-AMBIGUOUS naming an unrelated metric as a rival reading.
+    Scoring the distinctive parts gives the typo its plain did-you-mean."""
+    bundled = aq.available_metric_names(aq.bundled_metrics_dir())
+    assert aq.ambiguous_candidates("aproval_rate", bundled) == []
+    assert aq.ambiguous_candidates("delivery_rate", bundled) == []
+    with pytest.raises(SystemExit) as exc:
+        aq.find_metric_file("aproval_rate")
+    msg = str(exc.value)
+    assert "R1-AMBIGUOUS" not in msg
+    assert "payment_approval_rate" in msg  # the did-you-mean names the right one
+
+
+def test_generic_terms_stay_ambiguous_on_the_distinctive_part():
+    """The fix must not weaken the guard: `payment_rate` is still the generic
+    ask it always was, and now names every payment reading rather than the two
+    that happened to tie on characters."""
+    bundled = aq.available_metric_names(aq.bundled_metrics_dir())
+    got = set(aq.ambiguous_candidates("payment_rate", bundled))
+    assert {"payment_approval_rate", "payment_decline_rate",
+            "payment_submit_to_decision_rate"} <= got
+
+
+def test_a_miss_made_only_of_common_tokens_is_a_plain_r1():
+    bundled = aq.available_metric_names(aq.bundled_metrics_dir())
+    assert aq.ambiguous_candidates("rate", bundled) == []
+
+
 def test_exact_names_never_trip_the_ambiguity_guard():
     """Every registered name must keep resolving exactly — the guard fires
     only on the refusal path, so governance gained a check without the happy
