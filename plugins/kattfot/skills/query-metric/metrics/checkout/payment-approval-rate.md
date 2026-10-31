@@ -19,6 +19,7 @@ denominator_column: payments_decisioned
 maturity_stage: payment_decisioned
 value_format: percent
 column_label: Approval Rate
+aliases: [approval rate, payment approvals, approved payments rate, share of payments approved]
 allowed_dimensions: [channel, payment_method, market, category, checkout_version]
 allowed_filters: [cohort_week, channel, payment_method, market, category, checkout_version]
 default_lookback_weeks: 20

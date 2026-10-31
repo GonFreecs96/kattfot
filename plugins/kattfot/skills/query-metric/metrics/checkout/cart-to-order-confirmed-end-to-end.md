@@ -19,6 +19,7 @@ denominator_column: carts_created
 maturity_stage: order_confirmed
 value_format: percent
 column_label: Cart → Order
+aliases: [cart to order conversion, cart to order confirmed, end to end conversion, overall checkout conversion, cart to order]
 allowed_dimensions: [channel, payment_method, market, category, checkout_version]
 allowed_filters: [cohort_week, channel, payment_method, market, category, checkout_version]
 default_lookback_weeks: 20

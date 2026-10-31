@@ -121,7 +121,13 @@ of the refusal rules R1–R6 and the tier definitions.
 ### Step 1 — Identify the metric
 
 List metric files in both locations, merge with consumer-wins precedence on `name:`.
-Match the question against each metric's `name` and `display_name`.
+Match the question against each metric's `name`, `display_name` and `aliases`
+(the phrasings a user actually types; `AUTHORING.md`).
+`scripts/resolve_question.py "<question>"` is a deterministic pre-pass over
+those same three fields — alias and keyword matching, not an LLM — that prints
+the request it would hand the helper (metric, dimensions, filters, time range)
+or the refusal the helper gives. Its behaviour is pinned by name in the golden
+question suite (`tests/golden/questions.yaml`).
 
 If both locations are empty, say so and point at
 `$AQM_ROOT/templates/example-metric.md` and `$AQM_ROOT/AUTHORING.md`.
@@ -267,8 +273,13 @@ propose a workaround that violates the same rule, and **do not write an output f
 `kattfot_query.py`): the name matches several registered metrics about equally
 well — it is a substring of two or more names, or the two closest fuzzy matches
 both clear `AMBIGUITY_MATCH_FLOOR` (0.6) and sit within `AMBIGUITY_MATCH_MARGIN`
-(0.08) of each other. The helper exits 1 — the same code as a plain R1 miss; the
-prefix is what tells them apart — with no output file and this on stderr:
+(0.08) of each other. Both comparisons ignore catalog-common tokens — those in
+at least half of the registered names and at least three of them (`rate`, `to`
+in the bundled catalog; `catalog_common_tokens`) — so a shared suffix cannot
+make two unrelated metrics read as rival answers, and a miss made only of such
+tokens falls through to the plain R1. The helper exits 1 — the same code as a
+plain R1 miss; the prefix is what tells them apart — with no output file and
+this on stderr:
 
 ```
 ERROR (R1-AMBIGUOUS): 'payment' matches multiple registered metrics about equally

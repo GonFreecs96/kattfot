@@ -19,6 +19,7 @@ denominator_column: orders_delivered
 maturity_stage: returned
 value_format: percent
 column_label: Return Rate
+aliases: [return rate, returns rate, delivered to returned, orders sent back, share of deliveries returned]
 allowed_dimensions: [channel, payment_method, market, category, checkout_version]
 allowed_filters: [cohort_week, channel, payment_method, market, category, checkout_version]
 default_lookback_weeks: 26

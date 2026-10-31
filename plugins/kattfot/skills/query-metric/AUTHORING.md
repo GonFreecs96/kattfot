@@ -58,6 +58,7 @@ tells you.
 | `maturity_stage` | Keys into the funnel spec's `stage_maturity.lag_days`. **Set this.** See below. |
 | `maturity_lag_days` | An explicit lag, overriding the stage table. Use only when the metric's stage genuinely is not in the ladder. |
 | `column_label` | Friendly header for the value column. Display-only; the SQL alias stays `name`. |
+| `aliases` | The phrasings a user actually types for this metric (`approval rate`, `cart abandonment`). Lowercase phrases, matched whole, longest wins — by `scripts/resolve_question.py` and the golden question suite (`tests/golden/questions.yaml`). Never a single generic word another metric could claim; that ambiguity is `R1-AMBIGUOUS`'s job to refuse, not an alias's to resolve. |
 | `time_column_type` | `DATE` (default), `DATETIME`, or `TIMESTAMP`. A DATETIME cohort column needs its range widened to whole days, which the helper does. |
 | `owner` | Who to ask when the definition looks wrong. See `doctrine/ownership-governance.md`. |
 | `relationships` | Registered entity slugs the metric also touches. |

@@ -19,6 +19,7 @@ denominator_column: orders_shipped
 maturity_stage: delivered
 value_format: percent
 column_label: Shipped → Delivered
+aliases: [shipped to delivered, delivery rate, delivery success rate, shipped orders delivered, delivered rate]
 allowed_dimensions: [channel, payment_method, market, category, checkout_version]
 allowed_filters: [cohort_week, channel, payment_method, market, category, checkout_version]
 default_lookback_weeks: 20

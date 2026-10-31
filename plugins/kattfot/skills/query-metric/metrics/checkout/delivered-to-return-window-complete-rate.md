@@ -19,6 +19,7 @@ denominator_column: orders_delivered
 maturity_stage: return_window_complete
 value_format: percent
 column_label: Delivered → Kept
+aliases: [delivered to kept, kept rate, return window completion rate, delivered to return window complete]
 allowed_dimensions: [channel, payment_method, market, category, checkout_version]
 allowed_filters: [cohort_week, channel, payment_method, market, category, checkout_version]
 default_lookback_weeks: 26

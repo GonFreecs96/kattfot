@@ -19,6 +19,7 @@ denominator_column: carts_created
 maturity_stage: return_window_complete
 value_format: percent
 column_label: Cart → Settled
+aliases: [cart to settled, cart to settled conversion, settled conversion, cart to return window complete, end to end settled rate]
 allowed_dimensions: [channel, payment_method, market, category, checkout_version]
 allowed_filters: [cohort_week, channel, payment_method, market, category, checkout_version]
 default_lookback_weeks: 26

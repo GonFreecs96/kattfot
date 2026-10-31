@@ -22,8 +22,26 @@ Branch `tier-0-research-pass`.
 - `R1-AMBIGUOUS` is documented in `query-metric/SKILL.md` (trigger, exit code, what
   the user sees) and in the refusal table of `doctrine/accuracy-tiers.md`. The code
   has refused near-tie metric names since the research pass; the prose did not say so.
+- Golden-question regression gate (Tier 1 item A): `tests/golden/questions.yaml` —
+  31 cases, 93 phrasings, every bundled metric at least once, every refusal rule
+  (R1, R1-AMBIGUOUS, R2–R6) at least twice, with explicit should-not-answer cases
+  (T1, T3, out-of-domain, individual-level, PII). `tests/test_golden_questions.py`
+  runs one test per (case, phrasing) — no pass rate — plus structural tests that
+  fail by name when a metric lacks a case. Expectations are pinned by hand and
+  never passed to the resolver. `query-metric/scripts/resolve_question.py` is the
+  thin deterministic layer it drives (alias / keyword matching over `name`,
+  `display_name` and the new per-metric `aliases:` frontmatter, then the helper's
+  own `load_metric` / `validate_tier` / `validate_request`); not an LLM, and it
+  queries nothing. `pytest -m regression` runs only the refusal guards.
 
 ### Changed
+- `R1-AMBIGUOUS` scores a miss on the distinctive part of each name, ignoring tokens
+  common to most of the catalog (`rate`, `to`; `catalog_common_tokens`, at least half
+  the names and at least three). Found by the golden suite: `aproval_rate` refused as a
+  near-tie between `payment_approval_rate` and an unrelated `cart_to_stale_rate` on the
+  strength of `_rate` alone. It now gets the plain did-you-mean; generic terms
+  (`payment_rate`) still refuse and now name every reading, not the two that tied on
+  characters.
 - The PreToolUse access-path hook declares `onFailure: block`, and both hook adapters
   (Claude Code, Cursor) deny when the matcher itself raises — a timeout or internal
   error now blocks the Bash call instead of counting as no decision.

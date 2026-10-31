@@ -197,6 +197,39 @@ def suggest_close_names(metric_name: str, available: list, n: int = 3) -> list:
 AMBIGUITY_MATCH_FLOOR = 0.6
 AMBIGUITY_MATCH_MARGIN = 0.08
 
+#: A token has to appear in at least this many registered names — and in at
+#: least half of them — before it counts as catalog-common and is ignored when
+#: scoring a miss. The absolute floor keeps a two-metric catalog from declaring
+#: its own vocabulary common; the half keeps `payment` (4 of 15) distinctive.
+COMMON_TOKEN_MIN_NAMES = 3
+
+
+def catalog_common_tokens(available: list) -> set:
+    """Tokens shared by most of the catalog (`rate`, `to` in the bundled one).
+
+    They carry no information about WHICH metric a miss meant, but a shared
+    suffix inflates character similarity between unrelated names: `aproval_rate`
+    read as a near-tie between `payment_approval_rate` and `cart_to_stale_rate`
+    purely on the strength of `_rate`. Scoring on what is left once these are
+    removed is what makes the ambiguity guard measure readings, not suffixes.
+    Pure; computed from the names passed in, so a consumer catalog with a
+    different house style gets its own common set.
+    """
+    if not available:
+        return set()
+    counts: dict = {}
+    for name in available:
+        for tok in set(name.lower().split("_")):
+            counts[tok] = counts.get(tok, 0) + 1
+    need = max(COMMON_TOKEN_MIN_NAMES, (len(available) + 1) // 2)
+    return {tok for tok, n in counts.items() if n >= need}
+
+
+def distinctive_part(name: str, common: set) -> str:
+    """`name` with the catalog-common tokens removed — the part a miss has to
+    resemble for the resemblance to mean anything. Empty when nothing is left."""
+    return "_".join(t for t in name.lower().split("_") if t not in common)
+
 
 def ambiguous_candidates(metric_name: str, available: list) -> list:
     """The registered names a miss matches ABOUT EQUALLY WELL, or [] when the
@@ -211,16 +244,25 @@ def ambiguous_candidates(metric_name: str, available: list) -> list:
       enough that picking the winner would answer a different question than
       the one asked roughly half the time.
 
+    Both triggers compare the DISTINCTIVE parts (`distinctive_part`): a shared
+    `_rate` suffix must not make two unrelated metrics read as rival answers,
+    and a miss made only of common tokens ("rate") has nothing to be ambiguous
+    about, so it falls through to the plain R1.
+
     Pure, so the thresholds are unit-testable against real catalog names.
     """
     if not metric_name or not available:
         return []
-    q = metric_name.lower()
-    substring = [x for x in available if q in x.lower()]
+    common = catalog_common_tokens(available)
+    q = distinctive_part(metric_name, common)
+    if not q:
+        return []
+    parts = [(distinctive_part(x, common) or x.lower(), x) for x in available]
+    substring = [x for d, x in parts if q in d]
     if len(substring) >= 2:
         return substring
     scored = sorted(
-        ((difflib.SequenceMatcher(None, q, x.lower()).ratio(), x) for x in available),
+        ((difflib.SequenceMatcher(None, q, d).ratio(), x) for d, x in parts),
         reverse=True,
     )
     if (
